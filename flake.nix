@@ -28,6 +28,10 @@
           packages = with pkgs; [
             # C++ Compiler is already part of stdenv
             gcc
+            gdb
+            clang
+            clang-tools   # gives clang-tidy, clang-format, etc.
+            lldb
             cmake
             ninja
             git
