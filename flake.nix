@@ -22,6 +22,20 @@
         # module parameters provide easy access to attributes of the same
         # system.
 
+        # devShells.default describes the default shell with C++, cmake, boost,
+        # and catch2
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
+            # C++ Compiler is already part of stdenv
+            gcc
+            cmake
+            ninja
+            git
+            zsh
+            nixd
+            nixpkgs-fmt
+          ];
+        };
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = pkgs.hello;
       };
