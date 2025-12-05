@@ -8,7 +8,6 @@
 
   outputs = inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
-
       imports = [
         # To import an internal flake module: ./other.nix
         # To import an external flake module:
@@ -17,56 +16,33 @@
         #   3. Add here: foo.flakeModule
       ];
 
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "aarch64-darwin"
-        "x86_64-darwin"
-      ];
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
 
-      perSystem = { pkgs, ... }:
+      perSystem = { config, self', inputs', pkgs, system, ... }:
         let
-          # Simple Zsh config injected into the dev shell.
-          # NOTE: contents of the multi-line string are deliberately not indented.
+          # Instead of writeTextFile with invalid destination,
+          # we create a simple text file in the store and copy it into ZDOTDIR.
           elysiumZshrc = pkgs.writeText "elysium-zshrc" ''
             export PROJECT="elysium"
             autoload -Uz colors && colors
-
-            # Aliases (basic quality of life)
-            alias ll="ls -alF"
-            alias la="ls -A"
-            alias l="ls -CF"
-
-            # Zsh nice defaults
-            setopt autocd        # type directory name and jump into it
-            setopt correct       # auto-correct minor typos in commands
-            autoload -Uz compinit
-            compinit
-
-            # Prompt format:
-            # [elysium : <relative path>] [branch]🧪
-            export PS1="%F{cyan}[elysium : %F{green}%~%F{cyan}] [%F{yellow}$(git rev-parse --abbrev-ref HEAD 2>/dev/null)%F{cyan}]🧪%f %# "
+            export PS1="%F{cyan}[elysium:%~]%f %F{yellow}$(git rev-parse --abbrev-ref HEAD 2>/dev/null)%f %# "
           '';
-
         in
         {
-          # Default dev shell: compilers, tooling, Zsh, LSP helpers.
+          # devShells.default describes the default shell with C++, cmake, boost,
+          # and catch2
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
-              # C++ toolchain
+              # C++ Compiler is already part of stdenv
               gcc
               gdb
               clang
-              clang-tools # clang-tidy, clang-format, etc.
+              clang-tools # gives clang-tidy, clang-format, etc.
               lldb
               llvmPackages.bintools
-
-              # Build tools
               cmake
               ninja
               git
-
-              # Nix / editor tooling
               zsh
               nixd
               nixpkgs-fmt
