@@ -32,6 +32,7 @@
             clang
             clang-tools   # gives clang-tidy, clang-format, etc.
             lldb
+            llvmPackages.bintools
             cmake
             ninja
             git
