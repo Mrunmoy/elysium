@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "llvm-vs-code-extensions.vscode-clangd",
+    "ms-vscode.cmake-tools",
+    "jnoortheen.nix-ide",
+    "arrterian.nix-env-selector",
+    "twxs.cmake",
+    "vadimcn.vscode-lldb"
+  ]
+}

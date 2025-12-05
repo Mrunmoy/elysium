@@ -1,0 +1,49 @@
+{
+  // Auto formatting
+  "editor.formatOnSave": true,
+
+  // ============================
+  // C++ Formatting (clang-format)
+  // ============================
+  "C_Cpp.clang_format_style": "file",
+  "C_Cpp.clang_format_fallbackStyle": "Google",
+  "clang-format.executable": "clang-format",
+
+  // Use clangd instead of Microsoft C++
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "clangd.arguments": [
+    "--background-index",
+    "--header-insertion=never",
+    "--compile-commands-dir=build"
+  ],
+
+  // =================================
+  // Nix formatting (nixpkgs-fmt)
+  // =================================
+  "[nix]": {
+    "editor.defaultFormatter": "jnoortheen.nix-ide"
+  },
+  "nix.formatterPath": "nixpkgs-fmt",
+
+  // ============================
+  // CMake Tools Integration
+  // ============================
+  "cmake.generator": "Ninja",
+  "cmake.buildDirectory": "build",
+  "cmake.installPrefix": "${workspaceFolder}/dist",
+  "cmake.configureOnOpen": true,
+  "cmake.sourceDirectory": "${workspaceFolder}",
+
+  // ============================
+  // Terminal
+  // ============================
+  "terminal.integrated.inheritEnv": true,
+
+  // ============================
+  // Files
+  // ============================
+  "files.associations": {
+    "*.tpp": "cpp",
+    "*.hpp": "cpp"
+  }
+}
