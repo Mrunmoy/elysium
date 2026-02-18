@@ -1,0 +1,12 @@
+build/
+build-test/
+.cache/
+compile_commands.json
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+.direnv/
+result
