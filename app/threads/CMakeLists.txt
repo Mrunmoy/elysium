@@ -3,7 +3,7 @@ add_executable(threads
 )
 
 target_link_libraries(threads PRIVATE
-    kernel
+    -Wl,--whole-archive kernel -Wl,--no-whole-archive
     hal
     startup
 )

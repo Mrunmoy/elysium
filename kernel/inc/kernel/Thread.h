@@ -24,13 +24,13 @@ namespace kernel
 
     struct ThreadControlBlock
     {
-        std::uint32_t *m_stackPointer;       // [offset 0] PSP -- assembly reads this
+        std::uint32_t *m_stackPointer;  // [offset 0] PSP -- assembly reads this
         ThreadState m_state;
         ThreadId m_id;
-        std::uint8_t m_priority;             // Reserved for Phase 2
+        std::uint8_t m_priority;  // Reserved for Phase 2
         const char *m_name;
-        std::uint32_t *m_stackBase;          // Bottom of stack (for overflow detection)
-        std::uint32_t m_stackSize;           // In bytes
+        std::uint32_t *m_stackBase;  // Bottom of stack (for overflow detection)
+        std::uint32_t m_stackSize;   // In bytes
         std::uint32_t m_timeSliceRemaining;
         std::uint32_t m_timeSlice;
     };
@@ -41,9 +41,9 @@ namespace kernel
         void *arg;
         const char *name;
         std::uint32_t *stack;
-        std::uint32_t stackSize;    // In bytes
-        std::uint8_t priority;      // Reserved for Phase 2
-        std::uint32_t timeSlice;    // In ticks (0 = default)
+        std::uint32_t stackSize;  // In bytes
+        std::uint8_t priority;    // Reserved for Phase 2
+        std::uint32_t timeSlice;  // In ticks (0 = default)
     };
 
     // Create a new thread. Returns thread ID or kInvalidThreadId on failure.

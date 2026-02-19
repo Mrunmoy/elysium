@@ -99,7 +99,18 @@ namespace kernel
 
     void yield()
     {
+        arch::enterCritical();
+
+        // Reset time slice and rotate the ready queue
         s_scheduler.yield();
+        ThreadId nextId = s_scheduler.switchContext();
+        ThreadControlBlock *nextTcb = threadGetTcb(nextId);
+        if (nextTcb != nullptr)
+        {
+            g_nextTcb = nextTcb;
+        }
+
+        arch::exitCritical();
     }
 
     std::uint32_t tickCount()

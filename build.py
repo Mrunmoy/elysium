@@ -74,11 +74,11 @@ def build_tests():
     ])
 
 
-def flash():
+def flash(target="threads"):
     """Flash firmware to target via J-Link."""
-    bin_path = os.path.join(BUILD_DIR, "app", "blinky", "blinky.bin")
+    bin_path = os.path.join(BUILD_DIR, "app", target, f"{target}.bin")
     if not os.path.exists(bin_path):
-        print("Error: firmware not built. Run build first.")
+        print(f"Error: {bin_path} not found. Run build first.")
         sys.exit(1)
 
     jlink_script = os.path.join(BUILD_DIR, "flash.jlink")
@@ -104,6 +104,7 @@ def main():
     parser.add_argument("-t", "--test", action="store_true", help="Build and run host tests")
     parser.add_argument("-e", "--examples", action="store_true", help="Build examples")
     parser.add_argument("-f", "--flash", action="store_true", help="Flash to target")
+    parser.add_argument("--app", default="threads", help="App to flash (default: threads)")
     args = parser.parse_args()
 
     if args.clean:
@@ -113,7 +114,7 @@ def main():
         build_tests()
     elif args.flash:
         build_firmware()
-        flash()
+        flash(args.app)
     else:
         build_firmware()
 
