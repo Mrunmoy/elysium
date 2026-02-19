@@ -3,17 +3,19 @@
 ## Current Status (2026-02-20)
 - Phase 0 (Foundation) COMPLETE
 - Phase 1 (Kernel Core) COMPLETE and VERIFIED on hardware (commit af65fad)
-- Cross-compilation: threads demo 3156 B FLASH, 23 KB SRAM; blinky 1644 B FLASH
-- Host tests: 33/33 passing (7 GPIO + 11 Thread + 15 Scheduler)
+- Crash dump system COMPLETE (commit bc73012)
+- Cross-compilation: threads demo 5836 B FLASH, 23 KB SRAM; blinky 1644 B FLASH
+- Host tests: 33/33 C++ passing (7 GPIO + 11 Thread + 15 Scheduler)
+- Python tests: 17/17 passing (crash monitor tool)
 - LED toggling verified via J-Link register reads (ODR changes at ~500ms)
 - Context switching verified: g_currentTcb and g_nextTcb point to different TCBs
+- Crash dump: SHCSR shows all 3 fault handlers enabled, CCR has DIV_0_TRP + UNALIGN_TRP
 - UART serial RX not working (CP2102 wiring issue -- PA9 to RX needs checking)
 - GitHub repo: git@github.com:Mrunmoy/elysium.git
 - Branches: main, phase-0, phase-1/kernel-core (all pushed)
 
 ## Next Steps
-- Fix UART serial wiring (PA9 to CP2102 RX)
-- Add crash dump support (reference: github.com/Mrunmoy/STM32F407VGT6 coredump branch)
+- Fix UART serial wiring (PA9 to CP2102 RX) -- needed to verify crash dump UART output
 - Phase 2: Priority scheduling, mutexes, semaphores
 - See CLAUDE.md for full project vision
 
