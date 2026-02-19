@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ms-os is a greenfield Real-Time Operating System (RTOS) targeting ARM Cortex A/R/M series processors. Initial hardware target is STM32F407VGt6. The project is in early design/implementation phase.
+ms-os is a greenfield Real-Time Operating System (RTOS) targeting ARM Cortex A/R/M series processors. Initial hardware target is STM32F207ZGT6 (Cortex-M3, 120 MHz, 1 MB FLASH, 128 KB SRAM). The project is in early implementation phase (Phase 0 complete).
 
 **Architecture:** Microkernel design, written in C++17 with Assembly where required. Must support full C++17 applications, multithreading, synchronization, core pinning, IPC, interrupts, heap management, device tree (YAML), and a custom bootloader.
 
@@ -12,29 +12,78 @@ ms-os is a greenfield Real-Time Operating System (RTOS) targeting ARM Cortex A/R
 - printf/stdout redirected to a configurable serial port
 - Applications can register for peripheral interrupts through the OS
 - Microkernel: minimal kernel with user-space services (drivers, IPC, process management)
+- Register-level HAL (direct register access, not wrapping the ST HAL library)
 
-## Build System
+## Build Commands
 
-- **CMake 3.14+** with **Ninja** generator
-- **Arm GNU Toolchain** for cross-compilation
-- **Python 3** build scripts following the convention from sibling libraries:
+Requires Nix dev shell (enter with `nix develop`):
 
 ```bash
-python3 build.py              # Build only
-python3 build.py -c           # Clean build
-python3 build.py -t           # Build + run tests
-python3 build.py -e           # Build + examples
-python3 build.py -c -t -e     # Clean + tests + examples
+python3 build.py              # Cross-compile ARM firmware -> build/
+python3 build.py -t           # Build + run host unit tests -> build-test/
+python3 build.py -c           # Clean both build directories
+python3 build.py -f           # Flash firmware via J-Link
+python3 build.py -e           # Build examples
 ```
 
-Tests run via ctest:
+Run a specific test binary directly:
 ```bash
-ctest --test-dir build --output-on-failure
+./build-test/test/hal/hal_tests                          # Run all HAL tests
+./build-test/test/hal/hal_tests --gtest_filter='*Toggle*' # Run one test
 ```
+
+Run tests via ctest:
+```bash
+ctest --test-dir build-test --output-on-failure
+```
+
+## Dual Build System Architecture
+
+The root `CMakeLists.txt` uses `CMAKE_CROSSCOMPILING` to switch between two completely different build graphs:
+
+**Cross-compile** (`python3 build.py`): Uses `cmake/arm-none-eabi-gcc.cmake` toolchain file. Builds `startup` + `hal` + `app/blinky` into `build/`. Output: ELF, .bin, .hex.
+
+**Host build** (`python3 build.py -t`): No toolchain file, uses native GCC. Builds Google Test + test executables into `build-test/`. Real HAL sources are NOT compiled; mock implementations are linked instead.
+
+This means adding a new HAL module requires changes in three places:
+1. `hal/src/stm32f4/` -- real implementation (cross-compile only)
+2. `hal/CMakeLists.txt` -- add source to the `hal` library
+3. `test/hal/` -- mock implementation + test file + update `test/hal/CMakeLists.txt`
+
+## Testing Strategy: Link-Time Mock Substitution
+
+Tests run on the host machine (x86) by substituting mock implementations at link time:
+
+- **Public API headers** (`hal/inc/hal/*.h`) are shared between real and mock code
+- **Real implementations** (`hal/src/stm32f4/Gpio.cpp`) manipulate hardware registers via volatile pointers
+- **Mock implementations** (`test/hal/MockGpio.cpp`) provide the same symbols but record calls into global vectors defined in `test/hal/MockRegisters.h`
+- **Test files** (`test/hal/GpioTest.cpp`) call the public HAL API, then assert on the recorded mock state
+
+Each test's `SetUp()` calls `test::resetMockState()` to clear recorded calls. When adding a new HAL component, follow this same pattern: write mock that records calls, write tests that verify recorded state.
+
+## Startup Sequence (Cross-Compiled Firmware)
+
+```
+Reset_Handler (startup/stm32f207zgt6/Startup.s)
+  -> Copy .data from FLASH to SRAM
+  -> Zero .bss
+  -> __libc_init_array (C++ static constructors)
+  -> SystemInit() (startup/stm32f207zgt6/SystemInit.cpp)
+       -> Configure PLL: HSE 25MHz, M=25 N=240 P=2 Q=5 -> 120 MHz SYSCLK
+       -> Flash: 3 wait states, prefetch + I/D caches
+       -> APB1 /4 = 30 MHz, APB2 /2 = 60 MHz
+  -> main()
+```
+
+**Memory layout** (from `startup/stm32f207zgt6/Linker.ld`):
+- FLASH: 0x08000000 (1024K) -- .isr_vector, .text, .rodata, .ARM.exidx
+- SRAM: 0x20000000 (128K) -- .data, .bss, .heap (16K), ._stack (4K at top)
+
+SystemInit.cpp uses `extern "C"` for linkage with the assembly Reset_Handler. The global `SystemCoreClock` variable (120000000) is expected by CMSIS headers.
 
 ## Reference Implementations
 
-Three reference RTOSes at `/home/litu/sandbox/embedded/rtos/`:
+Reference RTOSes at `/home/litu/sandbox/embedded/rtos/`:
 - **FreeRTOS** - Minimal portable kernel, extensive device support
 - **ThreadX** - Picokernel with preemption-threshold scheduling, SMP support
 - **Zephyr** - Modern modular RTOS with device tree support and extensive driver ecosystem
@@ -44,11 +93,11 @@ Microkernel reference at `/mnt/usb/minix/`:
 
 ## Sibling Libraries (Foundation Components)
 
-These production-ready C++17 libraries at `/mnt/data/sandbox/cpp/` serve as building blocks:
+Production-ready C++17 libraries at `/mnt/data/sandbox/cpp/` that serve as building blocks:
 
 - **ms-ringbuffer** - Header-only lock-free SPSC ring buffer, cache-line padded, shared-memory compatible
 - **ms-runloop** - Epoll-based event loop with thread-safe callable posting and FD source watching
-- **ms-ipc** - IPC framework with IDL code generator (ipcgen), shared memory transport, UDS signaling, zero-copy serialization. Uses ms-ringbuffer and ms-runloop as dependencies
+- **ms-ipc** - IPC framework with IDL code generator (ipcgen), shared memory transport, UDS signaling, zero-copy serialization
 
 ## C++ Coding Standards
 
@@ -65,15 +114,14 @@ These production-ready C++17 libraries at `/mnt/data/sandbox/cpp/` serve as buil
 - Constants: `k` prefix (`kConstantName`)
 
 ### Platform Separation
-- **No `#ifdef`/`#ifndef`/`#if defined(...)` in `.cpp` files** - use directory structure instead
-- For sibling libraries: `include/{core,platform/{linux,macos,windows}}/`, `src/{core,platform/{linux,macos,windows}}/`
-- For ms-os kernel: platform directories should reflect ARM targets (e.g., `stm32f4/`, `cortex-m/`)
-- CMake selects platform files at build time
+- **No `#ifdef`/`#ifndef`/`#if defined(...)` in `.cpp` files** -- use directory structure instead
+- HAL pattern: `hal/inc/hal/` (public headers), `hal/src/stm32f4/` (platform implementations)
+- CMake selects platform files at build time; new platform targets get their own directories (e.g., `cortex-m/`, `stm32f4/`)
 
 ### Two Compilation Modes
 
 **Kernel code** (kernel, drivers, HAL):
-- Compiled with `-fno-exceptions -fno-rtti`
+- Compiled with `-fno-exceptions -fno-rtti -fno-unwind-tables`
 - No dynamic allocation (prefer static allocation, `std::array`, `std::optional`)
 - No exceptions, no RTTI
 - Deterministic behavior only
@@ -91,10 +139,11 @@ These production-ready C++17 libraries at `/mnt/data/sandbox/cpp/` serve as buil
 ### Style
 - Early returns to reduce nesting
 - No emojis or unicode in code, comments, or markdown
-- Minimal `main()` - move logic into classes
+- Minimal `main()` -- move logic into classes
 - Document thread safety expectations in class comments
 - RAII throughout, avoid global state
 - No raw `new`/`delete` in any code
+- C++17 only (not C++20) -- designated initializers (`{.field = val}`) are not available
 
 ## Development Workflow
 
@@ -112,6 +161,7 @@ Do not skip or reorder phases. No phase is complete until its artifacts exist.
 - Google Test v1.14.0 (as git submodule in `test/vendor/googletest/`)
 - Test discovery via CMake `gtest_discover_tests()`
 - Python tests for code generators via pytest
+- Link-time mock substitution pattern (see "Testing Strategy" section above)
 
 ## CI
 

@@ -1,15 +1,14 @@
 /**
- * Startup code for STM32F407VGT6
+ * Startup code for STM32F207ZGT6
  *
  * Vector table, Reset_Handler (data copy, bss zero, C++ init, main call),
  * and default exception/IRQ handlers (weak infinite loops).
  *
- * GNU AS syntax, Cortex-M4 (Thumb-2).
+ * GNU AS syntax, Cortex-M3 (Thumb-2).
  */
 
     .syntax unified
-    .cpu cortex-m4
-    .fpu fpv4-sp-d16
+    .cpu cortex-m3
     .thumb
 
 /* Symbols from linker script */
@@ -45,7 +44,7 @@ g_vectorTable:
     .word PendSV_Handler            /* 14: PendSV */
     .word SysTick_Handler           /* 15: SysTick */
 
-    /* STM32F407 external interrupts (IRQ 0..81) */
+    /* STM32F207 external interrupts (IRQ 0..80) */
     .word WWDG_IRQHandler               /*  0: Window Watchdog */
     .word PVD_IRQHandler                /*  1: PVD via EXTI */
     .word TAMP_STAMP_IRQHandler         /*  2: Tamper and TimeStamp */
@@ -126,8 +125,7 @@ g_vectorTable:
     .word OTG_HS_IRQHandler             /* 77: USB OTG HS */
     .word DCMI_IRQHandler               /* 78: DCMI */
     .word 0                             /* 79: Reserved */
-    .word RNG_IRQHandler                /* 80: RNG */
-    .word FPU_IRQHandler                /* 81: FPU */
+    .word RNG_IRQHandler                /* 80: HASH / RNG */
 
     .size g_vectorTable, .-g_vectorTable
 
@@ -158,14 +156,6 @@ _fini:
     .type Reset_Handler, %function
 
 Reset_Handler:
-    /* Enable FPU (CP10 and CP11 full access) */
-    ldr r0, =0xE000ED88
-    ldr r1, [r0]
-    orr r1, r1, #(0xF << 20)
-    str r1, [r0]
-    dsb
-    isb
-
     /* Copy .data from FLASH to SRAM */
     ldr r0, =_sdata
     ldr r1, =_edata
@@ -223,7 +213,7 @@ Infinite_Loop:
     b Infinite_Loop
     .size Default_Handler, .-Default_Handler
 
-/* Cortex-M4 system exceptions */
+/* Cortex-M3 system exceptions */
     .weak NMI_Handler
     .thumb_set NMI_Handler, Default_Handler
 
@@ -251,7 +241,7 @@ Infinite_Loop:
     .weak SysTick_Handler
     .thumb_set SysTick_Handler, Default_Handler
 
-/* STM32F407 peripheral IRQ handlers */
+/* STM32F207 peripheral IRQ handlers */
     .weak WWDG_IRQHandler
     .thumb_set WWDG_IRQHandler, Default_Handler
 
@@ -491,6 +481,3 @@ Infinite_Loop:
 
     .weak RNG_IRQHandler
     .thumb_set RNG_IRQHandler, Default_Handler
-
-    .weak FPU_IRQHandler
-    .thumb_set FPU_IRQHandler, Default_Handler

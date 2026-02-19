@@ -10,7 +10,7 @@ set(CMAKE_SIZE arm-none-eabi-size)
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
+set(CPU_FLAGS "-mcpu=cortex-m3 -mthumb")
 
 set(CMAKE_C_FLAGS_INIT "${CPU_FLAGS}")
 set(CMAKE_CXX_FLAGS_INIT "${CPU_FLAGS}")

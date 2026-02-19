@@ -2,7 +2,7 @@
 
 Microkernel Real-Time Operating System targeting ARM Cortex-M processors.
 
-Initial hardware target: **STM32F407VGT6** (Cortex-M4, 168 MHz, 1 MB Flash, 192 KB SRAM).
+Initial hardware target: **STM32F207ZGT6** (Cortex-M3, 120 MHz, 1 MB Flash, 128 KB SRAM).
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ nix develop
 ```
 
 This drops you into a shell with everything needed: ARM toolchain
-(`arm-none-eabi-gcc`), CMake, Ninja, OpenOCD, Python 3, ST-Link tools,
+(`arm-none-eabi-gcc`), CMake, Ninja, J-Link tools, Python 3,
 and clang-format. Nothing else to install.
 
 If you use [direnv](https://direnv.net/), the `.envrc` activates the
@@ -60,7 +60,7 @@ Runs tests via ctest. No ARM toolchain required.
 python3 build.py -f
 ```
 
-Requires an ST-Link debugger connected via SWD/JTAG.
+Requires a J-Link debugger connected via JTAG.
 
 ## Project Structure
 
@@ -72,10 +72,10 @@ ms-os/
   cmake/
     arm-none-eabi-gcc.cmake   ARM cross-compilation toolchain
   startup/
-    stm32f407vgt6/
+    stm32f207zgt6/
       Startup.s           Vector table + reset handler
       Linker.ld           Linker script (memory layout)
-      SystemInit.cpp      Clock configuration (PLL -> 168 MHz)
+      SystemInit.cpp      Clock configuration (PLL -> 120 MHz)
   hal/
     inc/hal/              HAL abstraction headers
     src/stm32f4/          STM32F4 register-level implementation

@@ -14,7 +14,7 @@ target_compile_options(blinky PRIVATE
 )
 
 target_link_options(blinky PRIVATE
-    -T${CMAKE_SOURCE_DIR}/startup/stm32f407vgt6/Linker.ld
+    -T${CMAKE_SOURCE_DIR}/startup/stm32f207zgt6/Linker.ld
     -Wl,--gc-sections
     -Wl,--print-memory-usage
     --specs=nosys.specs

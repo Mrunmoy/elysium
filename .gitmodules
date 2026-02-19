@@ -10,3 +10,6 @@
 [submodule "test/vendor/googletest"]
 	path = test/vendor/googletest
 	url = https://github.com/google/googletest.git
+[submodule "vendor/cmsis-device-f2"]
+	path = vendor/cmsis-device-f2
+	url = https://github.com/STMicroelectronics/cmsis_device_f2.git

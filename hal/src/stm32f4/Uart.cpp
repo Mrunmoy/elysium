@@ -30,9 +30,9 @@ namespace
     constexpr std::uint32_t kSrTxe = 1U << 7;     // Transmit data register empty
     constexpr std::uint32_t kSrTc = 1U << 6;      // Transmission complete
 
-    // APB clock frequencies (after SystemInit: APB1=42MHz, APB2=84MHz)
-    constexpr std::uint32_t kApb1Clock = 42000000;
-    constexpr std::uint32_t kApb2Clock = 84000000;
+    // APB clock frequencies (after SystemInit: APB1=30MHz, APB2=60MHz)
+    constexpr std::uint32_t kApb1Clock = 30000000;
+    constexpr std::uint32_t kApb2Clock = 60000000;
 
     std::uint32_t uartBase(hal::UartId id)
     {

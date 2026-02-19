@@ -1,7 +1,7 @@
-// Blinky -- proof-of-life application for ms-os on STM32F407VGT6
+// Blinky -- proof-of-life application for ms-os on STM32F207ZGT6
 //
 // Toggles the on-board LED and prints "ms-os alive" over UART.
-// STM32F407 Discovery board: LED on PD12 (green), USART2 TX on PA2 (AF7).
+// Board: LED on PC13, USART1 TX on PA9 (AF7).
 
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
@@ -13,7 +13,7 @@ namespace
     constexpr std::uint32_t kSysTickCtrl = 0xE000E010;
     constexpr std::uint32_t kSysTickLoad = 0xE000E014;
     constexpr std::uint32_t kSysTickVal = 0xE000E018;
-    constexpr std::uint32_t kSystemCoreClock = 168000000;
+    constexpr std::uint32_t kSystemCoreClock = 120000000;
 
     volatile std::uint32_t &reg(std::uint32_t addr)
     {
@@ -39,23 +39,23 @@ namespace
 int main()
 {
     // Enable peripheral clocks
-    hal::rccEnableGpioClock(hal::Port::D);
+    hal::rccEnableGpioClock(hal::Port::C);
     hal::rccEnableGpioClock(hal::Port::A);
-    hal::rccEnableUartClock(hal::UartId::Usart2);
+    hal::rccEnableUartClock(hal::UartId::Usart1);
 
-    // Configure LED pin: PD12, push-pull output
+    // Configure LED pin: PC13, push-pull output
     hal::GpioConfig ledConfig{};
-    ledConfig.port = hal::Port::D;
-    ledConfig.pin = 12;
+    ledConfig.port = hal::Port::C;
+    ledConfig.pin = 13;
     ledConfig.mode = hal::PinMode::Output;
     ledConfig.speed = hal::OutputSpeed::Low;
     ledConfig.outputType = hal::OutputType::PushPull;
     hal::gpioInit(ledConfig);
 
-    // Configure USART2 TX pin: PA2, alternate function 7
+    // Configure USART1 TX pin: PA9, alternate function 7
     hal::GpioConfig txConfig{};
     txConfig.port = hal::Port::A;
-    txConfig.pin = 2;
+    txConfig.pin = 9;
     txConfig.mode = hal::PinMode::AlternateFunction;
     txConfig.speed = hal::OutputSpeed::VeryHigh;
     txConfig.alternateFunction = 7;
@@ -63,15 +63,15 @@ int main()
 
     // Initialize UART: 115200 8N1
     hal::UartConfig uartConfig{};
-    uartConfig.id = hal::UartId::Usart2;
+    uartConfig.id = hal::UartId::Usart1;
     uartConfig.baudRate = 115200;
     hal::uartInit(uartConfig);
 
-    hal::uartWriteString(hal::UartId::Usart2, "ms-os alive\r\n");
+    hal::uartWriteString(hal::UartId::Usart1, "ms-os alive\r\n");
 
     while (true)
     {
-        hal::gpioToggle(hal::Port::D, 12);
+        hal::gpioToggle(hal::Port::C, 13);
         delayMs(500);
     }
 }

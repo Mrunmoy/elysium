@@ -7,7 +7,7 @@ Usage:
     python3 build.py -c           # Clean build
     python3 build.py -t           # Build + run host tests
     python3 build.py -e           # Build + examples (same as default for now)
-    python3 build.py -f           # Flash to target via OpenOCD
+    python3 build.py -f           # Flash to target via J-Link
     python3 build.py -c -t        # Clean + tests
 """
 
@@ -75,17 +75,26 @@ def build_tests():
 
 
 def flash():
-    """Flash firmware to target via OpenOCD."""
-    elf_path = os.path.join(BUILD_DIR, "app", "blinky", "blinky")
-    if not os.path.exists(elf_path):
+    """Flash firmware to target via J-Link."""
+    bin_path = os.path.join(BUILD_DIR, "app", "blinky", "blinky.bin")
+    if not os.path.exists(bin_path):
         print("Error: firmware not built. Run build first.")
         sys.exit(1)
 
+    jlink_script = os.path.join(BUILD_DIR, "flash.jlink")
+    with open(jlink_script, "w") as f:
+        f.write(f"loadbin {bin_path}, 0x08000000\n")
+        f.write("r\n")
+        f.write("g\n")
+        f.write("q\n")
+
     run([
-        "openocd",
-        "-f", "interface/stlink.cfg",
-        "-f", "target/stm32f4x.cfg",
-        "-c", f"program {elf_path} verify reset exit",
+        "JLinkExe",
+        "-device", "STM32F207ZG",
+        "-if", "SWD",
+        "-speed", "4000",
+        "-autoconnect", "1",
+        "-CommandFile", jlink_script,
     ])
 
 

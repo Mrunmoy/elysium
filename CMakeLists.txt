@@ -23,7 +23,7 @@ if(CMAKE_CROSSCOMPILING)
     # ---------- Cross-compilation (ARM firmware) ----------
 
     add_compile_definitions(
-        STM32F407xx
+        STM32F207xx
     )
 
     # Prevent compiler from generating hardware FP instructions in libraries
@@ -38,7 +38,7 @@ if(CMAKE_CROSSCOMPILING)
     add_library(cmsis INTERFACE)
     target_include_directories(cmsis INTERFACE
         ${CMAKE_SOURCE_DIR}/vendor/cmsis_core/CMSIS/Core/Include
-        ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f4/Include
+        ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f2/Include
     )
 
     add_subdirectory(startup)

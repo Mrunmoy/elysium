@@ -20,30 +20,29 @@ gcc-arm-embedded, cmake, ninja, openocd, python3, git, stlink, clang-tools.
 | Submodule | Path | Version |
 |-----------|------|---------|
 | STM32F4 HAL Driver | `vendor/stm32f4xx-hal-driver` | v1.8.5 |
-| CMSIS Device F4 | `vendor/cmsis-device-f4` | v2.6.11 |
+| CMSIS Device F2 | `vendor/cmsis-device-f2` | v2.2.6 |
 | CMSIS 5 (Core) | `vendor/cmsis_core` | 5.9.0 |
 | Google Test | `test/vendor/googletest` | v1.14.0 |
 
-### Startup Code (startup/stm32f407vgt6/)
+### Startup Code (startup/stm32f207zgt6/)
 
-**Linker.ld** -- Memory layout for STM32F407VGT6:
+**Linker.ld** -- Memory layout for STM32F207ZGT6:
 - FLASH: 0x08000000, 1024K
 - SRAM: 0x20000000, 128K
-- CCM: 0x10000000, 64K
 
 Sections: `.isr_vector`, `.text`, `.rodata`, `.data` (LMA flash, VMA SRAM),
 `.bss`, `.heap`, `._stack`.
 
-**Startup.s** -- GNU AS, Cortex-M4 Thumb-2:
-- Vector table (initial SP + 15 system exceptions + 82 IRQs)
-- Reset_Handler: FPU enable, .data copy, .bss zero, __libc_init_array, SystemInit, main
+**Startup.s** -- GNU AS, Cortex-M3 Thumb-2:
+- Vector table (initial SP + 15 system exceptions + 81 IRQs)
+- Reset_Handler: .data copy, .bss zero, __libc_init_array, SystemInit, main
 - Default handlers: weak infinite loops, overridable
 
 **SystemInit.cpp** -- Clock configuration:
-- Flash: 5 wait states, prefetch + I/D cache
+- Flash: 3 wait states, prefetch + I/D cache
 - HSE: 25 MHz external crystal
-- PLL: M=25, N=336, P=2, Q=7 -> 168 MHz SYSCLK
-- AHB /1 (168 MHz), APB1 /4 (42 MHz), APB2 /2 (84 MHz)
+- PLL: M=25, N=240, P=2, Q=5 -> 120 MHz SYSCLK
+- AHB /1 (120 MHz), APB1 /4 (30 MHz), APB2 /2 (60 MHz)
 
 ### HAL Abstraction (hal/)
 
@@ -55,7 +54,7 @@ Register-level C++ wrappers (no dependency on ST HAL library at runtime):
 
 ### Blinky Application (app/blinky/)
 
-Proof-of-life: initializes GPIO PD12 (LED) and USART2 PA2 (TX), prints
+Proof-of-life: initializes GPIO PC13 (LED) and USART1 PA9 (TX), prints
 "ms-os alive" to serial, then toggles LED at 500ms using SysTick busy-wait.
 
 ### Build System
@@ -67,7 +66,7 @@ Proof-of-life: initializes GPIO PD12 (LED) and USART2 PA2 (TX), prints
 **build.py** -- Entry point:
 - `build.py` -- cross-compile firmware
 - `build.py -t` -- host tests
-- `build.py -f` -- flash via OpenOCD
+- `build.py -f` -- flash via J-Link
 - `build.py -c` -- clean
 
 ### Test Infrastructure
