@@ -1,0 +1,56 @@
+#ifndef TEST_MOCK_KERNEL_H
+#define TEST_MOCK_KERNEL_H
+
+// Mock state recording for kernel host-side testing.
+//
+// The kernel arch layer (CortexM.h) accesses Cortex-M3 hardware registers
+// (NVIC, SysTick, SCB). On the host, these addresses are not mapped.
+//
+// This mock records calls to arch functions so tests can verify the kernel
+// core logic (thread creation, scheduling, context switch triggers) without
+// any hardware dependency.
+
+#include <cstdint>
+#include <vector>
+
+namespace test
+{
+    struct ContextSwitchTrigger
+    {
+        bool pendSvSet;
+    };
+
+    struct SysTickConfig
+    {
+        std::uint32_t ticks;
+    };
+
+    struct CriticalSectionAction
+    {
+        enum class Type
+        {
+            Enter,
+            Exit
+        };
+        Type type;
+    };
+
+    // Global recording state (reset between tests)
+    inline std::vector<ContextSwitchTrigger> g_contextSwitchTriggers;
+    inline std::vector<SysTickConfig> g_sysTickConfigs;
+    inline std::vector<CriticalSectionAction> g_criticalSectionActions;
+    inline bool g_schedulerStarted = false;
+    inline std::uint32_t g_basePriority = 0;
+
+    inline void resetKernelMockState()
+    {
+        g_contextSwitchTriggers.clear();
+        g_sysTickConfigs.clear();
+        g_criticalSectionActions.clear();
+        g_schedulerStarted = false;
+        g_basePriority = 0;
+    }
+
+}  // namespace test
+
+#endif  // TEST_MOCK_KERNEL_H

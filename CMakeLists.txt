@@ -43,7 +43,9 @@ if(CMAKE_CROSSCOMPILING)
 
     add_subdirectory(startup)
     add_subdirectory(hal)
+    add_subdirectory(kernel)
     add_subdirectory(app/blinky)
+    add_subdirectory(app/threads)
 
 else()
     # ---------- Host build (unit tests) ----------
