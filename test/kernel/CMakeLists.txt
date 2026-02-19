@@ -2,6 +2,7 @@ add_executable(kernel_tests
     ThreadTest.cpp
     SchedulerTest.cpp
     MockCortexM.cpp
+    MockCrashDump.cpp
     MockKernelGlobals.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Thread.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Scheduler.cpp

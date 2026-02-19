@@ -6,6 +6,7 @@
 #include "kernel/Kernel.h"
 #include "kernel/Scheduler.h"
 #include "kernel/CortexM.h"
+#include "kernel/CrashDump.h"
 
 #include <cstdint>
 
@@ -33,6 +34,7 @@ namespace kernel
 
     void init()
     {
+        crashDumpInit();
         threadReset();
         s_scheduler.init();
         s_tickCount = 0;

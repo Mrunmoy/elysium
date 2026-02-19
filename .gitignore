@@ -10,3 +10,4 @@ compile_commands.json
 *.map
 .direnv/
 result
+__pycache__/
