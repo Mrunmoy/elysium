@@ -50,11 +50,11 @@ namespace kernel
             {
                 continue;
             }
-            if (tcb->m_state == ThreadState::Blocked && tcb->m_wakeupTick != 0)
+            if (tcb->state == ThreadState::Blocked && tcb->wakeupTick != 0)
             {
-                if (now >= tcb->m_wakeupTick)
+                if (now >= tcb->wakeupTick)
                 {
-                    tcb->m_wakeupTick = 0;
+                    tcb->wakeupTick = 0;
                     s_scheduler.unblockThread(i);
                 }
             }
@@ -157,7 +157,7 @@ namespace kernel
         ThreadControlBlock *tcb = threadGetTcb(s_scheduler.currentThreadId());
         if (tcb != nullptr)
         {
-            tcb->m_wakeupTick = s_tickCount + ticks;
+            tcb->wakeupTick = s_tickCount + ticks;
         }
 
         s_scheduler.blockCurrentThread();

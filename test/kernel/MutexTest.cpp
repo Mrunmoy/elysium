@@ -65,7 +65,7 @@ protected:
         kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
         if (tcb != nullptr)
         {
-            tcb->m_state = kernel::ThreadState::Running;
+            tcb->state = kernel::ThreadState::Running;
         }
     }
 };
@@ -84,8 +84,8 @@ TEST_F(MutexTest, Create_InitiallyUnlocked)
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(id);
     ASSERT_NE(mcb, nullptr);
 
-    EXPECT_EQ(mcb->m_owner, kernel::kInvalidThreadId);
-    EXPECT_EQ(mcb->m_lockCount, 0u);
+    EXPECT_EQ(mcb->owner, kernel::kInvalidThreadId);
+    EXPECT_EQ(mcb->lockCount, 0u);
 }
 
 TEST_F(MutexTest, Create_MaxMutexesReturnsInvalid)
@@ -108,8 +108,8 @@ TEST_F(MutexTest, Lock_AcquiresFreeMutex)
     EXPECT_TRUE(kernel::mutexLock(mid));
 
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_owner, tid);
-    EXPECT_EQ(mcb->m_lockCount, 1u);
+    EXPECT_EQ(mcb->owner, tid);
+    EXPECT_EQ(mcb->lockCount, 1u);
 }
 
 TEST_F(MutexTest, Unlock_ReleasesOwnedMutex)
@@ -122,8 +122,8 @@ TEST_F(MutexTest, Unlock_ReleasesOwnedMutex)
     EXPECT_TRUE(kernel::mutexUnlock(mid));
 
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_owner, kernel::kInvalidThreadId);
-    EXPECT_EQ(mcb->m_lockCount, 0u);
+    EXPECT_EQ(mcb->owner, kernel::kInvalidThreadId);
+    EXPECT_EQ(mcb->lockCount, 0u);
 }
 
 TEST_F(MutexTest, Unlock_FailsIfNotOwner)
@@ -144,7 +144,7 @@ TEST_F(MutexTest, Unlock_FailsIfNotOwner)
     EXPECT_FALSE(kernel::mutexUnlock(mid));
 
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_owner, t1);
+    EXPECT_EQ(mcb->owner, t1);
 }
 
 // ---- Recursive locking ----
@@ -160,8 +160,8 @@ TEST_F(MutexTest, RecursiveLock_IncrementsCount)
     kernel::mutexLock(mid);
 
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_lockCount, 3u);
-    EXPECT_EQ(mcb->m_owner, tid);
+    EXPECT_EQ(mcb->lockCount, 3u);
+    EXPECT_EQ(mcb->owner, tid);
 }
 
 TEST_F(MutexTest, RecursiveUnlock_DecrementsCount)
@@ -175,12 +175,12 @@ TEST_F(MutexTest, RecursiveUnlock_DecrementsCount)
 
     kernel::mutexUnlock(mid);
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_lockCount, 1u);
-    EXPECT_EQ(mcb->m_owner, tid);  // Still owned
+    EXPECT_EQ(mcb->lockCount, 1u);
+    EXPECT_EQ(mcb->owner, tid);  // Still owned
 
     kernel::mutexUnlock(mid);
-    EXPECT_EQ(mcb->m_lockCount, 0u);
-    EXPECT_EQ(mcb->m_owner, kernel::kInvalidThreadId);  // Released
+    EXPECT_EQ(mcb->lockCount, 0u);
+    EXPECT_EQ(mcb->owner, kernel::kInvalidThreadId);  // Released
 }
 
 // ---- TryLock ----
@@ -194,7 +194,7 @@ TEST_F(MutexTest, TryLock_SucceedsWhenFree)
     EXPECT_TRUE(kernel::mutexTryLock(mid));
 
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_owner, tid);
+    EXPECT_EQ(mcb->owner, tid);
 }
 
 TEST_F(MutexTest, TryLock_FailsWhenHeldByOther)
@@ -235,12 +235,12 @@ TEST_F(MutexTest, Lock_BlocksAndAddsToWaitQueue)
 
     // Verify: t2 is in the wait queue
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_waitCount, 1u);
-    EXPECT_EQ(mcb->m_waitHead, t2);
+    EXPECT_EQ(mcb->waitCount, 1u);
+    EXPECT_EQ(mcb->waitHead, t2);
 
     // t2's state should be Blocked
     kernel::ThreadControlBlock *tcb2 = kernel::threadGetTcb(t2);
-    EXPECT_EQ(tcb2->m_state, kernel::ThreadState::Blocked);
+    EXPECT_EQ(tcb2->state, kernel::ThreadState::Blocked);
 }
 
 TEST_F(MutexTest, PriorityInheritance_BoostsOwner)
@@ -263,8 +263,8 @@ TEST_F(MutexTest, PriorityInheritance_BoostsOwner)
     kernel::mutexLock(mid);
 
     kernel::ThreadControlBlock *tcb1 = kernel::threadGetTcb(t1);
-    EXPECT_EQ(tcb1->m_currentPriority, 5u);   // Boosted to t2's priority
-    EXPECT_EQ(tcb1->m_basePriority, 20u);      // Base unchanged
+    EXPECT_EQ(tcb1->currentPriority, 5u);   // Boosted to t2's priority
+    EXPECT_EQ(tcb1->basePriority, 20u);      // Base unchanged
 }
 
 TEST_F(MutexTest, PriorityInheritance_RestoredOnUnlock)
@@ -283,14 +283,14 @@ TEST_F(MutexTest, PriorityInheritance_RestoredOnUnlock)
 
     // t1 should be boosted
     kernel::ThreadControlBlock *tcb1 = kernel::threadGetTcb(t1);
-    EXPECT_EQ(tcb1->m_currentPriority, 5u);
+    EXPECT_EQ(tcb1->currentPriority, 5u);
 
     // t1 unlocks
     forceCurrent(t1);
     kernel::mutexUnlock(mid);
 
     // t1's priority should be restored
-    EXPECT_EQ(tcb1->m_currentPriority, 20u);
+    EXPECT_EQ(tcb1->currentPriority, 20u);
 }
 
 TEST_F(MutexTest, Unlock_WakesHighestPriorityWaiter)
@@ -318,6 +318,6 @@ TEST_F(MutexTest, Unlock_WakesHighestPriorityWaiter)
 
     // t3 (highest priority waiter) should now own the mutex
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
-    EXPECT_EQ(mcb->m_owner, t3);
-    EXPECT_EQ(mcb->m_waitCount, 1u);  // t2 still waiting
+    EXPECT_EQ(mcb->owner, t3);
+    EXPECT_EQ(mcb->waitCount, 1u);  // t2 still waiting
 }

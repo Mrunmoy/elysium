@@ -29,8 +29,8 @@ namespace kernel
         s_nextSemId = 0;
         for (std::uint8_t i = 0; i < kMaxSemaphores; ++i)
         {
-            s_semPool[i].m_active = false;
-            s_semPool[i].m_waitHead = kInvalidThreadId;
+            s_semPool[i].active = false;
+            s_semPool[i].waitHead = kInvalidThreadId;
         }
     }
 
@@ -44,12 +44,12 @@ namespace kernel
 
         SemaphoreId id = s_nextSemId++;
         SemaphoreControlBlock &scb = s_semPool[id];
-        scb.m_active = true;
-        scb.m_count = initialCount;
-        scb.m_maxCount = maxCount;
-        scb.m_waitHead = kInvalidThreadId;
-        scb.m_waitCount = 0;
-        scb.m_name = name;
+        scb.active = true;
+        scb.count = initialCount;
+        scb.maxCount = maxCount;
+        scb.waitHead = kInvalidThreadId;
+        scb.waitCount = 0;
+        scb.name = name;
 
         return id;
     }
@@ -60,12 +60,12 @@ namespace kernel
         {
             return;
         }
-        s_semPool[id].m_active = false;
+        s_semPool[id].active = false;
     }
 
     bool semaphoreWait(SemaphoreId id)
     {
-        if (id >= kMaxSemaphores || !s_semPool[id].m_active)
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
         {
             return false;
         }
@@ -74,9 +74,9 @@ namespace kernel
 
         SemaphoreControlBlock &scb = s_semPool[id];
 
-        if (scb.m_count > 0)
+        if (scb.count > 0)
         {
-            --scb.m_count;
+            --scb.count;
             arch::exitCritical();
             return true;
         }
@@ -85,8 +85,8 @@ namespace kernel
         Scheduler &sched = internal::scheduler();
         ThreadId currentId = sched.currentThreadId();
 
-        waitQueueInsert(scb.m_waitHead, currentId);
-        ++scb.m_waitCount;
+        waitQueueInsert(scb.waitHead, currentId);
+        ++scb.waitCount;
 
         sched.blockCurrentThread();
 
@@ -106,7 +106,7 @@ namespace kernel
 
     bool semaphoreTryWait(SemaphoreId id)
     {
-        if (id >= kMaxSemaphores || !s_semPool[id].m_active)
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
         {
             return false;
         }
@@ -114,9 +114,9 @@ namespace kernel
         arch::enterCritical();
 
         SemaphoreControlBlock &scb = s_semPool[id];
-        if (scb.m_count > 0)
+        if (scb.count > 0)
         {
-            --scb.m_count;
+            --scb.count;
             arch::exitCritical();
             return true;
         }
@@ -127,7 +127,7 @@ namespace kernel
 
     bool semaphoreSignal(SemaphoreId id)
     {
-        if (id >= kMaxSemaphores || !s_semPool[id].m_active)
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
         {
             return false;
         }
@@ -137,10 +137,10 @@ namespace kernel
         SemaphoreControlBlock &scb = s_semPool[id];
 
         // If threads are waiting, wake the highest-priority one
-        if (!waitQueueEmpty(scb.m_waitHead))
+        if (!waitQueueEmpty(scb.waitHead))
         {
-            ThreadId waiterId = waitQueueRemoveHead(scb.m_waitHead);
-            --scb.m_waitCount;
+            ThreadId waiterId = waitQueueRemoveHead(scb.waitHead);
+            --scb.waitCount;
 
             Scheduler &sched = internal::scheduler();
             bool preempt = sched.unblockThread(waiterId);
@@ -164,13 +164,13 @@ namespace kernel
         }
 
         // No waiters -- increment count if below max
-        if (scb.m_count >= scb.m_maxCount)
+        if (scb.count >= scb.maxCount)
         {
             arch::exitCritical();
             return false;
         }
 
-        ++scb.m_count;
+        ++scb.count;
         arch::exitCritical();
         return true;
     }

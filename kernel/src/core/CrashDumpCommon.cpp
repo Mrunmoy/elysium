@@ -99,13 +99,13 @@ namespace kernel
 
         // Thread context
         faultPrint("Thread: ");
-        if (tcb != nullptr && tcb->m_name != nullptr)
+        if (tcb != nullptr && tcb->name != nullptr)
         {
-            faultPrint(tcb->m_name);
+            faultPrint(tcb->name);
             faultPrint(" (id=");
             // Print thread ID as single digit (IDs are 0-7)
             char idBuf[2];
-            idBuf[0] = '0' + tcb->m_id;
+            idBuf[0] = '0' + tcb->id;
             idBuf[1] = '\0';
             faultPrint(idBuf);
             faultPrint(")");
@@ -143,9 +143,10 @@ namespace kernel
         if (tcb != nullptr)
         {
             faultPrint("Stack: base=");
-            faultPrintHex(reinterpret_cast<std::uint32_t>(tcb->m_stackBase));
+            faultPrintHex(static_cast<std::uint32_t>(
+                reinterpret_cast<std::uintptr_t>(tcb->stackBase)));
             faultPrint(" size=");
-            faultPrintHex(tcb->m_stackSize);
+            faultPrintHex(tcb->stackSize);
             faultPrint("\r\n");
         }
 

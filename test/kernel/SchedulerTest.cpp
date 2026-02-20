@@ -123,7 +123,7 @@ TEST_F(SchedulerTest, SwitchContext_DequeuesHighestPriority)
     EXPECT_EQ(m_scheduler.currentThreadId(), high);
 
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(high);
-    EXPECT_EQ(tcb->m_state, kernel::ThreadState::Running);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Running);
 }
 
 TEST_F(SchedulerTest, SwitchContext_SamePriorityRoundRobin)
@@ -171,11 +171,11 @@ TEST_F(SchedulerTest, Tick_DecrementsTimeSlice)
 
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
-    std::uint32_t initial = tcb->m_timeSliceRemaining;
+    std::uint32_t initial = tcb->timeSliceRemaining;
 
     m_scheduler.tick();
 
-    EXPECT_EQ(tcb->m_timeSliceRemaining, initial - 1);
+    EXPECT_EQ(tcb->timeSliceRemaining, initial - 1);
 }
 
 TEST_F(SchedulerTest, Tick_SamePriorityTimeSliceExpiry)
@@ -214,7 +214,7 @@ TEST_F(SchedulerTest, Tick_NoSwitchWhenAlone)
 
     // Time slice should be reset since there are no peers
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
-    EXPECT_EQ(tcb->m_timeSliceRemaining, tcb->m_timeSlice);
+    EXPECT_EQ(tcb->timeSliceRemaining, tcb->timeSlice);
 }
 
 TEST_F(SchedulerTest, Tick_HigherPriorityPreempts)
@@ -248,11 +248,11 @@ TEST_F(SchedulerTest, Yield_ResetsTimeSlice)
     // Consume some ticks
     m_scheduler.tick();
     m_scheduler.tick();
-    EXPECT_EQ(tcb->m_timeSliceRemaining, 8u);
+    EXPECT_EQ(tcb->timeSliceRemaining, 8u);
 
     // Yield resets time slice
     m_scheduler.yield();
-    EXPECT_EQ(tcb->m_timeSliceRemaining, 10u);
+    EXPECT_EQ(tcb->timeSliceRemaining, 10u);
 }
 
 // ---- Thread removal ----
@@ -264,10 +264,10 @@ TEST_F(SchedulerTest, RemoveThread_SetsStateInactive)
 
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
-    EXPECT_EQ(tcb->m_state, kernel::ThreadState::Ready);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Ready);
 
     m_scheduler.removeThread(id);
-    EXPECT_EQ(tcb->m_state, kernel::ThreadState::Inactive);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Inactive);
 }
 
 TEST_F(SchedulerTest, RemoveThread_RemovesFromQueue)
@@ -310,7 +310,7 @@ TEST_F(SchedulerTest, BlockCurrentThread_SetsStateBlocked)
     m_scheduler.blockCurrentThread();
 
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
-    EXPECT_EQ(tcb->m_state, kernel::ThreadState::Blocked);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Blocked);
 }
 
 TEST_F(SchedulerTest, UnblockThread_ReturnsToReadyQueue)
@@ -320,12 +320,12 @@ TEST_F(SchedulerTest, UnblockThread_ReturnsToReadyQueue)
 
     // Block id2 manually
     kernel::ThreadControlBlock *tcb2 = kernel::threadGetTcb(id2);
-    tcb2->m_state = kernel::ThreadState::Blocked;
+    tcb2->state = kernel::ThreadState::Blocked;
 
     // Unblock it
     m_scheduler.unblockThread(id2);
 
-    EXPECT_EQ(tcb2->m_state, kernel::ThreadState::Ready);
+    EXPECT_EQ(tcb2->state, kernel::ThreadState::Ready);
     EXPECT_EQ(m_scheduler.readyCount(), 1u);  // id2 is now in ready queue
 }
 
@@ -335,7 +335,7 @@ TEST_F(SchedulerTest, UnblockThread_ReturnsTrueIfHigherPriority)
     kernel::ThreadId high = createThread("high", g_stack2, sizeof(g_stack2), 5);
 
     kernel::ThreadControlBlock *highTcb = kernel::threadGetTcb(high);
-    highTcb->m_state = kernel::ThreadState::Blocked;
+    highTcb->state = kernel::ThreadState::Blocked;
 
     bool preempt = m_scheduler.unblockThread(high);
     EXPECT_TRUE(preempt);
@@ -347,7 +347,7 @@ TEST_F(SchedulerTest, UnblockThread_ReturnsFalseIfLowerPriority)
     kernel::ThreadId low = createThread("low", g_stack2, sizeof(g_stack2), 20);
 
     kernel::ThreadControlBlock *lowTcb = kernel::threadGetTcb(low);
-    lowTcb->m_state = kernel::ThreadState::Blocked;
+    lowTcb->state = kernel::ThreadState::Blocked;
 
     bool preempt = m_scheduler.unblockThread(low);
     EXPECT_FALSE(preempt);
@@ -370,6 +370,6 @@ TEST_F(SchedulerTest, SetThreadPriority_ReposInReadyQueue)
     m_scheduler.setThreadPriority(low, 5);
 
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(low);
-    EXPECT_EQ(tcb->m_currentPriority, 5u);
+    EXPECT_EQ(tcb->currentPriority, 5u);
     EXPECT_EQ(m_scheduler.pickNext(), low);
 }

@@ -2,12 +2,128 @@
 
 ## Overview
 
-Fault handler and diagnostic system for ms-os on Cortex-M3 (STM32F207ZGT6).
-When the CPU hits an unrecoverable fault (HardFault, MemManage, BusFault,
-UsageFault), the system captures register state, fault status, and thread
-context, then outputs a structured crash dump via UART. A host-side Python
-tool monitors the serial port and automatically translates addresses to
-source file:line using `arm-none-eabi-addr2line`.
+Fault handler and diagnostic system for ms-os on ARM Cortex-M (STM32F207ZGT6,
+STM32F407VET6) and future Cortex-A targets. When the CPU hits an unrecoverable
+fault (HardFault, MemManage, BusFault, UsageFault), the system captures register
+state, fault status, and thread context, then outputs a structured crash dump
+via UART. A host-side Python tool monitors the serial port and automatically
+translates addresses to source file:line using `arm-none-eabi-addr2line`.
+
+## Three-Layer Architecture
+
+The crash dump system is split into three layers to separate portable formatting
+logic from CPU-specific and board-specific code:
+
+| Layer | Directory | What varies | Example |
+|-------|-----------|-------------|---------|
+| **Common** | `kernel/src/core/` | Nothing -- pure formatting | crash dump structure, hex conversion |
+| **Arch** | `kernel/src/arch/{cortex-m3,cortex-m4}/` | CPU core | SCB fault registers, stack frame layout, CFSR decoding, test fault instructions |
+| **Board** | `kernel/src/board/{stm32f207zgt6,stm32f407vet6}/` | SoC peripherals | UART init/output, LED blink, clock-based delay |
+
+### Call Flow
+
+```
+FaultHandlers.s (arch assembly, unchanged)
+    |
+    v
+faultHandlerC(stackFrame, excReturn)        [CrashDumpCommon.cpp]  COMMON
+    |-- boardEnsureOutput()                  [CrashDumpBoard.cpp]   BOARD
+    |-- archPopulateFaultInfo(info, ...)     [CrashDumpArch.cpp]    ARCH
+    |-- faultPrint / faultPrintHex           [CrashDumpCommon.cpp]  COMMON
+    |     \-- boardFaultPutChar()            [CrashDumpBoard.cpp]   BOARD
+    |     \-- boardFaultFlush()              [CrashDumpBoard.cpp]   BOARD
+    |-- archDecodeFaultBits(info)            [CrashDumpArch.cpp]    ARCH
+    |-- boardFaultBlink()                    [CrashDumpBoard.cpp]   BOARD
+```
+
+### Files
+
+| File | Layer | Purpose |
+|------|-------|---------|
+| `kernel/inc/kernel/CrashDump.h` | Public | FaultType enum, crashDumpInit(), triggerTestFault() |
+| `kernel/inc/kernel/CrashDumpArch.h` | Public | FaultInfo struct, arch function declarations |
+| `kernel/inc/kernel/CrashDumpBoard.h` | Public | Board output function declarations |
+| `kernel/src/core/CrashDumpInternal.h` | Internal | faultPrint(), faultPrintHex() declarations |
+| `kernel/src/core/CrashDumpCommon.cpp` | Common | Portable crash dump formatter (zero hardware addresses) |
+| `kernel/src/arch/cortex-m3/CrashDumpArch.cpp` | Arch | M3 fault info population and CFSR/HFSR decoding |
+| `kernel/src/arch/cortex-m4/CrashDumpArch.cpp` | Arch | M4 fault info population, CFSR/HFSR + MLSPERR decoding |
+| `kernel/src/arch/cortex-m3/FaultHandlers.s` | Arch | Naked ASM entry points for fault exceptions |
+| `kernel/src/arch/cortex-m4/FaultHandlers.s` | Arch | Naked ASM entry points for fault exceptions |
+| `kernel/src/board/stm32f207zgt6/CrashDumpBoard.cpp` | Board | STM32F207 USART1/GPIO/LED output |
+| `kernel/src/board/stm32f407vet6/CrashDumpBoard.cpp` | Board | STM32F407 USART1/GPIO/LED output |
+| `test/kernel/MockCrashDump.cpp` | Test | No-op stubs for host testing |
+| `test/kernel/MockCrashDump.h` | Test | Mock state for crash dump output capture |
+| `test/kernel/CrashDumpTest.cpp` | Test | Unit tests for formatting logic |
+
+### CMake Integration
+
+The root `CMakeLists.txt` defines `MSOS_BOARD_DIR` alongside `MSOS_ARCH_DIR`:
+
+```cmake
+# stm32f207zgt6 (default target)
+set(MSOS_ARCH_DIR cortex-m3)
+set(MSOS_BOARD_DIR stm32f207zgt6)
+
+# stm32f407vet6
+set(MSOS_ARCH_DIR cortex-m4)
+set(MSOS_BOARD_DIR stm32f407vet6)
+```
+
+`kernel/CMakeLists.txt` uses both variables:
+
+```cmake
+add_library(kernel STATIC
+    src/core/CrashDumpCommon.cpp
+    src/arch/${MSOS_ARCH_DIR}/CrashDumpArch.cpp
+    src/arch/${MSOS_ARCH_DIR}/FaultHandlers.s
+    src/board/${MSOS_BOARD_DIR}/CrashDumpBoard.cpp
+    ...
+)
+```
+
+### FaultInfo Struct
+
+Defined in `kernel/inc/kernel/CrashDumpArch.h`. This is the bridge between
+arch-specific code (which populates it) and common code (which formats it):
+
+```cpp
+struct FaultInfo
+{
+    std::uint32_t pc;
+    std::uint32_t lr;
+    std::uint32_t sp;
+    std::uint32_t r0, r1, r2, r3, r12;
+    std::uint32_t statusReg;       // xPSR (Cortex-M) or CPSR (Cortex-A)
+
+    std::uint32_t faultReg[4];     // M: CFSR, HFSR, MMFAR, BFAR
+    const char *faultRegNames[4];  // "CFSR ", "HFSR ", etc.
+
+    const char *faultType;         // "HardFault", "DataAbort", etc.
+    std::uint32_t excInfo;         // EXC_RETURN (M) or exception mode (A)
+};
+```
+
+### Arch Functions
+
+Each architecture directory provides four functions:
+
+```cpp
+void archPopulateFaultInfo(FaultInfo &info, uint32_t *stackFrame, uint32_t excReturn);
+void archDecodeFaultBits(const FaultInfo &info);
+void archCrashDumpInit();
+void archTriggerTestFault(FaultType type);
+```
+
+### Board Functions
+
+Each board directory provides four functions:
+
+```cpp
+void boardEnsureOutput();       // Init output device if not ready
+void boardFaultPutChar(char c); // Blocking single-char output
+void boardFaultFlush();         // Wait for TX complete
+[[noreturn]] void boardFaultBlink(); // Blink LED forever + halt
+```
 
 ## Cortex-M3 Exception Model
 
@@ -77,6 +193,22 @@ hardware performs these steps atomically before the handler runs:
 4. **Loads the handler address** from the vector table and begins execution
    in Handler mode using MSP.
 
+### Cortex-M4 FPU Extended Frame
+
+On Cortex-M4 with FPU enabled, when a context was using the FPU
+(EXC_RETURN[4] == 0), the hardware pushes an extended 26-word frame:
+
+```
+    [SP + 0..7]   = R0, R1, R2, R3, R12, LR, PC, xPSR  (same as basic)
+    [SP + 8..23]  = S0-S15
+    [SP + 24]     = FPSCR
+    [SP + 25]     = Reserved
+```
+
+The integer registers R0-xPSR are always at offsets [0..7] regardless of
+whether the basic (8-word) or extended (26-word) frame was pushed. The
+M4-specific CFSR bit 5 (MLSPERR) reports lazy FP stacking errors.
+
 ### How Our Fault Handler Uses This
 
 Since the hardware has already saved the faulting context, our handler only
@@ -144,87 +276,17 @@ this as PC + LR + fault registers are sufficient for diagnosis.
 | Reserved RAM | Not needed | Typically needed for safety |
 | Handler can be C | Yes (directly) | Needs ASM wrapper for mode switching |
 
-## Architecture
+## Common Layer (CrashDumpCommon.cpp)
 
-```
-TARGET (Cortex-M3)                         HOST (Python)
--------------------                        -------------
+The common layer contains zero hardware addresses. It:
 
-Fault occurs
-  |
-  v
-FaultHandlers.s                            tools/crash_monitor.py
-  naked ASM wrapper                          |
-  detect MSP vs PSP                          | monitors serial port
-  pass stack frame ptr                       | detects crash markers
-  to C handler                               | extracts addresses
-  |                                          | runs addr2line
-  v                                          | prints decoded output
-CrashDump.cpp                               |
-  extract R0-R3,R12,LR,PC,xPSR              v
-  read SCB: CFSR,HFSR,MMFAR,BFAR       Terminal with colored output
-  read thread context from g_currentTcb
-  format and print via polled UART
-  blink LED + halt (debug) or reset (release)
-```
-
-## Target-Side Design
-
-### Files
-
-| File | Purpose |
-|------|---------|
-| `kernel/src/arch/cortex-m3/FaultHandlers.s` | Naked ASM entry points for HardFault, MemManage, BusFault, UsageFault |
-| `kernel/src/core/CrashDump.cpp` | C++ handler: register extraction, fault decoding, UART output |
-| `kernel/inc/kernel/CrashDump.h` | Public header: init function, extern "C" handler declaration |
-
-### Assembly Stubs (FaultHandlers.s)
-
-All four fault handlers use the same pattern:
-
-```asm
-HardFault_Handler:
-    tst     lr, #4          @ Test EXC_RETURN bit 2
-    ite     eq
-    mrseq   r0, msp         @ Bit 2 = 0: fault used MSP (handler mode)
-    mrsne   r0, psp         @ Bit 2 = 1: fault used PSP (thread mode)
-    mov     r1, lr          @ Pass EXC_RETURN as second arg
-    b       faultHandlerC   @ Branch to C handler
-```
-
-Key points:
-- No function prologue (naked) -- preserves LR = EXC_RETURN
-- Uses `.global` to override weak symbols in Startup.s
-- `--whole-archive` linkage (already configured) ensures override
-- All four handlers branch to the same C function `faultHandlerC`
-
-### C Handler (CrashDump.cpp)
-
-```cpp
-extern "C" void faultHandlerC(std::uint32_t *stackFrame, std::uint32_t excReturn);
-```
-
-The handler:
-
-1. **Extracts stacked registers** from the hardware exception frame:
-   - stackFrame[0..7] = R0, R1, R2, R3, R12, LR, PC, xPSR
-
-2. **Reads SCB fault status registers**:
-   - CFSR (0xE000ED28): MemManage + BusFault + UsageFault combined
-   - HFSR (0xE000ED2C): HardFault status
-   - MMFAR (0xE000ED34): MemManage fault address (if MMARVALID)
-   - BFAR (0xE000ED38): BusFault address (if BFARVALID)
-
-3. **Reads thread context** from `g_currentTcb`:
-   - Thread ID, name, stack base, stack size
-
-4. **Outputs structured crash dump** via polled UART:
-   - Uses `hal::uartWriteString()` (polling, no interrupts, no heap)
-   - If UART not initialized, performs direct register-level init
-
-5. **Post-output behavior**:
-   - Blink LED on PC13 for visual indication
-   - Infinite loop (halt for debugger)
+1. Calls `boardEnsureOutput()` to initialize the output device.
+2. Calls `archPopulateFaultInfo()` to fill the `FaultInfo` struct.
+3. Formats and prints the crash dump using `faultPrint()` and
+   `faultPrintHex()`, which delegate to `boardFaultPutChar()` and
+   `boardFaultFlush()`.
+4. Calls `archDecodeFaultBits()` for arch-specific bit interpretation.
+5. Calls `boardFaultBlink()` to halt with a visual indicator.
 
 ### Crash Dump Output Format
 
@@ -264,6 +326,21 @@ Key design choices:
 - Decoded fault bits as human-readable strings prefixed with `  -> `
 - Thread name and ID for identifying which thread faulted
 
+## Arch Layer (CrashDumpArch.cpp)
+
+### Cortex-M3
+
+- Reads SCB fault registers: CFSR, HFSR, MMFAR, BFAR
+- Decodes MemManage, BusFault, UsageFault, HardFault bits
+- Enables configurable fault handlers (SHCSR) and traps (CCR)
+- Triggers test faults via Thumb-2 inline assembly (UDIV, bad pointer, 0xDEFE)
+
+### Cortex-M4
+
+Same as M3, plus:
+- Decodes MLSPERR (CFSR bit 5) for lazy FP stacking errors
+- Header comment documents FPU extended frame layout
+
 ### Fault Bit Decoding
 
 CFSR sub-registers:
@@ -271,6 +348,9 @@ CFSR sub-registers:
 **MemManage (bits 0-7)**:
 - Bit 0: IACCVIOL -- instruction access violation
 - Bit 1: DACCVIOL -- data access violation
+- Bit 3: MUNSTKERR -- unstacking error
+- Bit 4: MSTKERR -- stacking error
+- Bit 5: MLSPERR -- lazy FP stacking error (M4 only)
 - Bit 7: MMARVALID -- MMFAR holds valid address
 
 **BusFault (bits 8-15)**:
@@ -298,8 +378,10 @@ HFSR:
 `kernel::crashDumpInit()` called from `kernel::init()`:
 - Enables MemManage, BusFault, and UsageFault handlers in SCB->SHCSR
   (otherwise they all escalate to HardFault)
-- Optionally enables DIV_0_TRP in SCB->CCR for divide-by-zero detection
+- Enables DIV_0_TRP in SCB->CCR for divide-by-zero detection
 - Enables UNALIGN_TRP in SCB->CCR for unaligned access detection
+
+## Board Layer (CrashDumpBoard.cpp)
 
 ### Exception-Safe UART
 
@@ -309,8 +391,43 @@ checks USART1->CR1.UE (UART enable bit) and if not set, performs minimal
 direct register-level UART initialization:
 - Enable GPIOA and USART1 clocks in RCC
 - Configure PA9 as AF7 push-pull
-- Set BRR for 115200 at APB2=60MHz
+- Set BRR for 115200 at APB2 clock rate
 - Enable UE + TE in CR1
+
+### LED Blink
+
+After the crash dump is printed, `boardFaultBlink()` toggles PC13 (LED)
+in a 250ms on / 250ms off pattern using a calibrated delay loop. This
+provides a visual indication of a fault even without a serial connection.
+The function is marked `[[noreturn]]` as it never returns.
+
+### Board Differences
+
+Both STM32F207 and STM32F407 use the same USART1 peripheral IP and GPIO
+layout (PA9 = TX, PC13 = LED), so the board files are currently identical.
+When boards diverge (e.g., different UART or LED pin), each file can be
+edited independently.
+
+## Porting Guide: Adding a New Board/Arch
+
+### New Architecture (e.g., Cortex-A9)
+
+1. Create `kernel/src/arch/cortex-a9/CrashDumpArch.cpp`
+   - Implement `archPopulateFaultInfo()` reading DFSR, DFAR, IFSR, IFAR
+   - Implement `archDecodeFaultBits()` for ARMv7-A fault model
+   - Implement `archCrashDumpInit()` (set up exception vectors)
+   - Implement `archTriggerTestFault()` with ARM-mode test faults
+2. Create `kernel/src/arch/cortex-a9/FaultHandlers.s` with ARM-mode stubs
+3. Add CMake target: `set(MSOS_ARCH_DIR cortex-a9)`
+4. CrashDumpCommon.cpp is untouched
+
+### New Board (e.g., PYNQ-Z2)
+
+1. Create `kernel/src/board/pynq-z2/CrashDumpBoard.cpp`
+   - Implement UART output via Xilinx PS UART (0xE0001000)
+   - Implement LED blink via MIO GPIO
+2. Add CMake target: `set(MSOS_BOARD_DIR pynq-z2)`
+3. CrashDumpCommon.cpp and CrashDumpArch.cpp are untouched
 
 ## Host-Side Design
 
@@ -352,11 +469,16 @@ When a crash dump is detected, the tool:
 ### Host-Side Unit Tests
 
 `test/kernel/CrashDumpTest.cpp`:
-- Mock UART output (record strings written)
-- Call `faultHandlerC()` with known stack frames
-- Assert output contains expected register values
-- Assert fault bit decoding is correct
-- Assert thread context (name, ID) is included
+- Compile real `CrashDumpCommon.cpp` in test build (not the mock)
+- Mock `boardFaultPutChar()` to capture output into `test::g_crashOutput`
+- Mock `archPopulateFaultInfo()` to populate FaultInfo from test data
+- Mock `archDecodeFaultBits()` as no-op (tested via arch-specific tests)
+- Mock `boardFaultBlink()` to return via `setjmp`/`longjmp` (it's `[[noreturn]]`)
+- Test cases:
+  - `faultPrintHex()` with known values (0, 0xDEADBEEF, 0xFFFFFFFF)
+  - `faultHandlerC()` with known stack frame, assert formatted output
+  - Thread context: verify thread name and ID appear when `g_currentTcb` is set
+  - Null thread context: verify "(none)" when `g_currentTcb` is nullptr
 
 ### On-Target Test
 
@@ -371,31 +493,3 @@ When a crash dump is detected, the tool:
 - Feed known crash dump text, verify address extraction
 - Mock addr2line subprocess, verify invocation args
 - Verify colored output formatting
-
-## Integration
-
-### CMake Changes
-
-`kernel/CMakeLists.txt`:
-```cmake
-add_library(kernel STATIC
-    ...existing files...
-    src/arch/cortex-m3/FaultHandlers.s
-    src/core/CrashDump.cpp
-)
-
-set_source_files_properties(src/arch/cortex-m3/FaultHandlers.s PROPERTIES
-    LANGUAGE ASM
-)
-```
-
-### Kernel Init
-
-`kernel::init()` calls `crashDumpInit()` to enable configurable fault
-handlers before any threads are created.
-
-### No Changes Needed
-
-- Startup.s: fault handlers are weak, overridden by --whole-archive
-- Linker.ld: no new sections needed
-- App code: no changes (crash dump is automatic on any fault)

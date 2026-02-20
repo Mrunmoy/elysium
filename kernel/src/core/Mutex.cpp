@@ -55,9 +55,9 @@ namespace kernel
         s_nextMutexId = 0;
         for (std::uint8_t i = 0; i < kMaxMutexes; ++i)
         {
-            s_mutexPool[i].m_active = false;
-            s_mutexPool[i].m_owner = kInvalidThreadId;
-            s_mutexPool[i].m_waitHead = kInvalidThreadId;
+            s_mutexPool[i].active = false;
+            s_mutexPool[i].owner = kInvalidThreadId;
+            s_mutexPool[i].waitHead = kInvalidThreadId;
         }
     }
 
@@ -70,12 +70,12 @@ namespace kernel
 
         MutexId id = s_nextMutexId++;
         MutexControlBlock &mcb = s_mutexPool[id];
-        mcb.m_active = true;
-        mcb.m_owner = kInvalidThreadId;
-        mcb.m_lockCount = 0;
-        mcb.m_waitHead = kInvalidThreadId;
-        mcb.m_waitCount = 0;
-        mcb.m_name = name;
+        mcb.active = true;
+        mcb.owner = kInvalidThreadId;
+        mcb.lockCount = 0;
+        mcb.waitHead = kInvalidThreadId;
+        mcb.waitCount = 0;
+        mcb.name = name;
 
         return id;
     }
@@ -86,12 +86,12 @@ namespace kernel
         {
             return;
         }
-        s_mutexPool[id].m_active = false;
+        s_mutexPool[id].active = false;
     }
 
     bool mutexLock(MutexId id)
     {
-        if (id >= kMaxMutexes || !s_mutexPool[id].m_active)
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
         {
             return false;
         }
@@ -102,39 +102,39 @@ namespace kernel
         Scheduler &sched = internal::scheduler();
         ThreadId currentId = sched.currentThreadId();
 
-        if (mcb.m_owner == kInvalidThreadId)
+        if (mcb.owner == kInvalidThreadId)
         {
             // Mutex is free -- acquire it
-            mcb.m_owner = currentId;
-            mcb.m_lockCount = 1;
+            mcb.owner = currentId;
+            mcb.lockCount = 1;
             arch::exitCritical();
             return true;
         }
 
-        if (mcb.m_owner == currentId)
+        if (mcb.owner == currentId)
         {
             // Recursive lock by same thread
-            ++mcb.m_lockCount;
+            ++mcb.lockCount;
             arch::exitCritical();
             return true;
         }
 
         // Mutex held by another thread -- block and apply priority inheritance
         ThreadControlBlock *currentTcb = threadGetTcb(currentId);
-        ThreadControlBlock *ownerTcb = threadGetTcb(mcb.m_owner);
+        ThreadControlBlock *ownerTcb = threadGetTcb(mcb.owner);
 
         // Priority inheritance: boost the owner if we have higher priority
         if (currentTcb != nullptr && ownerTcb != nullptr)
         {
-            if (currentTcb->m_currentPriority < ownerTcb->m_currentPriority)
+            if (currentTcb->currentPriority < ownerTcb->currentPriority)
             {
-                sched.setThreadPriority(mcb.m_owner, currentTcb->m_currentPriority);
+                sched.setThreadPriority(mcb.owner, currentTcb->currentPriority);
             }
         }
 
         // Add current thread to the mutex wait queue
-        waitQueueInsert(mcb.m_waitHead, currentId);
-        ++mcb.m_waitCount;
+        waitQueueInsert(mcb.waitHead, currentId);
+        ++mcb.waitCount;
 
         // Block the current thread
         sched.blockCurrentThread();
@@ -156,7 +156,7 @@ namespace kernel
 
     bool mutexTryLock(MutexId id)
     {
-        if (id >= kMaxMutexes || !s_mutexPool[id].m_active)
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
         {
             return false;
         }
@@ -167,17 +167,17 @@ namespace kernel
         Scheduler &sched = internal::scheduler();
         ThreadId currentId = sched.currentThreadId();
 
-        if (mcb.m_owner == kInvalidThreadId)
+        if (mcb.owner == kInvalidThreadId)
         {
-            mcb.m_owner = currentId;
-            mcb.m_lockCount = 1;
+            mcb.owner = currentId;
+            mcb.lockCount = 1;
             arch::exitCritical();
             return true;
         }
 
-        if (mcb.m_owner == currentId)
+        if (mcb.owner == currentId)
         {
-            ++mcb.m_lockCount;
+            ++mcb.lockCount;
             arch::exitCritical();
             return true;
         }
@@ -188,7 +188,7 @@ namespace kernel
 
     bool mutexUnlock(MutexId id)
     {
-        if (id >= kMaxMutexes || !s_mutexPool[id].m_active)
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
         {
             return false;
         }
@@ -200,14 +200,14 @@ namespace kernel
         ThreadId currentId = sched.currentThreadId();
 
         // Only the owner can unlock
-        if (mcb.m_owner != currentId)
+        if (mcb.owner != currentId)
         {
             arch::exitCritical();
             return false;
         }
 
-        --mcb.m_lockCount;
-        if (mcb.m_lockCount > 0)
+        --mcb.lockCount;
+        if (mcb.lockCount > 0)
         {
             // Still recursively locked
             arch::exitCritical();
@@ -217,24 +217,24 @@ namespace kernel
         // Restore the owner's base priority (undo inheritance)
         ThreadControlBlock *ownerTcb = threadGetTcb(currentId);
         if (ownerTcb != nullptr &&
-            ownerTcb->m_currentPriority != ownerTcb->m_basePriority)
+            ownerTcb->currentPriority != ownerTcb->basePriority)
         {
-            sched.setThreadPriority(currentId, ownerTcb->m_basePriority);
+            sched.setThreadPriority(currentId, ownerTcb->basePriority);
         }
 
         // Release the mutex
-        mcb.m_owner = kInvalidThreadId;
+        mcb.owner = kInvalidThreadId;
 
         // Wake the highest-priority waiter, if any
         bool preempt = false;
-        if (!waitQueueEmpty(mcb.m_waitHead))
+        if (!waitQueueEmpty(mcb.waitHead))
         {
-            ThreadId waiterId = waitQueueRemoveHead(mcb.m_waitHead);
-            --mcb.m_waitCount;
+            ThreadId waiterId = waitQueueRemoveHead(mcb.waitHead);
+            --mcb.waitCount;
 
             // Transfer ownership to the waiter
-            mcb.m_owner = waiterId;
-            mcb.m_lockCount = 1;
+            mcb.owner = waiterId;
+            mcb.lockCount = 1;
 
             // Unblock the waiter
             preempt = sched.unblockThread(waiterId);

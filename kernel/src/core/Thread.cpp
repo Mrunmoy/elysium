@@ -19,8 +19,8 @@ namespace kernel
         s_nextId = 0;
         for (std::uint8_t i = 0; i < kMaxThreads; ++i)
         {
-            s_tcbPool[i].m_state = ThreadState::Inactive;
-            s_tcbPool[i].m_id = kInvalidThreadId;
+            s_tcbPool[i].state = ThreadState::Inactive;
+            s_tcbPool[i].id = kInvalidThreadId;
         }
     }
 
@@ -34,18 +34,18 @@ namespace kernel
         ThreadId id = s_nextId++;
         ThreadControlBlock &tcb = s_tcbPool[id];
 
-        tcb.m_id = id;
-        tcb.m_state = ThreadState::Ready;
-        tcb.m_basePriority = config.priority;
-        tcb.m_currentPriority = config.priority;
-        tcb.m_name = config.name;
-        tcb.m_stackBase = config.stack;
-        tcb.m_stackSize = config.stackSize;
-        tcb.m_timeSlice = (config.timeSlice == 0) ? kDefaultTimeSlice : config.timeSlice;
-        tcb.m_timeSliceRemaining = tcb.m_timeSlice;
-        tcb.m_nextReady = kInvalidThreadId;
-        tcb.m_nextWait = kInvalidThreadId;
-        tcb.m_wakeupTick = 0;
+        tcb.id = id;
+        tcb.state = ThreadState::Ready;
+        tcb.basePriority = config.priority;
+        tcb.currentPriority = config.priority;
+        tcb.name = config.name;
+        tcb.stackBase = config.stack;
+        tcb.stackSize = config.stackSize;
+        tcb.timeSlice = (config.timeSlice == 0) ? kDefaultTimeSlice : config.timeSlice;
+        tcb.timeSliceRemaining = tcb.timeSlice;
+        tcb.nextReady = kInvalidThreadId;
+        tcb.nextWait = kInvalidThreadId;
+        tcb.wakeupTick = 0;
 
         // Build initial stack frame at top of stack
         // Stack grows downward; top = base + (size / sizeof(uint32_t))
@@ -89,7 +89,7 @@ namespace kernel
             reinterpret_cast<std::uintptr_t>(config.function));            // PC
         stackTop[15] = 0x01000000u;                                        // xPSR (Thumb)
 
-        tcb.m_stackPointer = stackTop;
+        tcb.stackPointer = stackTop;
 
         return id;
     }

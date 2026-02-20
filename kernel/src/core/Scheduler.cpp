@@ -38,8 +38,8 @@ namespace kernel
             return;
         }
 
-        std::uint8_t pri = tcb->m_currentPriority;
-        tcb->m_nextReady = kInvalidThreadId;
+        std::uint8_t pri = tcb->currentPriority;
+        tcb->nextReady = kInvalidThreadId;
 
         if (m_readyHead[pri] == kInvalidThreadId)
         {
@@ -54,7 +54,7 @@ namespace kernel
             ThreadControlBlock *tail = threadGetTcb(m_readyTail[pri]);
             if (tail != nullptr)
             {
-                tail->m_nextReady = id;
+                tail->nextReady = id;
             }
             m_readyTail[pri] = id;
         }
@@ -78,8 +78,8 @@ namespace kernel
         ThreadControlBlock *tcb = threadGetTcb(id);
         if (tcb != nullptr)
         {
-            m_readyHead[priority] = tcb->m_nextReady;
-            tcb->m_nextReady = kInvalidThreadId;
+            m_readyHead[priority] = tcb->nextReady;
+            tcb->nextReady = kInvalidThreadId;
         }
         else
         {
@@ -121,14 +121,14 @@ namespace kernel
                 break;
             }
 
-            if (prevTcb->m_nextReady == id)
+            if (prevTcb->nextReady == id)
             {
                 // Found it -- unlink
                 ThreadControlBlock *tcb = threadGetTcb(id);
                 if (tcb != nullptr)
                 {
-                    prevTcb->m_nextReady = tcb->m_nextReady;
-                    tcb->m_nextReady = kInvalidThreadId;
+                    prevTcb->nextReady = tcb->nextReady;
+                    tcb->nextReady = kInvalidThreadId;
                 }
 
                 // Update tail if we removed the last element
@@ -148,7 +148,7 @@ namespace kernel
                 return;
             }
 
-            prev = prevTcb->m_nextReady;
+            prev = prevTcb->nextReady;
         }
     }
 
@@ -162,7 +162,7 @@ namespace kernel
             return false;
         }
 
-        tcb->m_state = ThreadState::Ready;
+        tcb->state = ThreadState::Ready;
         enqueueReady(id);
         return true;
     }
@@ -176,12 +176,12 @@ namespace kernel
         }
 
         // Remove from ready list if in queue
-        if (tcb->m_state == ThreadState::Ready)
+        if (tcb->state == ThreadState::Ready)
         {
-            removeFromReadyList(id, tcb->m_currentPriority);
+            removeFromReadyList(id, tcb->currentPriority);
         }
 
-        tcb->m_state = ThreadState::Inactive;
+        tcb->state = ThreadState::Inactive;
 
         if (m_currentThreadId == id)
         {
@@ -214,7 +214,7 @@ namespace kernel
 
         // Check for preemption: higher-priority thread became ready
         std::uint8_t highPri = highestReadyPriority();
-        if (highPri < kMaxPriorities && highPri < tcb->m_currentPriority)
+        if (highPri < kMaxPriorities && highPri < tcb->currentPriority)
         {
             return true;
         }
@@ -226,20 +226,20 @@ namespace kernel
         }
 
         // Time-slice within same priority
-        if (tcb->m_timeSliceRemaining > 0)
+        if (tcb->timeSliceRemaining > 0)
         {
-            --tcb->m_timeSliceRemaining;
+            --tcb->timeSliceRemaining;
         }
 
-        if (tcb->m_timeSliceRemaining == 0)
+        if (tcb->timeSliceRemaining == 0)
         {
             // Check if same-priority peers exist in the ready queue
-            if (m_readyBitmap & (1U << tcb->m_currentPriority))
+            if (m_readyBitmap & (1U << tcb->currentPriority))
             {
                 return true;
             }
             // No peers; reset slice and continue
-            tcb->m_timeSliceRemaining = tcb->m_timeSlice;
+            tcb->timeSliceRemaining = tcb->timeSlice;
         }
 
         return false;
@@ -255,7 +255,7 @@ namespace kernel
         ThreadControlBlock *tcb = threadGetTcb(m_currentThreadId);
         if (tcb != nullptr)
         {
-            tcb->m_timeSliceRemaining = tcb->m_timeSlice;
+            tcb->timeSliceRemaining = tcb->timeSlice;
         }
     }
 
@@ -265,9 +265,9 @@ namespace kernel
         ThreadControlBlock *oldTcb = threadGetTcb(oldId);
 
         // Re-enqueue the outgoing thread if still Running
-        if (oldTcb != nullptr && oldTcb->m_state == ThreadState::Running)
+        if (oldTcb != nullptr && oldTcb->state == ThreadState::Running)
         {
-            oldTcb->m_state = ThreadState::Ready;
+            oldTcb->state = ThreadState::Ready;
             enqueueReady(oldId);
         }
 
@@ -286,8 +286,8 @@ namespace kernel
         ThreadControlBlock *nextTcb = threadGetTcb(nextId);
         if (nextTcb != nullptr)
         {
-            nextTcb->m_state = ThreadState::Running;
-            nextTcb->m_timeSliceRemaining = nextTcb->m_timeSlice;
+            nextTcb->state = ThreadState::Running;
+            nextTcb->timeSliceRemaining = nextTcb->timeSlice;
         }
 
         m_currentThreadId = nextId;
@@ -302,19 +302,19 @@ namespace kernel
             return;
         }
 
-        tcb->m_state = ThreadState::Blocked;
+        tcb->state = ThreadState::Blocked;
         // Thread is NOT re-enqueued in the ready list -- it's blocked
     }
 
     bool Scheduler::unblockThread(ThreadId id)
     {
         ThreadControlBlock *tcb = threadGetTcb(id);
-        if (tcb == nullptr || tcb->m_state != ThreadState::Blocked)
+        if (tcb == nullptr || tcb->state != ThreadState::Blocked)
         {
             return false;
         }
 
-        tcb->m_state = ThreadState::Ready;
+        tcb->state = ThreadState::Ready;
         enqueueReady(id);
 
         // Return true if unblocked thread has higher priority than current
@@ -323,7 +323,7 @@ namespace kernel
         {
             return true;
         }
-        return tcb->m_currentPriority < curTcb->m_currentPriority;
+        return tcb->currentPriority < curTcb->currentPriority;
     }
 
     void Scheduler::setThreadPriority(ThreadId id, std::uint8_t newPriority)
@@ -334,22 +334,22 @@ namespace kernel
             return;
         }
 
-        std::uint8_t oldPriority = tcb->m_currentPriority;
+        std::uint8_t oldPriority = tcb->currentPriority;
         if (oldPriority == newPriority)
         {
             return;
         }
 
         // If thread is in the ready queue, reposition it
-        if (tcb->m_state == ThreadState::Ready)
+        if (tcb->state == ThreadState::Ready)
         {
             removeFromReadyList(id, oldPriority);
-            tcb->m_currentPriority = newPriority;
+            tcb->currentPriority = newPriority;
             enqueueReady(id);
         }
         else
         {
-            tcb->m_currentPriority = newPriority;
+            tcb->currentPriority = newPriority;
         }
     }
 

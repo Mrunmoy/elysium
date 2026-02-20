@@ -7,10 +7,11 @@
 
 #include <string>
 #include <cstdint>
+#include <csetjmp>
 
 namespace test
 {
-    // Captured output from faultPrint calls
+    // Captured output from boardFaultPutChar calls
     extern std::string g_crashOutput;
 
     // Mock SCB register values (set before calling faultHandlerC)
@@ -27,6 +28,11 @@ namespace test
     // Mock RCC registers
     extern std::uint32_t g_mockRccAhb1enr;
     extern std::uint32_t g_mockRccApb2enr;
+
+    // Jump buffer for escaping boardFaultBlink() in tests.
+    // Set g_blinkJmpBufSet = true after setjmp() to enable longjmp escape.
+    extern std::jmp_buf g_blinkJmpBuf;
+    extern bool g_blinkJmpBufSet;
 
     void resetCrashDumpMockState();
 

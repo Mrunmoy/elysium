@@ -30,23 +30,23 @@ namespace kernel
 
     struct ThreadControlBlock
     {
-        std::uint32_t *m_stackPointer;  // [offset 0] PSP -- assembly reads this
-        ThreadState m_state;
-        ThreadId m_id;
-        std::uint8_t m_basePriority;       // Assigned priority (0=highest, 31=lowest)
-        std::uint8_t m_currentPriority;    // Effective priority (may be boosted by inheritance)
-        const char *m_name;
-        std::uint32_t *m_stackBase;        // Bottom of stack (for overflow detection)
-        std::uint32_t m_stackSize;         // In bytes
-        std::uint32_t m_timeSliceRemaining;
-        std::uint32_t m_timeSlice;
+        std::uint32_t *stackPointer;    // [offset 0] PSP -- assembly reads this
+        ThreadState state;
+        ThreadId id;
+        std::uint8_t basePriority;      // Assigned priority (0=highest, 31=lowest)
+        std::uint8_t currentPriority;   // Effective priority (may be boosted by inheritance)
+        const char *name;
+        std::uint32_t *stackBase;       // Bottom of stack (for overflow detection)
+        std::uint32_t stackSize;        // In bytes
+        std::uint32_t timeSliceRemaining;
+        std::uint32_t timeSlice;
 
         // Linked list pointers
-        ThreadId m_nextReady;              // Next in per-priority ready list
-        ThreadId m_nextWait;               // Next in mutex/semaphore wait queue
+        ThreadId nextReady;             // Next in per-priority ready list
+        ThreadId nextWait;              // Next in mutex/semaphore wait queue
 
         // Sleep / timeout
-        std::uint32_t m_wakeupTick;        // Tick at which to wake (0 = not sleeping)
+        std::uint32_t wakeupTick;       // Tick at which to wake (0 = not sleeping)
     };
 
     struct ThreadConfig

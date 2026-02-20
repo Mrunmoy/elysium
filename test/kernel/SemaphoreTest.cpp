@@ -61,7 +61,7 @@ protected:
         kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
         if (tcb != nullptr)
         {
-            tcb->m_state = kernel::ThreadState::Running;
+            tcb->state = kernel::ThreadState::Running;
         }
     }
 };
@@ -80,8 +80,8 @@ TEST_F(SemaphoreTest, Create_InitialCount)
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(id);
     ASSERT_NE(scb, nullptr);
 
-    EXPECT_EQ(scb->m_count, 3u);
-    EXPECT_EQ(scb->m_maxCount, 5u);
+    EXPECT_EQ(scb->count, 3u);
+    EXPECT_EQ(scb->maxCount, 5u);
 }
 
 TEST_F(SemaphoreTest, Create_InvalidIfInitialExceedsMax)
@@ -110,7 +110,7 @@ TEST_F(SemaphoreTest, Wait_DecrementsCount)
     EXPECT_TRUE(kernel::semaphoreWait(sid));
 
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 2u);
+    EXPECT_EQ(scb->count, 2u);
 }
 
 TEST_F(SemaphoreTest, Signal_IncrementsCount)
@@ -119,7 +119,7 @@ TEST_F(SemaphoreTest, Signal_IncrementsCount)
     EXPECT_TRUE(kernel::semaphoreSignal(sid));
 
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 2u);
+    EXPECT_EQ(scb->count, 2u);
 }
 
 TEST_F(SemaphoreTest, Signal_FailsAtMaxCount)
@@ -128,7 +128,7 @@ TEST_F(SemaphoreTest, Signal_FailsAtMaxCount)
     EXPECT_FALSE(kernel::semaphoreSignal(sid));
 
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 5u);
+    EXPECT_EQ(scb->count, 5u);
 }
 
 TEST_F(SemaphoreTest, BinarySemaphore_ToggleBehavior)
@@ -141,11 +141,11 @@ TEST_F(SemaphoreTest, BinarySemaphore_ToggleBehavior)
     // Wait: 1 -> 0
     EXPECT_TRUE(kernel::semaphoreWait(sid));
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 0u);
+    EXPECT_EQ(scb->count, 0u);
 
     // Signal: 0 -> 1
     EXPECT_TRUE(kernel::semaphoreSignal(sid));
-    EXPECT_EQ(scb->m_count, 1u);
+    EXPECT_EQ(scb->count, 1u);
 
     // Signal again: already at max
     EXPECT_FALSE(kernel::semaphoreSignal(sid));
@@ -159,7 +159,7 @@ TEST_F(SemaphoreTest, TryWait_SucceedsWhenAvailable)
     EXPECT_TRUE(kernel::semaphoreTryWait(sid));
 
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 0u);
+    EXPECT_EQ(scb->count, 0u);
 }
 
 TEST_F(SemaphoreTest, TryWait_FailsWhenZero)
@@ -182,12 +182,12 @@ TEST_F(SemaphoreTest, Wait_BlocksWhenCountZero)
 
     // Thread should be Blocked
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(tid);
-    EXPECT_EQ(tcb->m_state, kernel::ThreadState::Blocked);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Blocked);
 
     // Should be in wait queue
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_waitCount, 1u);
-    EXPECT_EQ(scb->m_waitHead, tid);
+    EXPECT_EQ(scb->waitCount, 1u);
+    EXPECT_EQ(scb->waitHead, tid);
 }
 
 TEST_F(SemaphoreTest, Signal_WakesBlockedThread)
@@ -210,12 +210,12 @@ TEST_F(SemaphoreTest, Signal_WakesBlockedThread)
 
     // t1 should be Ready (unblocked)
     kernel::ThreadControlBlock *tcb1 = kernel::threadGetTcb(t1);
-    EXPECT_EQ(tcb1->m_state, kernel::ThreadState::Ready);
+    EXPECT_EQ(tcb1->state, kernel::ThreadState::Ready);
 
     // Count should still be 0 (consumed by waking t1)
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 0u);
-    EXPECT_EQ(scb->m_waitCount, 0u);
+    EXPECT_EQ(scb->count, 0u);
+    EXPECT_EQ(scb->waitCount, 0u);
 }
 
 TEST_F(SemaphoreTest, Signal_WakesHighestPriorityWaiter)
@@ -241,14 +241,14 @@ TEST_F(SemaphoreTest, Signal_WakesHighestPriorityWaiter)
     // t2 was woken and has higher priority than t3, so preemptive switchContext
     // made t2 Running (not just Ready)
     kernel::ThreadControlBlock *tcb2 = kernel::threadGetTcb(t2);
-    EXPECT_NE(tcb2->m_state, kernel::ThreadState::Blocked);
+    EXPECT_NE(tcb2->state, kernel::ThreadState::Blocked);
 
     // t1 still blocked
     kernel::ThreadControlBlock *tcb1 = kernel::threadGetTcb(t1);
-    EXPECT_EQ(tcb1->m_state, kernel::ThreadState::Blocked);
+    EXPECT_EQ(tcb1->state, kernel::ThreadState::Blocked);
 
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_waitCount, 1u);
+    EXPECT_EQ(scb->waitCount, 1u);
 }
 
 // ---- Counting semaphore ----
@@ -266,11 +266,11 @@ TEST_F(SemaphoreTest, CountingSemaphore_MultipleResources)
     EXPECT_TRUE(kernel::semaphoreWait(sid));
 
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
-    EXPECT_EQ(scb->m_count, 0u);
+    EXPECT_EQ(scb->count, 0u);
 
     // Release them back
     EXPECT_TRUE(kernel::semaphoreSignal(sid));
     EXPECT_TRUE(kernel::semaphoreSignal(sid));
     EXPECT_TRUE(kernel::semaphoreSignal(sid));
-    EXPECT_EQ(scb->m_count, 3u);
+    EXPECT_EQ(scb->count, 3u);
 }

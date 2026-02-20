@@ -1,8 +1,14 @@
-// Cortex-M3/M4 crash dump architecture support.
+// Cortex-M4 crash dump architecture support.
 //
 // Implements arch-specific fault info population and fault bit decoding
-// for ARMv7-M processors. Both Cortex-M3 and M4 share the same SCB
-// registers, fault model, and hardware stack frame layout.
+// for the Cortex-M4 (ARMv7E-M). Shares the same SCB fault registers and
+// base stack frame layout as Cortex-M3, but adds FPU-related fault
+// decoding (MLSPERR -- lazy FP stacking error, CFSR bit 5).
+//
+// Stack frame note: the integer registers R0-xPSR are always at offsets
+// [0..7] from the exception SP, regardless of whether the FPU extended
+// frame (26 words) or basic frame (8 words) was pushed. The FPU registers
+// (S0-S15, FPSCR) occupy offsets [8..25] in the extended case.
 
 #include "kernel/CrashDumpArch.h"
 #include "CrashDumpInternal.h"
@@ -33,6 +39,7 @@ namespace
     constexpr std::uint32_t kMmDaccviol = 1U << 1;
     constexpr std::uint32_t kMmMunstkerr = 1U << 3;
     constexpr std::uint32_t kMmMstkerr = 1U << 4;
+    constexpr std::uint32_t kMmMlsperr = 1U << 5;   // M4 only: lazy FP stacking error
     constexpr std::uint32_t kMmMmarvalid = 1U << 7;
 
     // CFSR bit masks -- BusFault (bits 8-15)
@@ -92,6 +99,10 @@ namespace
         if (cfsr & kMmMstkerr)
         {
             kernel::faultPrint("  -> MSTKERR: Stacking error (MemManage)\r\n");
+        }
+        if (cfsr & kMmMlsperr)
+        {
+            kernel::faultPrint("  -> MLSPERR: Lazy FP stacking error\r\n");
         }
         if (cfsr & kMmMmarvalid)
         {

@@ -3,6 +3,7 @@ add_executable(kernel_tests
     SchedulerTest.cpp
     MutexTest.cpp
     SemaphoreTest.cpp
+    CrashDumpTest.cpp
     MockCortexM.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
@@ -11,6 +12,7 @@ add_executable(kernel_tests
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Mutex.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Semaphore.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/WaitQueue.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/CrashDumpCommon.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE

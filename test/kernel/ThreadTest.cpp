@@ -61,7 +61,7 @@ TEST_F(ThreadTest, CreateThread_SetsStateToReady)
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
 
     ASSERT_NE(tcb, nullptr);
-    EXPECT_EQ(tcb->m_state, kernel::ThreadState::Ready);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Ready);
 }
 
 TEST_F(ThreadTest, CreateThread_InitializesStackFrame)
@@ -78,8 +78,8 @@ TEST_F(ThreadTest, CreateThread_InitializesStackFrame)
     ASSERT_NE(tcb, nullptr);
 
     // Stack pointer should point into the stack buffer
-    EXPECT_GE(tcb->m_stackPointer, g_testStack1);
-    EXPECT_LT(tcb->m_stackPointer, g_testStack1 + 128);
+    EXPECT_GE(tcb->stackPointer, g_testStack1);
+    EXPECT_LT(tcb->stackPointer, g_testStack1 + 128);
 
     // Initial stack frame layout (16 words):
     // SP+0:  r4  (0)             software context
@@ -95,7 +95,7 @@ TEST_F(ThreadTest, CreateThread_InitializesStackFrame)
     // SP+14: PC  (entry function)
     // SP+15: xPSR (0x01000000)
 
-    std::uint32_t *sp = tcb->m_stackPointer;
+    std::uint32_t *sp = tcb->stackPointer;
 
     // r4-r11 should be zero (software context)
     for (int i = 0; i <= 7; ++i)
@@ -132,7 +132,7 @@ TEST_F(ThreadTest, CreateThread_StackAligned8Bytes)
     ASSERT_NE(tcb, nullptr);
 
     // Stack pointer must be 8-byte aligned
-    std::uintptr_t sp = reinterpret_cast<std::uintptr_t>(tcb->m_stackPointer);
+    std::uintptr_t sp = reinterpret_cast<std::uintptr_t>(tcb->stackPointer);
     EXPECT_EQ(sp % 8, 0u);
 }
 
@@ -181,7 +181,7 @@ TEST_F(ThreadTest, CreateThread_ArgumentPassedInR0)
     ASSERT_NE(tcb, nullptr);
 
     // r0 in stack frame should be the arg pointer (at index 8)
-    std::uint32_t *sp = tcb->m_stackPointer;
+    std::uint32_t *sp = tcb->stackPointer;
     EXPECT_EQ(sp[8], static_cast<std::uint32_t>(
         reinterpret_cast<std::uintptr_t>(&argValue)));
 }
@@ -199,9 +199,9 @@ TEST_F(ThreadTest, CreateThread_SetsNameAndStackInfo)
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
 
-    EXPECT_STREQ(tcb->m_name, "worker");
-    EXPECT_EQ(tcb->m_stackBase, g_testStack1);
-    EXPECT_EQ(tcb->m_stackSize, sizeof(g_testStack1));
+    EXPECT_STREQ(tcb->name, "worker");
+    EXPECT_EQ(tcb->stackBase, g_testStack1);
+    EXPECT_EQ(tcb->stackSize, sizeof(g_testStack1));
 }
 
 TEST_F(ThreadTest, CreateThread_DefaultTimeSlice)
@@ -218,8 +218,8 @@ TEST_F(ThreadTest, CreateThread_DefaultTimeSlice)
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
 
-    EXPECT_EQ(tcb->m_timeSlice, kernel::kDefaultTimeSlice);
-    EXPECT_EQ(tcb->m_timeSliceRemaining, kernel::kDefaultTimeSlice);
+    EXPECT_EQ(tcb->timeSlice, kernel::kDefaultTimeSlice);
+    EXPECT_EQ(tcb->timeSliceRemaining, kernel::kDefaultTimeSlice);
 }
 
 TEST_F(ThreadTest, CreateThread_CustomTimeSlice)
@@ -236,8 +236,8 @@ TEST_F(ThreadTest, CreateThread_CustomTimeSlice)
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
 
-    EXPECT_EQ(tcb->m_timeSlice, 20u);
-    EXPECT_EQ(tcb->m_timeSliceRemaining, 20u);
+    EXPECT_EQ(tcb->timeSlice, 20u);
+    EXPECT_EQ(tcb->timeSliceRemaining, 20u);
 }
 
 TEST_F(ThreadTest, GetTcb_InvalidIdReturnsNull)
@@ -280,8 +280,8 @@ TEST_F(ThreadTest, CreateThread_SetsPriorityFields)
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
 
-    EXPECT_EQ(tcb->m_basePriority, 7u);
-    EXPECT_EQ(tcb->m_currentPriority, 7u);
+    EXPECT_EQ(tcb->basePriority, 7u);
+    EXPECT_EQ(tcb->currentPriority, 7u);
 }
 
 TEST_F(ThreadTest, CreateThread_InitializesLinkedListPointers)
@@ -297,7 +297,7 @@ TEST_F(ThreadTest, CreateThread_InitializesLinkedListPointers)
     kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
     ASSERT_NE(tcb, nullptr);
 
-    EXPECT_EQ(tcb->m_nextReady, kernel::kInvalidThreadId);
-    EXPECT_EQ(tcb->m_nextWait, kernel::kInvalidThreadId);
-    EXPECT_EQ(tcb->m_wakeupTick, 0u);
+    EXPECT_EQ(tcb->nextReady, kernel::kInvalidThreadId);
+    EXPECT_EQ(tcb->nextWait, kernel::kInvalidThreadId);
+    EXPECT_EQ(tcb->wakeupTick, 0u);
 }

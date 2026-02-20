@@ -1,5 +1,5 @@
 // Priority-sorted wait queue for mutex and semaphore wait lists.
-// Highest priority (lowest m_currentPriority value) at the head.
+// Highest priority (lowest currentPriority value) at the head.
 
 #include "WaitQueue.h"
 
@@ -13,7 +13,7 @@ namespace kernel
             return;
         }
 
-        tcb->m_nextWait = kInvalidThreadId;
+        tcb->nextWait = kInvalidThreadId;
 
         // Empty queue: insert at head
         if (head == kInvalidThreadId)
@@ -24,9 +24,9 @@ namespace kernel
 
         // Insert before head if higher priority
         ThreadControlBlock *headTcb = threadGetTcb(head);
-        if (headTcb != nullptr && tcb->m_currentPriority < headTcb->m_currentPriority)
+        if (headTcb != nullptr && tcb->currentPriority < headTcb->currentPriority)
         {
-            tcb->m_nextWait = head;
+            tcb->nextWait = head;
             head = id;
             return;
         }
@@ -41,20 +41,20 @@ namespace kernel
                 break;
             }
 
-            ThreadId next = prevTcb->m_nextWait;
+            ThreadId next = prevTcb->nextWait;
             if (next == kInvalidThreadId)
             {
                 // Append at end
-                prevTcb->m_nextWait = id;
+                prevTcb->nextWait = id;
                 return;
             }
 
             ThreadControlBlock *nextTcb = threadGetTcb(next);
-            if (nextTcb != nullptr && tcb->m_currentPriority < nextTcb->m_currentPriority)
+            if (nextTcb != nullptr && tcb->currentPriority < nextTcb->currentPriority)
             {
                 // Insert between prev and next
-                tcb->m_nextWait = next;
-                prevTcb->m_nextWait = id;
+                tcb->nextWait = next;
+                prevTcb->nextWait = id;
                 return;
             }
 
@@ -73,8 +73,8 @@ namespace kernel
         ThreadControlBlock *tcb = threadGetTcb(id);
         if (tcb != nullptr)
         {
-            head = tcb->m_nextWait;
-            tcb->m_nextWait = kInvalidThreadId;
+            head = tcb->nextWait;
+            tcb->nextWait = kInvalidThreadId;
         }
         else
         {
@@ -108,18 +108,18 @@ namespace kernel
                 break;
             }
 
-            if (prevTcb->m_nextWait == id)
+            if (prevTcb->nextWait == id)
             {
                 ThreadControlBlock *tcb = threadGetTcb(id);
                 if (tcb != nullptr)
                 {
-                    prevTcb->m_nextWait = tcb->m_nextWait;
-                    tcb->m_nextWait = kInvalidThreadId;
+                    prevTcb->nextWait = tcb->nextWait;
+                    tcb->nextWait = kInvalidThreadId;
                 }
                 return;
             }
 
-            prev = prevTcb->m_nextWait;
+            prev = prevTcb->nextWait;
         }
     }
 

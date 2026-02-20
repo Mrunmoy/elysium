@@ -4,7 +4,7 @@
 
 namespace kernel
 {
-    // Priority-sorted wait queue operations using the m_nextWait linked list
+    // Priority-sorted wait queue operations using the nextWait linked list
     // in each TCB.  Highest priority (lowest number) is at the head.
 
     // Insert thread into wait queue, maintaining priority sort order.

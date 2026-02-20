@@ -12,12 +12,12 @@ namespace kernel
 
     struct SemaphoreControlBlock
     {
-        bool m_active;              // Whether this slot is allocated
-        std::uint32_t m_count;      // Current count
-        std::uint32_t m_maxCount;   // Maximum count
-        ThreadId m_waitHead;        // Head of priority-sorted wait queue
-        std::uint8_t m_waitCount;   // Number of waiting threads
-        const char *m_name;
+        bool active;              // Whether this slot is allocated
+        std::uint32_t count;      // Current count
+        std::uint32_t maxCount;   // Maximum count
+        ThreadId waitHead;        // Head of priority-sorted wait queue
+        std::uint8_t waitCount;   // Number of waiting threads
+        const char *name;
     };
 
     // Create a counting semaphore.

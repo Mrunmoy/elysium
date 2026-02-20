@@ -12,12 +12,12 @@ namespace kernel
 
     struct MutexControlBlock
     {
-        bool m_active;             // Whether this slot is allocated
-        ThreadId m_owner;          // Thread holding the mutex (kInvalidThreadId = unlocked)
-        std::uint8_t m_lockCount;  // Recursive lock depth
-        ThreadId m_waitHead;       // Head of priority-sorted wait queue
-        std::uint8_t m_waitCount;  // Number of waiting threads
-        const char *m_name;
+        bool active;             // Whether this slot is allocated
+        ThreadId owner;          // Thread holding the mutex (kInvalidThreadId = unlocked)
+        std::uint8_t lockCount;  // Recursive lock depth
+        ThreadId waitHead;       // Head of priority-sorted wait queue
+        std::uint8_t waitCount;  // Number of waiting threads
+        const char *name;
     };
 
     // Create a mutex. Returns mutex ID or kInvalidMutexId on failure.
