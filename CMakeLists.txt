@@ -22,9 +22,25 @@ add_compile_options(
 if(CMAKE_CROSSCOMPILING)
     # ---------- Cross-compilation (ARM firmware) ----------
 
-    add_compile_definitions(
-        STM32F207xx
-    )
+    # Default target if not specified
+    if(NOT DEFINED MSOS_TARGET)
+        set(MSOS_TARGET "stm32f207zgt6")
+    endif()
+
+    # Target-specific configuration
+    if(MSOS_TARGET STREQUAL "stm32f407vet6")
+        add_compile_definitions(STM32F407xx)
+        set(MSOS_STARTUP_DIR stm32f407vet6)
+        set(MSOS_ARCH_DIR cortex-m4)
+        set(MSOS_CMSIS_DEVICE_DIR ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f4/Include)
+        set(MSOS_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/startup/stm32f407vet6/Linker.ld)
+    else()
+        add_compile_definitions(STM32F207xx)
+        set(MSOS_STARTUP_DIR stm32f207zgt6)
+        set(MSOS_ARCH_DIR cortex-m3)
+        set(MSOS_CMSIS_DEVICE_DIR ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f2/Include)
+        set(MSOS_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/startup/stm32f207zgt6/Linker.ld)
+    endif()
 
     # Prevent compiler from generating hardware FP instructions in libraries
     # that would conflict with our soft/hard float settings
@@ -38,7 +54,7 @@ if(CMAKE_CROSSCOMPILING)
     add_library(cmsis INTERFACE)
     target_include_directories(cmsis INTERFACE
         ${CMAKE_SOURCE_DIR}/vendor/cmsis_core/CMSIS/Core/Include
-        ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f2/Include
+        ${MSOS_CMSIS_DEVICE_DIR}
     )
 
     add_subdirectory(startup)

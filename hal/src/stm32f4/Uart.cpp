@@ -1,4 +1,5 @@
 #include "hal/Uart.h"
+#include "startup/SystemClock.h"
 
 #include <cstdint>
 #include <cstring>
@@ -30,10 +31,6 @@ namespace
     constexpr std::uint32_t kSrTxe = 1U << 7;     // Transmit data register empty
     constexpr std::uint32_t kSrTc = 1U << 6;      // Transmission complete
 
-    // APB clock frequencies (after SystemInit: APB1=30MHz, APB2=60MHz)
-    constexpr std::uint32_t kApb1Clock = 30000000;
-    constexpr std::uint32_t kApb2Clock = 60000000;
-
     std::uint32_t uartBase(hal::UartId id)
     {
         switch (id)
@@ -59,9 +56,9 @@ namespace
         // USART1 and USART6 are on APB2; others on APB1
         if (id == hal::UartId::Usart1 || id == hal::UartId::Usart6)
         {
-            return kApb2Clock;
+            return g_apb2Clock;
         }
-        return kApb1Clock;
+        return g_apb1Clock;
     }
 
     volatile std::uint32_t &reg(std::uint32_t addr)

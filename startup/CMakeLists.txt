@@ -1,11 +1,15 @@
 add_library(startup STATIC
-    stm32f207zgt6/Startup.s
-    stm32f207zgt6/SystemInit.cpp
+    ${MSOS_STARTUP_DIR}/Startup.s
+    ${MSOS_STARTUP_DIR}/SystemInit.cpp
+)
+
+target_include_directories(startup PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/inc
 )
 
 target_include_directories(startup PRIVATE
     ${CMAKE_SOURCE_DIR}/hal/inc/hal
-    ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f2/Include
+    ${MSOS_CMSIS_DEVICE_DIR}
     ${CMAKE_SOURCE_DIR}/vendor/cmsis_core/CMSIS/Core/Include
 )
 
@@ -13,6 +17,6 @@ target_compile_options(startup PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti -fno-unwind-tables>
 )
 
-set_source_files_properties(stm32f207zgt6/Startup.s PROPERTIES
+set_source_files_properties(${MSOS_STARTUP_DIR}/Startup.s PROPERTIES
     LANGUAGE ASM
 )

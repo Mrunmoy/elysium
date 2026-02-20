@@ -10,7 +10,12 @@ set(CMAKE_SIZE arm-none-eabi-size)
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-set(CPU_FLAGS "-mcpu=cortex-m3 -mthumb")
+# Select CPU flags based on target MCU
+if(MSOS_TARGET STREQUAL "stm32f407vet6")
+    set(CPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=soft")
+else()
+    set(CPU_FLAGS "-mcpu=cortex-m3 -mthumb")
+endif()
 
 set(CMAKE_C_FLAGS_INIT "${CPU_FLAGS}")
 set(CMAKE_CXX_FLAGS_INIT "${CPU_FLAGS}")

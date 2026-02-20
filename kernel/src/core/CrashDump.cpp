@@ -11,6 +11,7 @@
 #include "kernel/CrashDump.h"
 #include "kernel/CortexM.h"
 #include "kernel/Thread.h"
+#include "startup/SystemClock.h"
 
 #include <cstdint>
 
@@ -144,9 +145,9 @@ namespace
         afrh |= (7U << 4);
         reg(kGpioaAfrh) = afrh;
 
-        // Configure USART1: 115200 baud at APB2 = 60 MHz
+        // Configure USART1: 115200 baud using runtime APB2 clock
         reg(kUsart1Cr1) = 0;
-        reg(kUsart1Brr) = 60000000U / 115200U;  // = 520 (0x208)
+        reg(kUsart1Brr) = g_apb2Clock / 115200U;
         reg(kUsart1Cr1) = kUsartUe | kUsartTe;
     }
 
@@ -313,10 +314,11 @@ namespace
     // Simple busy-wait delay (approximate).
     void faultDelayMs(std::uint32_t ms)
     {
-        // At 120 MHz, ~120000 cycles per ms. Inner loop ~4 cycles.
+        // Inner loop ~4 cycles per iteration.
+        std::uint32_t itersPerMs = SystemCoreClock / 4000;
         for (std::uint32_t i = 0; i < ms; ++i)
         {
-            for (volatile std::uint32_t j = 0; j < 30000; ++j)
+            for (volatile std::uint32_t j = 0; j < itersPerMs; ++j)
             {
             }
         }

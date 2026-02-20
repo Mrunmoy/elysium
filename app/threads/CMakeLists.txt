@@ -15,7 +15,7 @@ target_compile_options(threads PRIVATE
 )
 
 target_link_options(threads PRIVATE
-    -T${CMAKE_SOURCE_DIR}/startup/stm32f207zgt6/Linker.ld
+    -T${MSOS_LINKER_SCRIPT}
     -Wl,--gc-sections
     -Wl,--print-memory-usage
     --specs=nosys.specs

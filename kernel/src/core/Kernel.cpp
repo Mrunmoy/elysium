@@ -7,6 +7,7 @@
 #include "kernel/Scheduler.h"
 #include "kernel/CortexM.h"
 #include "kernel/CrashDump.h"
+#include "startup/SystemClock.h"
 
 #include <cstdint>
 
@@ -92,8 +93,7 @@ namespace kernel
         g_nextTcb = firstTcb;
 
         // Configure SysTick for 1 ms tick (SystemCoreClock / 1000)
-        constexpr std::uint32_t kSystemCoreClock = 120000000;
-        arch::configureSysTick(kSystemCoreClock / 1000);
+        arch::configureSysTick(SystemCoreClock / 1000);
 
         // Launch the first thread via SVC -- does not return
         arch::startFirstThread();

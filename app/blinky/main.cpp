@@ -6,6 +6,7 @@
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"
+#include "startup/SystemClock.h"
 
 namespace
 {
@@ -13,7 +14,6 @@ namespace
     constexpr std::uint32_t kSysTickCtrl = 0xE000E010;
     constexpr std::uint32_t kSysTickLoad = 0xE000E014;
     constexpr std::uint32_t kSysTickVal = 0xE000E018;
-    constexpr std::uint32_t kSystemCoreClock = 120000000;
 
     volatile std::uint32_t &reg(std::uint32_t addr)
     {
@@ -23,7 +23,7 @@ namespace
     void delayMs(std::uint32_t ms)
     {
         // Configure SysTick for 1 ms ticks (processor clock / 1000)
-        reg(kSysTickLoad) = (kSystemCoreClock / 1000) - 1;
+        reg(kSysTickLoad) = (SystemCoreClock / 1000) - 1;
         reg(kSysTickVal) = 0;
         reg(kSysTickCtrl) = 0x5;  // Enable, processor clock, no interrupt
 
