@@ -109,7 +109,8 @@ Production-ready C++17 libraries at `/mnt/data/sandbox/cpp/` that serve as build
 ### Naming
 - Files: CamelCase (`RingBuffer.h`, `EventDispatcher.cpp`)
 - Classes: CamelCase
-- Member variables: `m_` prefix (`m_buffer`, `m_isRunning`)
+- Member variables: `m_` prefix (`m_buffer`, `m_isRunning`) for classes
+- For structs members: no prefix in members
 - Private helpers: lowerCamelCase
 - Constants: `k` prefix (`kConstantName`)
 
