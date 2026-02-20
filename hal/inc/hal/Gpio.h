@@ -1,5 +1,4 @@
-#ifndef HAL_GPIO_H
-#define HAL_GPIO_H
+#pragma once
 
 #include <cstdint>
 
@@ -65,5 +64,3 @@ namespace hal
     bool gpioRead(Port port, std::uint8_t pin);
 
 }  // namespace hal
-
-#endif  // HAL_GPIO_H

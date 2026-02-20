@@ -1,5 +1,4 @@
-#ifndef KERNEL_THREAD_H
-#define KERNEL_THREAD_H
+#pragma once
 
 #include <cstdint>
 
@@ -59,5 +58,3 @@ namespace kernel
     void threadReset();
 
 }  // namespace kernel
-
-#endif  // KERNEL_THREAD_H

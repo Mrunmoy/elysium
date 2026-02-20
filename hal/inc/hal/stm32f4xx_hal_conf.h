@@ -1,8 +1,7 @@
 // HAL configuration for ms-os / STM32F407VGT6
 // Minimal module set for Phase 0.
 
-#ifndef STM32F4XX_HAL_CONF_H
-#define STM32F4XX_HAL_CONF_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C"
@@ -93,5 +92,3 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
-
-#endif  // STM32F4XX_HAL_CONF_H

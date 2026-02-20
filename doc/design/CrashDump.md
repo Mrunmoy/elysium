@@ -9,6 +9,141 @@ context, then outputs a structured crash dump via UART. A host-side Python
 tool monitors the serial port and automatically translates addresses to
 source file:line using `arm-none-eabi-addr2line`.
 
+## Cortex-M3 Exception Model
+
+### Why No Reserved RAM Region Is Needed
+
+On Cortex-A/R processors, exception handling requires dedicated RAM regions
+and manual register saves because:
+- The CPU has banked registers per mode (FIQ, IRQ, SVC, ABT, UND)
+- On exception entry, the CPU switches mode and bank-swaps SP, LR, SPSR
+- The handler must manually save SPSR, switch back to the faulting mode,
+  read out the faulting registers, and restore state
+- A reserved RAM region is needed because the faulting mode's stack cannot
+  be trusted
+
+**Cortex-M3 is fundamentally different.** It has no traditional ARM modes.
+Instead it uses a two-level privilege model (Handler mode vs Thread mode)
+with hardware-managed exception entry. The NVIC handles all register saving
+automatically before the first handler instruction executes.
+
+### Hardware Automatic Stacking
+
+When any exception (fault, interrupt, SysTick, SVC) occurs, the Cortex-M3
+hardware performs these steps atomically before the handler runs:
+
+1. **Determines the active stack pointer** -- MSP (Main Stack Pointer) if
+   in Handler mode, or PSP (Process Stack Pointer) if in Thread mode with
+   CONTROL.SPSEL=1.
+
+2. **Pushes 8 registers** onto the active stack in this fixed order:
+
+```
+    Higher address
+    +----------+
+    |   xPSR   |  [SP + 28]   Processor status (includes faulting IPSR/flags)
+    +----------+
+    |    PC    |  [SP + 24]   Exact address of the faulting instruction
+    +----------+
+    |    LR    |  [SP + 20]   Return address of the function that faulted
+    +----------+
+    |   R12    |  [SP + 16]
+    +----------+
+    |    R3    |  [SP + 12]
+    +----------+
+    |    R2    |  [SP + 8]
+    +----------+
+    |    R1    |  [SP + 4]
+    +----------+
+    |    R0    |  [SP + 0]    <-- SP points here when handler starts
+    +----------+
+    Lower address
+```
+
+   This is the "caller-saved" subset defined by the ARM AAPCS calling
+   convention. The hardware saves exactly the registers that a C function
+   call would clobber, so the handler can be a normal C function.
+
+3. **Sets LR to an EXC_RETURN magic value** that encodes:
+   - Bit 2: which stack was active (0=MSP, 1=PSP)
+   - Bit 3: thread vs handler mode return
+   - Bit 4: FPU frame (not applicable on M3, always 1)
+
+   Common values:
+   - `0xFFFFFFF1` -- return to Handler mode, use MSP (nested exception)
+   - `0xFFFFFFF9` -- return to Thread mode, use MSP
+   - `0xFFFFFFFD` -- return to Thread mode, use PSP (typical for RTOS threads)
+
+4. **Loads the handler address** from the vector table and begins execution
+   in Handler mode using MSP.
+
+### How Our Fault Handler Uses This
+
+Since the hardware has already saved the faulting context, our handler only
+needs to:
+
+1. **Read EXC_RETURN bit 2** to determine which stack has the frame:
+
+```asm
+    tst     lr, #4          @ Test bit 2 of EXC_RETURN
+    ite     eq
+    mrseq   r0, msp         @ Bit 2 = 0: frame is on MSP
+    mrsne   r0, psp         @ Bit 2 = 1: frame is on PSP
+```
+
+2. **Pass the stack frame pointer to C** as the first argument (R0).
+   The C handler indexes into it like a struct:
+
+```cpp
+    uint32_t r0   = stackFrame[0];
+    uint32_t r1   = stackFrame[1];
+    uint32_t r2   = stackFrame[2];
+    uint32_t r3   = stackFrame[3];
+    uint32_t r12  = stackFrame[4];
+    uint32_t lr   = stackFrame[5];   // caller of faulting function
+    uint32_t pc   = stackFrame[6];   // exact faulting instruction
+    uint32_t xpsr = stackFrame[7];   // processor flags at fault time
+```
+
+3. **Read SCB registers** for fault details. These are memory-mapped and
+   persist until explicitly cleared:
+   - CFSR (0xE000ED28): combined MemManage + BusFault + UsageFault status
+   - HFSR (0xE000ED2C): HardFault-specific status
+   - MMFAR (0xE000ED34): faulting address for MemManage
+   - BFAR (0xE000ED38): faulting address for BusFault
+
+No reserved RAM, no mode switching, no manual register saving. The hardware
+does all of it.
+
+### What About R4-R11?
+
+The hardware only pushes R0-R3, R12, LR, PC, xPSR (the "caller-saved" set).
+R4-R11 are "callee-saved" and are NOT in the exception frame. This is fine
+for crash diagnostics because:
+
+- PC tells us the exact faulting instruction
+- LR tells us who called the faulting function
+- R0-R3 hold the first four function arguments
+- R4-R11 are preserved across function calls anyway (the faulting function
+  would have saved them on its own stack frame if it used them)
+
+If full R4-R11 values are needed, they can be read directly in the assembly
+stub (before branching to C) since the handler runs immediately and no
+other code has modified them yet. Our current implementation does not do
+this as PC + LR + fault registers are sufficient for diagnosis.
+
+### Cortex-M3 vs Cortex-A/R Summary
+
+| Feature | Cortex-M3 | Cortex-A/R |
+|---------|-----------|------------|
+| Exception modes | Handler + Thread (2) | FIQ, IRQ, SVC, ABT, UND, SYS (7+) |
+| Banked registers | MSP/PSP only | SP, LR, SPSR per mode |
+| Auto stack frame | Yes (8 registers) | No (manual save required) |
+| Faulting PC | In stack frame [6] | In LR_abt (offset varies) |
+| Stack trust | Frame on faulting thread's stack | Need dedicated abort stack |
+| Reserved RAM | Not needed | Typically needed for safety |
+| Handler can be C | Yes (directly) | Needs ASM wrapper for mode switching |
+
 ## Architecture
 
 ```
@@ -226,9 +361,9 @@ When a crash dump is detected, the tool:
 ### On-Target Test
 
 `kernel::triggerTestFault(FaultType type)`:
-- `DivideByZero`: `volatile int x = 0; return 1/x;`
-- `InvalidMemory`: `*reinterpret_cast<volatile int*>(0xCCCCCCCC) = 0;`
-- `UndefinedInstruction`: inline `.word 0xFFFFFFFF`
+- `DivideByZero`: inline asm `udiv` (C division is UB, GCC optimizes it away)
+- `InvalidMemory`: `*reinterpret_cast<volatile uint32_t*>(0xCCCCCCCC) = 0xDEADBEEF;`
+- `UndefinedInstruction`: inline `.short 0xDEFE` (Thumb permanently undefined)
 
 ### Host-Side Tool Tests
 

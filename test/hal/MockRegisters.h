@@ -1,5 +1,4 @@
-#ifndef TEST_MOCK_REGISTERS_H
-#define TEST_MOCK_REGISTERS_H
+#pragma once
 
 // Mock register file for host-side HAL testing.
 //
@@ -60,5 +59,3 @@ namespace test
     }
 
 }  // namespace test
-
-#endif  // TEST_MOCK_REGISTERS_H

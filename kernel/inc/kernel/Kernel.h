@@ -1,5 +1,4 @@
-#ifndef KERNEL_KERNEL_H
-#define KERNEL_KERNEL_H
+#pragma once
 
 #include "kernel/Thread.h"
 
@@ -32,5 +31,3 @@ extern "C"
 {
     void SysTick_Handler();
 }
-
-#endif  // KERNEL_KERNEL_H

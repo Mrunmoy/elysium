@@ -1,5 +1,4 @@
-#ifndef KERNEL_CORTEX_M_H
-#define KERNEL_CORTEX_M_H
+#pragma once
 
 #include <cstdint>
 
@@ -40,5 +39,3 @@ namespace arch
 
 }  // namespace arch
 }  // namespace kernel
-
-#endif  // KERNEL_CORTEX_M_H

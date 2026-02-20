@@ -1,5 +1,4 @@
-#ifndef HAL_RCC_H
-#define HAL_RCC_H
+#pragma once
 
 #include "hal/Gpio.h"
 #include "hal/Uart.h"
@@ -10,5 +9,3 @@ namespace hal
     void rccEnableUartClock(UartId id);
 
 }  // namespace hal
-
-#endif  // HAL_RCC_H

@@ -1,5 +1,4 @@
-#ifndef TEST_MOCK_KERNEL_H
-#define TEST_MOCK_KERNEL_H
+#pragma once
 
 // Mock state recording for kernel host-side testing.
 //
@@ -52,5 +51,3 @@ namespace test
     }
 
 }  // namespace test
-
-#endif  // TEST_MOCK_KERNEL_H

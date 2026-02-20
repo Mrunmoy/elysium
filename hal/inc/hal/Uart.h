@@ -1,5 +1,4 @@
-#ifndef HAL_UART_H
-#define HAL_UART_H
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -31,5 +30,3 @@ namespace hal
     void uartWriteString(UartId id, const char *str);
 
 }  // namespace hal
-
-#endif  // HAL_UART_H

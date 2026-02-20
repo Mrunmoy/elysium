@@ -3,8 +3,7 @@
 // Provides a captured UART output buffer and mock register values
 // so we can test the crash dump formatting logic without hardware.
 
-#ifndef TEST_MOCK_CRASHDUMP_H
-#define TEST_MOCK_CRASHDUMP_H
+#pragma once
 
 #include <string>
 #include <cstdint>
@@ -32,5 +31,3 @@ namespace test
     void resetCrashDumpMockState();
 
 }  // namespace test
-
-#endif  // TEST_MOCK_CRASHDUMP_H

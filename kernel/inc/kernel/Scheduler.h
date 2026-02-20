@@ -1,5 +1,4 @@
-#ifndef KERNEL_SCHEDULER_H
-#define KERNEL_SCHEDULER_H
+#pragma once
 
 #include "kernel/Thread.h"
 
@@ -62,5 +61,3 @@ namespace kernel
     };
 
 }  // namespace kernel
-
-#endif  // KERNEL_SCHEDULER_H

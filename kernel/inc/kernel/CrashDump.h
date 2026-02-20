@@ -6,8 +6,7 @@
 // Call crashDumpInit() during kernel initialization to enable configurable
 // fault handlers (MemManage, BusFault, UsageFault) and trap settings.
 
-#ifndef KERNEL_CRASHDUMP_H
-#define KERNEL_CRASHDUMP_H
+#pragma once
 
 #include <cstdint>
 
@@ -38,5 +37,3 @@ namespace kernel
     }
 
 }  // namespace kernel
-
-#endif  // KERNEL_CRASHDUMP_H
