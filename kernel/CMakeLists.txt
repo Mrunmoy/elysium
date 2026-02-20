@@ -2,7 +2,9 @@ add_library(kernel STATIC
     src/core/Thread.cpp
     src/core/Scheduler.cpp
     src/core/Kernel.cpp
-    src/core/CrashDump.cpp
+    src/core/CrashDumpCommon.cpp
+    src/arch/${MSOS_ARCH_DIR}/CrashDumpArch.cpp
+    src/board/${MSOS_BOARD_DIR}/CrashDumpBoard.cpp
     src/core/Mutex.cpp
     src/core/Semaphore.cpp
     src/core/WaitQueue.cpp
@@ -13,6 +15,10 @@ add_library(kernel STATIC
 
 target_include_directories(kernel PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/inc
+)
+
+target_include_directories(kernel PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
 )
 
 target_link_libraries(kernel PRIVATE startup)
