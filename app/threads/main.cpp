@@ -127,12 +127,12 @@ int main()
     // Initialize kernel
     kernel::init();
 
-    // Create application threads
+    // Create application threads with explicit priorities (lower number = higher priority)
     kernel::createThread(ledThread, nullptr, "led",
-                         g_ledStack, sizeof(g_ledStack));
+                         g_ledStack, sizeof(g_ledStack), 10);
 
     kernel::createThread(uartThread, nullptr, "uart",
-                         g_uartStack, sizeof(g_uartStack));
+                         g_uartStack, sizeof(g_uartStack), 10);
 
     // Start scheduler -- does not return
     kernel::startScheduler();

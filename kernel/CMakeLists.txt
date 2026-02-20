@@ -3,6 +3,9 @@ add_library(kernel STATIC
     src/core/Scheduler.cpp
     src/core/Kernel.cpp
     src/core/CrashDump.cpp
+    src/core/Mutex.cpp
+    src/core/Semaphore.cpp
+    src/core/WaitQueue.cpp
     src/arch/${MSOS_ARCH_DIR}/ContextSwitch.s
     src/arch/${MSOS_ARCH_DIR}/CortexM.cpp
     src/arch/${MSOS_ARCH_DIR}/FaultHandlers.s

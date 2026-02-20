@@ -9,6 +9,8 @@
 // core logic (thread creation, scheduling, context switch triggers) without
 // any hardware dependency.
 
+#include "kernel/Scheduler.h"
+
 #include <cstdint>
 #include <vector>
 
@@ -51,3 +53,13 @@ namespace test
     }
 
 }  // namespace test
+
+// Scheduler accessor for Mutex/Semaphore integration tests.
+// Returns the global test scheduler (defined in MockKernelGlobals.cpp).
+namespace kernel
+{
+namespace internal
+{
+    Scheduler &scheduler();
+}  // namespace internal
+}  // namespace kernel

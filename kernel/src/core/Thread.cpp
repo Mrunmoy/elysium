@@ -36,12 +36,16 @@ namespace kernel
 
         tcb.m_id = id;
         tcb.m_state = ThreadState::Ready;
-        tcb.m_priority = config.priority;
+        tcb.m_basePriority = config.priority;
+        tcb.m_currentPriority = config.priority;
         tcb.m_name = config.name;
         tcb.m_stackBase = config.stack;
         tcb.m_stackSize = config.stackSize;
         tcb.m_timeSlice = (config.timeSlice == 0) ? kDefaultTimeSlice : config.timeSlice;
         tcb.m_timeSliceRemaining = tcb.m_timeSlice;
+        tcb.m_nextReady = kInvalidThreadId;
+        tcb.m_nextWait = kInvalidThreadId;
+        tcb.m_wakeupTick = 0;
 
         // Build initial stack frame at top of stack
         // Stack grows downward; top = base + (size / sizeof(uint32_t))

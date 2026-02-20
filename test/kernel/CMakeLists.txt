@@ -1,15 +1,21 @@
 add_executable(kernel_tests
     ThreadTest.cpp
     SchedulerTest.cpp
+    MutexTest.cpp
+    SemaphoreTest.cpp
     MockCortexM.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Thread.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Scheduler.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Mutex.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Semaphore.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/WaitQueue.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/inc
+    ${CMAKE_SOURCE_DIR}/kernel/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

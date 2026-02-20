@@ -22,6 +22,11 @@ namespace kernel
     static Scheduler s_scheduler;
     static volatile std::uint32_t s_tickCount = 0;
 
+    namespace internal
+    {
+        Scheduler &scheduler() { return s_scheduler; }
+    }  // namespace internal
+
     // Idle thread -- runs when no other threads are ready
     alignas(8) static std::uint32_t s_idleStack[128];  // 512 bytes
 
@@ -30,6 +35,29 @@ namespace kernel
         while (true)
         {
             // WFI would go here on real hardware to save power
+        }
+    }
+
+    // Check sleeping threads and wake any whose timeout has expired.
+    // Called from SysTick_Handler.
+    static void checkSleepingThreads()
+    {
+        std::uint32_t now = s_tickCount;
+        for (ThreadId i = 0; i < kMaxThreads; ++i)
+        {
+            ThreadControlBlock *tcb = threadGetTcb(i);
+            if (tcb == nullptr)
+            {
+                continue;
+            }
+            if (tcb->m_state == ThreadState::Blocked && tcb->m_wakeupTick != 0)
+            {
+                if (now >= tcb->m_wakeupTick)
+                {
+                    tcb->m_wakeupTick = 0;
+                    s_scheduler.unblockThread(i);
+                }
+            }
         }
     }
 
@@ -49,7 +77,7 @@ namespace kernel
         idleConfig.name = "idle";
         idleConfig.stack = s_idleStack;
         idleConfig.stackSize = sizeof(s_idleStack);
-        idleConfig.priority = 0xFF;  // lowest priority
+        idleConfig.priority = kIdlePriority;
         idleConfig.timeSlice = 1;
 
         ThreadId idleId = threadCreate(idleConfig);
@@ -59,7 +87,7 @@ namespace kernel
 
     ThreadId createThread(ThreadFunction function, void *arg, const char *name,
                           std::uint32_t *stack, std::uint32_t stackSize,
-                          std::uint32_t timeSlice)
+                          std::uint8_t priority, std::uint32_t timeSlice)
     {
         ThreadConfig config{};
         config.function = function;
@@ -67,6 +95,7 @@ namespace kernel
         config.name = name;
         config.stack = stack;
         config.stackSize = stackSize;
+        config.priority = priority;
         config.timeSlice = timeSlice;
 
         ThreadId id = threadCreate(config);
@@ -115,6 +144,35 @@ namespace kernel
         arch::exitCritical();
     }
 
+    void sleep(std::uint32_t ticks)
+    {
+        if (ticks == 0)
+        {
+            yield();
+            return;
+        }
+
+        arch::enterCritical();
+
+        ThreadControlBlock *tcb = threadGetTcb(s_scheduler.currentThreadId());
+        if (tcb != nullptr)
+        {
+            tcb->m_wakeupTick = s_tickCount + ticks;
+        }
+
+        s_scheduler.blockCurrentThread();
+
+        ThreadId nextId = s_scheduler.switchContext();
+        ThreadControlBlock *nextTcb = threadGetTcb(nextId);
+        if (nextTcb != nullptr)
+        {
+            g_nextTcb = nextTcb;
+        }
+
+        arch::exitCritical();
+        arch::triggerContextSwitch();
+    }
+
     std::uint32_t tickCount()
     {
         return s_tickCount;
@@ -136,11 +194,6 @@ namespace kernel
         }
     }
 
-    // Called from PendSV to perform context switch bookkeeping
-    // This is called indirectly: SysTick pends PendSV, PendSV saves/restores regs,
-    // and between save/restore it needs to know which TCB to switch to.
-    // We update g_nextTcb in SysTick so PendSV can use it directly.
-
 }  // namespace kernel
 
 // SysTick ISR -- called every 1 ms by hardware
@@ -148,13 +201,16 @@ extern "C" void SysTick_Handler()
 {
     ++kernel::s_tickCount;
 
-    // Run scheduler tick (decrements time slice, may pend PendSV)
+    // Wake threads whose sleep timer has expired
+    kernel::checkSleepingThreads();
+
+    // Run scheduler tick (check preemption, time-slice expiry)
     bool switchNeeded = kernel::s_scheduler.tick();
 
     if (switchNeeded)
     {
         // Perform context switch bookkeeping:
-        // Move current to back of ready queue, dequeue next
+        // Move current to back of ready queue, dequeue highest-priority ready thread
         kernel::ThreadId nextId = kernel::s_scheduler.switchContext();
         kernel::ThreadControlBlock *nextTcb = kernel::threadGetTcb(nextId);
         if (nextTcb != nullptr)

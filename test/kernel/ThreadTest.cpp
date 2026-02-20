@@ -265,3 +265,39 @@ TEST_F(ThreadTest, CreateThread_SequentialIds)
 
     EXPECT_EQ(id2, id1 + 1);
 }
+
+TEST_F(ThreadTest, CreateThread_SetsPriorityFields)
+{
+    kernel::ThreadConfig config{};
+    config.function = dummyThread;
+    config.arg = nullptr;
+    config.name = "pri-test";
+    config.stack = g_testStack1;
+    config.stackSize = sizeof(g_testStack1);
+    config.priority = 7;
+
+    kernel::ThreadId id = kernel::threadCreate(config);
+    kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
+    ASSERT_NE(tcb, nullptr);
+
+    EXPECT_EQ(tcb->m_basePriority, 7u);
+    EXPECT_EQ(tcb->m_currentPriority, 7u);
+}
+
+TEST_F(ThreadTest, CreateThread_InitializesLinkedListPointers)
+{
+    kernel::ThreadConfig config{};
+    config.function = dummyThread;
+    config.arg = nullptr;
+    config.name = "list-test";
+    config.stack = g_testStack1;
+    config.stackSize = sizeof(g_testStack1);
+
+    kernel::ThreadId id = kernel::threadCreate(config);
+    kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
+    ASSERT_NE(tcb, nullptr);
+
+    EXPECT_EQ(tcb->m_nextReady, kernel::kInvalidThreadId);
+    EXPECT_EQ(tcb->m_nextWait, kernel::kInvalidThreadId);
+    EXPECT_EQ(tcb->m_wakeupTick, 0u);
+}

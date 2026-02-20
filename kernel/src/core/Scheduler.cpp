@@ -1,4 +1,4 @@
-// Round-robin scheduler with time-slicing.
+// Priority-preemptive scheduler with per-priority ready lists and time-slicing.
 // This module has zero hardware dependencies -- fully testable on host.
 
 #include "kernel/Scheduler.h"
@@ -10,92 +10,193 @@ namespace kernel
 {
     void Scheduler::init()
     {
+        m_readyBitmap = 0;
         m_readyCount = 0;
-        m_readyHead = 0;
         m_currentThreadId = kInvalidThreadId;
         m_idleThreadId = kInvalidThreadId;
-        std::memset(m_readyQueue, kInvalidThreadId, sizeof(m_readyQueue));
+        std::memset(m_readyHead, kInvalidThreadId, sizeof(m_readyHead));
+        std::memset(m_readyTail, kInvalidThreadId, sizeof(m_readyTail));
     }
 
-    void Scheduler::enqueue(ThreadId id)
+    // ---- Private helpers ----
+
+    std::uint8_t Scheduler::highestReadyPriority() const
     {
-        if (m_readyCount >= kMaxThreads)
+        if (m_readyBitmap == 0)
+        {
+            return kMaxPriorities;  // No ready threads
+        }
+        // Lowest set bit = highest priority (priority 0 = bit 0)
+        return static_cast<std::uint8_t>(__builtin_ctz(m_readyBitmap));
+    }
+
+    void Scheduler::enqueueReady(ThreadId id)
+    {
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr)
         {
             return;
         }
-        std::uint8_t tail = (m_readyHead + m_readyCount) % kMaxThreads;
-        m_readyQueue[tail] = id;
+
+        std::uint8_t pri = tcb->m_currentPriority;
+        tcb->m_nextReady = kInvalidThreadId;
+
+        if (m_readyHead[pri] == kInvalidThreadId)
+        {
+            // Empty list at this priority
+            m_readyHead[pri] = id;
+            m_readyTail[pri] = id;
+            m_readyBitmap |= (1U << pri);
+        }
+        else
+        {
+            // Append to tail (FIFO within same priority for round-robin)
+            ThreadControlBlock *tail = threadGetTcb(m_readyTail[pri]);
+            if (tail != nullptr)
+            {
+                tail->m_nextReady = id;
+            }
+            m_readyTail[pri] = id;
+        }
+
         ++m_readyCount;
     }
 
-    ThreadId Scheduler::dequeue()
+    ThreadId Scheduler::dequeueReady(std::uint8_t priority)
     {
-        if (m_readyCount == 0)
+        if (priority >= kMaxPriorities)
         {
             return kInvalidThreadId;
         }
-        ThreadId id = m_readyQueue[m_readyHead];
-        m_readyHead = (m_readyHead + 1) % kMaxThreads;
+
+        ThreadId id = m_readyHead[priority];
+        if (id == kInvalidThreadId)
+        {
+            return kInvalidThreadId;
+        }
+
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb != nullptr)
+        {
+            m_readyHead[priority] = tcb->m_nextReady;
+            tcb->m_nextReady = kInvalidThreadId;
+        }
+        else
+        {
+            m_readyHead[priority] = kInvalidThreadId;
+        }
+
+        // If list is now empty, clear the tail and bitmap bit
+        if (m_readyHead[priority] == kInvalidThreadId)
+        {
+            m_readyTail[priority] = kInvalidThreadId;
+            m_readyBitmap &= ~(1U << priority);
+        }
+
         --m_readyCount;
         return id;
     }
 
+    void Scheduler::removeFromReadyList(ThreadId id, std::uint8_t priority)
+    {
+        if (priority >= kMaxPriorities || m_readyHead[priority] == kInvalidThreadId)
+        {
+            return;
+        }
+
+        // Special case: removing the head
+        if (m_readyHead[priority] == id)
+        {
+            dequeueReady(priority);
+            return;
+        }
+
+        // Walk the list to find the predecessor
+        ThreadId prev = m_readyHead[priority];
+        while (prev != kInvalidThreadId)
+        {
+            ThreadControlBlock *prevTcb = threadGetTcb(prev);
+            if (prevTcb == nullptr)
+            {
+                break;
+            }
+
+            if (prevTcb->m_nextReady == id)
+            {
+                // Found it -- unlink
+                ThreadControlBlock *tcb = threadGetTcb(id);
+                if (tcb != nullptr)
+                {
+                    prevTcb->m_nextReady = tcb->m_nextReady;
+                    tcb->m_nextReady = kInvalidThreadId;
+                }
+
+                // Update tail if we removed the last element
+                if (m_readyTail[priority] == id)
+                {
+                    m_readyTail[priority] = prev;
+                }
+
+                --m_readyCount;
+
+                // Clear bitmap bit if list is now empty
+                if (m_readyHead[priority] == kInvalidThreadId)
+                {
+                    m_readyTail[priority] = kInvalidThreadId;
+                    m_readyBitmap &= ~(1U << priority);
+                }
+                return;
+            }
+
+            prev = prevTcb->m_nextReady;
+        }
+    }
+
+    // ---- Public API ----
+
     bool Scheduler::addThread(ThreadId id)
     {
-        if (m_readyCount >= kMaxThreads)
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr)
         {
             return false;
         }
-        enqueue(id);
+
+        tcb->m_state = ThreadState::Ready;
+        enqueueReady(id);
         return true;
     }
 
     void Scheduler::removeThread(ThreadId id)
     {
-        // Find and remove from ready queue, compacting
-        for (std::uint8_t i = 0; i < m_readyCount; ++i)
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr)
         {
-            std::uint8_t idx = (m_readyHead + i) % kMaxThreads;
-            if (m_readyQueue[idx] == id)
-            {
-                // Shift remaining entries forward
-                for (std::uint8_t j = i; j < m_readyCount - 1; ++j)
-                {
-                    std::uint8_t from = (m_readyHead + j + 1) % kMaxThreads;
-                    std::uint8_t to = (m_readyHead + j) % kMaxThreads;
-                    m_readyQueue[to] = m_readyQueue[from];
-                }
-                --m_readyCount;
-
-                // Mark TCB as inactive
-                ThreadControlBlock *tcb = threadGetTcb(id);
-                if (tcb != nullptr)
-                {
-                    tcb->m_state = ThreadState::Inactive;
-                }
-                return;
-            }
+            return;
         }
 
-        // Also check if it's the currently running thread
+        // Remove from ready list if in queue
+        if (tcb->m_state == ThreadState::Ready)
+        {
+            removeFromReadyList(id, tcb->m_currentPriority);
+        }
+
+        tcb->m_state = ThreadState::Inactive;
+
         if (m_currentThreadId == id)
         {
-            ThreadControlBlock *tcb = threadGetTcb(id);
-            if (tcb != nullptr)
-            {
-                tcb->m_state = ThreadState::Inactive;
-            }
             m_currentThreadId = kInvalidThreadId;
         }
     }
 
     ThreadId Scheduler::pickNext()
     {
-        if (m_readyCount == 0)
+        std::uint8_t pri = highestReadyPriority();
+        if (pri >= kMaxPriorities)
         {
             return m_idleThreadId;
         }
-        return m_readyQueue[m_readyHead];
+        return m_readyHead[pri];
     }
 
     bool Scheduler::tick()
@@ -105,23 +206,26 @@ namespace kernel
             return false;
         }
 
-        // If running the idle thread, check if real threads are ready
-        if (m_currentThreadId == m_idleThreadId)
-        {
-            if (m_readyCount > 0)
-            {
-                arch::triggerContextSwitch();
-                return true;
-            }
-            return false;
-        }
-
         ThreadControlBlock *tcb = threadGetTcb(m_currentThreadId);
         if (tcb == nullptr)
         {
             return false;
         }
 
+        // Check for preemption: higher-priority thread became ready
+        std::uint8_t highPri = highestReadyPriority();
+        if (highPri < kMaxPriorities && highPri < tcb->m_currentPriority)
+        {
+            return true;
+        }
+
+        // Idle thread: switch if any real thread is ready
+        if (m_currentThreadId == m_idleThreadId)
+        {
+            return (m_readyCount > 0);
+        }
+
+        // Time-slice within same priority
         if (tcb->m_timeSliceRemaining > 0)
         {
             --tcb->m_timeSliceRemaining;
@@ -129,10 +233,13 @@ namespace kernel
 
         if (tcb->m_timeSliceRemaining == 0)
         {
-            // Time slice expired: trigger context switch
+            // Check if same-priority peers exist in the ready queue
+            if (m_readyBitmap & (1U << tcb->m_currentPriority))
+            {
+                return true;
+            }
+            // No peers; reset slice and continue
             tcb->m_timeSliceRemaining = tcb->m_timeSlice;
-            arch::triggerContextSwitch();
-            return true;
         }
 
         return false;
@@ -150,8 +257,6 @@ namespace kernel
         {
             tcb->m_timeSliceRemaining = tcb->m_timeSlice;
         }
-
-        arch::triggerContextSwitch();
     }
 
     ThreadId Scheduler::switchContext()
@@ -159,18 +264,22 @@ namespace kernel
         ThreadId oldId = m_currentThreadId;
         ThreadControlBlock *oldTcb = threadGetTcb(oldId);
 
-        // Put the outgoing thread back in the ready queue (if still active)
+        // Re-enqueue the outgoing thread if still Running
         if (oldTcb != nullptr && oldTcb->m_state == ThreadState::Running)
         {
             oldTcb->m_state = ThreadState::Ready;
-            enqueue(oldId);
+            enqueueReady(oldId);
         }
 
-        // Dequeue the next thread
-        ThreadId nextId = dequeue();
-        if (nextId == kInvalidThreadId)
+        // Select the highest-priority ready thread
+        std::uint8_t pri = highestReadyPriority();
+        ThreadId nextId;
+        if (pri < kMaxPriorities)
         {
-            // No ready threads -- run idle
+            nextId = dequeueReady(pri);
+        }
+        else
+        {
             nextId = m_idleThreadId;
         }
 
@@ -178,10 +287,70 @@ namespace kernel
         if (nextTcb != nullptr)
         {
             nextTcb->m_state = ThreadState::Running;
+            nextTcb->m_timeSliceRemaining = nextTcb->m_timeSlice;
         }
 
         m_currentThreadId = nextId;
         return nextId;
+    }
+
+    void Scheduler::blockCurrentThread()
+    {
+        ThreadControlBlock *tcb = threadGetTcb(m_currentThreadId);
+        if (tcb == nullptr)
+        {
+            return;
+        }
+
+        tcb->m_state = ThreadState::Blocked;
+        // Thread is NOT re-enqueued in the ready list -- it's blocked
+    }
+
+    bool Scheduler::unblockThread(ThreadId id)
+    {
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr || tcb->m_state != ThreadState::Blocked)
+        {
+            return false;
+        }
+
+        tcb->m_state = ThreadState::Ready;
+        enqueueReady(id);
+
+        // Return true if unblocked thread has higher priority than current
+        ThreadControlBlock *curTcb = threadGetTcb(m_currentThreadId);
+        if (curTcb == nullptr)
+        {
+            return true;
+        }
+        return tcb->m_currentPriority < curTcb->m_currentPriority;
+    }
+
+    void Scheduler::setThreadPriority(ThreadId id, std::uint8_t newPriority)
+    {
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr || newPriority >= kMaxPriorities)
+        {
+            return;
+        }
+
+        std::uint8_t oldPriority = tcb->m_currentPriority;
+        if (oldPriority == newPriority)
+        {
+            return;
+        }
+
+        // If thread is in the ready queue, reposition it
+        if (tcb->m_state == ThreadState::Ready)
+        {
+            removeFromReadyList(id, oldPriority);
+            tcb->m_currentPriority = newPriority;
+            enqueueReady(id);
+        }
+        else
+        {
+            tcb->m_currentPriority = newPriority;
+        }
     }
 
     ThreadId Scheduler::currentThreadId() const
