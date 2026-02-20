@@ -20,7 +20,7 @@
             cmake
             ninja
             openocd
-            python3
+            (python3.withPackages (ps: [ ps.pyserial ps.pytest ]))
             git
             stlink
             clang-tools

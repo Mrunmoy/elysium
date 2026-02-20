@@ -362,8 +362,14 @@ namespace kernel
         {
         case FaultType::DivideByZero:
         {
-            volatile int zero = 0;
-            volatile int result = 1 / zero;
+            // Use inline assembly to prevent the compiler from optimizing
+            // away the division (integer divide-by-zero is UB in C++).
+            std::uint32_t one = 1;
+            std::uint32_t zero = 0;
+            std::uint32_t result;
+            __asm volatile("udiv %0, %1, %2"
+                           : "=r"(result)
+                           : "r"(one), "r"(zero));
             (void)result;
             break;
         }
