@@ -20,9 +20,9 @@ namespace
     // AMBA Peripheral Clock Control
     constexpr std::uint32_t kAperClkCtrl = 0x12C;
 
-    // APER_CLK_CTRL bit positions
-    constexpr std::uint32_t kUart0ClkBit = 0;    // Bit 0: UART0
-    constexpr std::uint32_t kUart1ClkBit = 1;    // Bit 1: UART1
+    // APER_CLK_CTRL bit positions (per Zynq TRM, Table 25-10)
+    constexpr std::uint32_t kUart0ClkBit = 20;   // Bit 20: UART0
+    constexpr std::uint32_t kUart1ClkBit = 21;   // Bit 21: UART1
     constexpr std::uint32_t kGpioClkBit = 22;    // Bit 22: GPIO
 
     volatile std::uint32_t &reg(std::uint32_t addr)

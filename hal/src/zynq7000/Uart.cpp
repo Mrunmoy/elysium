@@ -26,13 +26,13 @@ namespace
     constexpr std::uint32_t kFifo = 0x30;    // TX/RX data FIFO
     constexpr std::uint32_t kBdiv = 0x34;    // Baud rate divider
 
-    // CR bits
-    constexpr std::uint32_t kCrTxDis = 1U << 3;     // TX disable
+    // CR bits (per Zynq TRM, UART Control Register, Table 19-1)
+    constexpr std::uint32_t kCrRxRes = 1U << 0;     // RX logic reset
+    constexpr std::uint32_t kCrTxRes = 1U << 1;     // TX logic reset
+    constexpr std::uint32_t kCrRxEn  = 1U << 2;     // RX enable
+    constexpr std::uint32_t kCrRxDis = 1U << 3;     // RX disable
     constexpr std::uint32_t kCrTxEn  = 1U << 4;     // TX enable
-    constexpr std::uint32_t kCrRxDis = 1U << 5;     // RX disable
-    constexpr std::uint32_t kCrRxEn  = 1U << 6;     // RX enable
-    constexpr std::uint32_t kCrTxRes = 1U << 7;     // TX logic reset
-    constexpr std::uint32_t kCrRxRes = 1U << 8;     // RX logic reset
+    constexpr std::uint32_t kCrTxDis = 1U << 5;     // TX disable
 
     // MR bits for 8N1
     // Bits 1:0 = CLKS (0 = uart_ref_clk)
