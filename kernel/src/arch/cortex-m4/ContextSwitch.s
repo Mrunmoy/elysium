@@ -17,11 +17,16 @@
  *   g_nextTcb     -- TCB of thread to switch to
  *
  * TCB layout: m_stackPointer is at offset 0 (first field).
+ * MPU fields: mpuStackRbar at offset 36, mpuStackRasr at offset 40.
  */
 
     .syntax unified
     .cpu cortex-m4
     .thumb
+
+/* TCB offsets for MPU stack region fields */
+    .equ OFFSET_MPU_RBAR, 36
+    .equ OFFSET_MPU_RASR, 40
 
 /* -------------------------------------------------------------------------- */
 /*  PendSV_Handler -- context switch                                          */
@@ -50,6 +55,12 @@ PendSV_Handler:
     ldr     r3, =g_nextTcb
     ldr     r2, [r3]            /* r2 = g_nextTcb */
     str     r2, [r1]            /* g_currentTcb = g_nextTcb */
+
+    /* Update MPU thread stack region for incoming thread */
+    ldr     r0, [r2, #OFFSET_MPU_RBAR]
+    ldr     r1, [r2, #OFFSET_MPU_RASR]
+    ldr     r3, =0xE000ED9C     /* MPU->RBAR address */
+    stm     r3, {r0, r1}        /* Write RBAR + RASR atomically */
 
     /* Load the incoming thread's stack pointer */
     ldr     r0, [r2, #0]        /* r0 = g_nextTcb->m_stackPointer */
@@ -81,6 +92,16 @@ SVC_Handler:
     /* Load g_currentTcb (set by startScheduler before SVC) */
     ldr     r0, =g_currentTcb
     ldr     r1, [r0]            /* r1 = g_currentTcb */
+
+    /* Update MPU thread stack region for first thread */
+    ldr     r2, [r1, #OFFSET_MPU_RBAR]
+    ldr     r3, [r1, #OFFSET_MPU_RASR]
+    ldr     r0, =0xE000ED9C     /* MPU->RBAR address */
+    stm     r0, {r2, r3}        /* Write RBAR + RASR */
+
+    /* Reload g_currentTcb pointer (r0 was reused) */
+    ldr     r0, =g_currentTcb
+    ldr     r1, [r0]
     ldr     r0, [r1, #0]        /* r0 = g_currentTcb->m_stackPointer */
 
     /* Restore r4-r11 from the initial stack frame */

@@ -7,9 +7,15 @@
 #include "kernel/Scheduler.h"
 #include "kernel/CortexM.h"
 #include "kernel/CrashDump.h"
+#include "kernel/Heap.h"
+#include "kernel/Mpu.h"
 #include "startup/SystemClock.h"
 
 #include <cstdint>
+
+// Linker-provided heap region symbols (defined in Linker.ld)
+extern "C" std::uint8_t _heap_start;
+extern "C" std::uint8_t _heap_end;
 
 namespace kernel
 {
@@ -28,7 +34,7 @@ namespace kernel
     }  // namespace internal
 
     // Idle thread -- runs when no other threads are ready
-    alignas(8) static std::uint32_t s_idleStack[128];  // 512 bytes
+    alignas(512) static std::uint32_t s_idleStack[128];  // 512 bytes
 
     static void idleThreadFunc(void *)
     {
@@ -64,6 +70,8 @@ namespace kernel
     void init()
     {
         crashDumpInit();
+        heapInit(&_heap_start, &_heap_end);
+        mpuInit();
         threadReset();
         s_scheduler.init();
         s_tickCount = 0;

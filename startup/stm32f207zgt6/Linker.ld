@@ -116,10 +116,11 @@ SECTIONS
         __bss_end__ = _ebss;
     } > SRAM
 
-    /* Heap grows up from end of BSS */
+    /* Heap grows up from end of BSS.
+     * Aligned to 16K for MPU region (power-of-2 alignment required). */
     .heap :
     {
-        . = ALIGN(8);
+        . = ALIGN(16K);
         _heap_start = .;
         . = . + _heap_size;
         . = ALIGN(8);

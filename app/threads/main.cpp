@@ -13,9 +13,9 @@
 
 namespace
 {
-    // Thread stacks (statically allocated)
-    alignas(8) std::uint32_t g_ledStack[256];    // 1024 bytes
-    alignas(8) std::uint32_t g_uartStack[256];   // 1024 bytes
+    // Thread stacks (statically allocated, aligned to stack size for MPU)
+    alignas(1024) std::uint32_t g_ledStack[256];    // 1024 bytes
+    alignas(1024) std::uint32_t g_uartStack[256];   // 1024 bytes
 
     // Simple integer-to-string for tick count (no sprintf in freestanding)
     void uintToStr(std::uint32_t val, char *buf, std::size_t bufSize)

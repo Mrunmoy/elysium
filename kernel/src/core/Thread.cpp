@@ -3,6 +3,7 @@
 
 #include "kernel/Thread.h"
 #include "kernel/CortexM.h"
+#include "kernel/Mpu.h"
 
 #include <cstdint>
 #include <cstring>
@@ -46,6 +47,19 @@ namespace kernel
         tcb.nextReady = kInvalidThreadId;
         tcb.nextWait = kInvalidThreadId;
         tcb.wakeupTick = 0;
+
+        // Pre-compute MPU stack region config for context switch
+        if (mpuValidateStack(config.stack, config.stackSize))
+        {
+            ThreadMpuConfig mpuConfig = mpuComputeThreadConfig(config.stack, config.stackSize);
+            tcb.mpuStackRbar = mpuConfig.stackRbar;
+            tcb.mpuStackRasr = mpuConfig.stackRasr;
+        }
+        else
+        {
+            tcb.mpuStackRbar = 0;
+            tcb.mpuStackRasr = 0;
+        }
 
         // Build initial stack frame at top of stack
         // Stack grows downward; top = base + (size / sizeof(uint32_t))

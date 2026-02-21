@@ -47,6 +47,10 @@ namespace kernel
 
         // Sleep / timeout
         std::uint32_t wakeupTick;       // Tick at which to wake (0 = not sleeping)
+
+        // MPU stack region (pre-computed for fast context switch)
+        std::uint32_t mpuStackRbar;     // RBAR value for this thread's stack region
+        std::uint32_t mpuStackRasr;     // RASR value for this thread's stack region
     };
 
     struct ThreadConfig

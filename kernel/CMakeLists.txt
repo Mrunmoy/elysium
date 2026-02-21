@@ -8,9 +8,13 @@ add_library(kernel STATIC
     src/core/Mutex.cpp
     src/core/Semaphore.cpp
     src/core/WaitQueue.cpp
+    src/core/BlockPool.cpp
+    src/core/Heap.cpp
+    src/core/HeapOperators.cpp
     src/arch/${MSOS_ARCH_DIR}/ContextSwitch.s
     src/arch/${MSOS_ARCH_DIR}/CortexM.cpp
     src/arch/${MSOS_ARCH_DIR}/FaultHandlers.s
+    src/arch/${MSOS_ARCH_DIR}/Mpu.cpp
 )
 
 target_include_directories(kernel PUBLIC
