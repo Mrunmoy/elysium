@@ -20,6 +20,7 @@
             cmake
             ninja
             openocd
+            gdb
             (python3.withPackages (ps: [ ps.pyserial ps.pytest ]))
             git
             stlink
