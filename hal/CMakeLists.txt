@@ -1,7 +1,13 @@
+if(MSOS_HAL_DIR)
+    set(HAL_SRC_DIR src/${MSOS_HAL_DIR})
+else()
+    set(HAL_SRC_DIR src/stm32f4)
+endif()
+
 add_library(hal STATIC
-    src/stm32f4/Gpio.cpp
-    src/stm32f4/Uart.cpp
-    src/stm32f4/Rcc.cpp
+    ${HAL_SRC_DIR}/Gpio.cpp
+    ${HAL_SRC_DIR}/Uart.cpp
+    ${HAL_SRC_DIR}/Rcc.cpp
 )
 
 target_include_directories(hal PUBLIC

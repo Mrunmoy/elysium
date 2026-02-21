@@ -1,0 +1,126 @@
+// Zynq-7000 PS UART driver (Cadence UART IP)
+//
+// Implements the hal::uart* interface for Zynq PS UART0/UART1.
+// UART0 base: 0xE0000000, UART1 base: 0xE0001000.
+//
+// Baud rate: baud = uart_ref_clk / (CD * (BDIV + 1))
+// where CD is BRGR register value and BDIV is baud rate divider.
+
+#include "hal/Uart.h"
+#include "startup/SystemClock.h"
+
+#include <cstdint>
+#include <cstring>
+
+namespace
+{
+    // PS UART base addresses
+    constexpr std::uint32_t kUart0Base = 0xE0000000;
+    constexpr std::uint32_t kUart1Base = 0xE0001000;
+
+    // Register offsets
+    constexpr std::uint32_t kCr   = 0x00;    // Control register
+    constexpr std::uint32_t kMr   = 0x04;    // Mode register
+    constexpr std::uint32_t kBrgr = 0x18;    // Baud rate generator (CD)
+    constexpr std::uint32_t kSr   = 0x2C;    // Channel status
+    constexpr std::uint32_t kFifo = 0x30;    // TX/RX data FIFO
+    constexpr std::uint32_t kBdiv = 0x34;    // Baud rate divider
+
+    // CR bits
+    constexpr std::uint32_t kCrTxDis = 1U << 3;     // TX disable
+    constexpr std::uint32_t kCrTxEn  = 1U << 4;     // TX enable
+    constexpr std::uint32_t kCrRxDis = 1U << 5;     // RX disable
+    constexpr std::uint32_t kCrRxEn  = 1U << 6;     // RX enable
+    constexpr std::uint32_t kCrTxRes = 1U << 7;     // TX logic reset
+    constexpr std::uint32_t kCrRxRes = 1U << 8;     // RX logic reset
+
+    // MR bits for 8N1
+    // Bits 1:0 = CLKS (0 = uart_ref_clk)
+    // Bits 2:1 = CHRL (0x = 8 bit)
+    // Bits 5:3 = PAR  (100 = no parity)
+    // Bits 7:6 = NBSTOP (00 = 1 stop bit)
+    // Bits 9:8 = CHMODE (00 = normal)
+    constexpr std::uint32_t kMr8n1 = (0x4U << 3);   // PAR=100 (no parity), rest 0
+
+    // SR bits
+    constexpr std::uint32_t kSrTxFull  = 1U << 4;   // TX FIFO full
+    constexpr std::uint32_t kSrTxEmpty = 1U << 3;    // TX FIFO empty
+
+    // Default baud rate divider (BDIV + 1 divides the CD output)
+    constexpr std::uint32_t kDefaultBdiv = 4;        // BDIV register value
+
+    std::uint32_t uartBase(hal::UartId id)
+    {
+        switch (id)
+        {
+            case hal::UartId::Uart0:
+                return kUart0Base;
+            default:
+                break;
+        }
+        return kUart1Base;
+    }
+
+    volatile std::uint32_t &reg(std::uint32_t addr)
+    {
+        return *reinterpret_cast<volatile std::uint32_t *>(addr);
+    }
+}  // namespace
+
+namespace hal
+{
+    void uartInit(const UartConfig &config)
+    {
+        std::uint32_t base = uartBase(config.id);
+
+        // Disable TX and RX
+        reg(base + kCr) = kCrTxDis | kCrRxDis;
+
+        // Reset TX and RX logic
+        reg(base + kCr) = kCrTxRes | kCrRxRes;
+
+        // Configure baud rate
+        // baud = uart_ref_clk / (CD * (BDIV + 1))
+        // CD = uart_ref_clk / (baud * (BDIV + 1))
+        std::uint32_t refClk = g_apb1Clock;    // UART reference clock
+        std::uint32_t bdiv = kDefaultBdiv;
+        std::uint32_t cd = refClk / (config.baudRate * (bdiv + 1));
+        if (cd < 1)
+        {
+            cd = 1;
+        }
+
+        reg(base + kBdiv) = bdiv;
+        reg(base + kBrgr) = cd;
+
+        // Configure mode: 8N1, normal mode, uart_ref_clk
+        reg(base + kMr) = kMr8n1;
+
+        // Enable TX and RX
+        reg(base + kCr) = kCrTxEn | kCrRxEn;
+    }
+
+    void uartPutChar(UartId id, char c)
+    {
+        std::uint32_t base = uartBase(id);
+
+        // Wait until TX FIFO is not full
+        while ((reg(base + kSr) & kSrTxFull) != 0)
+        {
+        }
+        reg(base + kFifo) = static_cast<std::uint32_t>(c);
+    }
+
+    void uartWrite(UartId id, const char *data, std::size_t length)
+    {
+        for (std::size_t i = 0; i < length; ++i)
+        {
+            uartPutChar(id, data[i]);
+        }
+    }
+
+    void uartWriteString(UartId id, const char *str)
+    {
+        uartWrite(id, str, std::strlen(str));
+    }
+}  // namespace hal

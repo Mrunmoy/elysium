@@ -45,6 +45,8 @@ namespace hal
             case UartId::Usart6:
                 reg(kRccBase + kRccApb2enr) |= (1U << 5);
                 break;
+            default:
+                break;
         }
     }
 }  // namespace hal

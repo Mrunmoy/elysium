@@ -47,6 +47,8 @@ namespace
                 return kUart5Base;
             case hal::UartId::Usart6:
                 return kUsart6Base;
+            default:
+                break;
         }
         return kUsart1Base;
     }
@@ -54,11 +56,14 @@ namespace
     std::uint32_t uartPeripheralClock(hal::UartId id)
     {
         // USART1 and USART6 are on APB2; others on APB1
-        if (id == hal::UartId::Usart1 || id == hal::UartId::Usart6)
+        switch (id)
         {
-            return g_apb2Clock;
+            case hal::UartId::Usart1:
+            case hal::UartId::Usart6:
+                return g_apb2Clock;
+            default:
+                return g_apb1Clock;
         }
-        return g_apb1Clock;
     }
 
     volatile std::uint32_t &reg(std::uint32_t addr)

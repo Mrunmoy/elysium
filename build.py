@@ -5,10 +5,12 @@ ms-os build script.
 Usage:
     python3 build.py                          # Cross-compile firmware (F207 default)
     python3 build.py --target stm32f407zgt6   # Cross-compile for F407
+    python3 build.py --target pynq-z2         # Cross-compile for PYNQ-Z2
     python3 build.py -c                       # Clean build
     python3 build.py -t                       # Build + run host tests
     python3 build.py -e                       # Build + examples (same as default for now)
     python3 build.py -f                       # Flash to target via J-Link
+    python3 build.py -f --target pynq-z2      # Flash to PYNQ-Z2 via OpenOCD
     python3 build.py -c -t                    # Clean + tests
 """
 
@@ -27,6 +29,11 @@ TOOLCHAIN_FILE = os.path.join(PROJECT_DIR, "cmake", "arm-none-eabi-gcc.cmake")
 JLINK_DEVICE_MAP = {
     "stm32f207zgt6": "STM32F207ZG",
     "stm32f407zgt6": "STM32F407ZG",
+}
+
+# Default app per target
+DEFAULT_APP = {
+    "pynq-z2": "hello",
 }
 
 
@@ -99,8 +106,8 @@ def build_tests():
     ])
 
 
-def flash(target, app="threads"):
-    """Flash firmware to target via J-Link."""
+def flash_jlink(target, app):
+    """Flash firmware to STM32 target via J-Link."""
     bin_path = os.path.join(BUILD_DIR, "app", app, f"{app}.bin")
     if not os.path.exists(bin_path):
         print(f"Error: {bin_path} not found. Run build first.")
@@ -125,17 +132,52 @@ def flash(target, app="threads"):
     ])
 
 
+def flash_openocd(app):
+    """Load firmware to PYNQ-Z2 via OpenOCD JTAG."""
+    elf_path = os.path.join(BUILD_DIR, "app", app, app)
+    if not os.path.exists(elf_path):
+        print(f"Error: {elf_path} not found. Run build first.")
+        sys.exit(1)
+
+    openocd_cfg = os.path.join(PROJECT_DIR, "openocd", "pynq-z2.cfg")
+    if not os.path.exists(openocd_cfg):
+        print(f"Error: {openocd_cfg} not found.")
+        sys.exit(1)
+
+    run([
+        "openocd",
+        "-f", openocd_cfg,
+        "-c", "init",
+        "-c", "halt",
+        "-c", f"load_image {elf_path}",
+        "-c", "resume 0x00100000",
+        "-c", "shutdown",
+    ])
+
+
+def flash(target, app):
+    """Flash firmware to target."""
+    if target == "pynq-z2":
+        flash_openocd(app)
+    else:
+        flash_jlink(target, app)
+
+
 def main():
     parser = argparse.ArgumentParser(description="ms-os build script")
     parser.add_argument("-c", "--clean", action="store_true", help="Clean build directories")
     parser.add_argument("-t", "--test", action="store_true", help="Build and run host tests")
     parser.add_argument("-e", "--examples", action="store_true", help="Build examples")
     parser.add_argument("-f", "--flash", action="store_true", help="Flash to target")
-    parser.add_argument("--app", default="threads", help="App to flash (default: threads)")
+    parser.add_argument("--app", default=None, help="App to flash (default: threads or hello)")
     parser.add_argument("--target", default="stm32f207zgt6",
-                        choices=["stm32f207zgt6", "stm32f407zgt6"],
+                        choices=["stm32f207zgt6", "stm32f407zgt6", "pynq-z2"],
                         help="Target MCU (default: stm32f207zgt6)")
     args = parser.parse_args()
+
+    # Default app depends on target
+    if args.app is None:
+        args.app = DEFAULT_APP.get(args.target, "threads")
 
     if args.clean:
         clean()

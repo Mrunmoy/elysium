@@ -28,11 +28,17 @@ if(CMAKE_CROSSCOMPILING)
     endif()
 
     # Target-specific configuration
-    if(MSOS_TARGET STREQUAL "stm32f407zgt6")
+    if(MSOS_TARGET STREQUAL "pynq-z2")
+        add_compile_definitions(ZYNQ7020)
+        set(MSOS_STARTUP_DIR pynq-z2)
+        set(MSOS_HAL_DIR zynq7000)
+        set(MSOS_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/startup/pynq-z2/Linker.ld)
+    elseif(MSOS_TARGET STREQUAL "stm32f407zgt6")
         add_compile_definitions(STM32F407xx)
         set(MSOS_STARTUP_DIR stm32f407zgt6)
         set(MSOS_ARCH_DIR cortex-m4)
         set(MSOS_BOARD_DIR stm32f407zgt6)
+        set(MSOS_HAL_DIR stm32f4)
         set(MSOS_CMSIS_DEVICE_DIR ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f4/Include)
         set(MSOS_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/startup/stm32f407zgt6/Linker.ld)
     else()
@@ -40,6 +46,7 @@ if(CMAKE_CROSSCOMPILING)
         set(MSOS_STARTUP_DIR stm32f207zgt6)
         set(MSOS_ARCH_DIR cortex-m3)
         set(MSOS_BOARD_DIR stm32f207zgt6)
+        set(MSOS_HAL_DIR stm32f4)
         set(MSOS_CMSIS_DEVICE_DIR ${CMAKE_SOURCE_DIR}/vendor/cmsis-device-f2/Include)
         set(MSOS_LINKER_SCRIPT ${CMAKE_SOURCE_DIR}/startup/stm32f207zgt6/Linker.ld)
     endif()
@@ -52,18 +59,25 @@ if(CMAKE_CROSSCOMPILING)
         -fno-common
     )
 
-    # CMSIS headers (interface-only target)
-    add_library(cmsis INTERFACE)
-    target_include_directories(cmsis INTERFACE
-        ${CMAKE_SOURCE_DIR}/vendor/cmsis_core/CMSIS/Core/Include
-        ${MSOS_CMSIS_DEVICE_DIR}
-    )
+    # CMSIS headers (interface-only target, STM32 targets only)
+    if(MSOS_CMSIS_DEVICE_DIR)
+        add_library(cmsis INTERFACE)
+        target_include_directories(cmsis INTERFACE
+            ${CMAKE_SOURCE_DIR}/vendor/cmsis_core/CMSIS/Core/Include
+            ${MSOS_CMSIS_DEVICE_DIR}
+        )
+    endif()
 
     add_subdirectory(startup)
     add_subdirectory(hal)
-    add_subdirectory(kernel)
-    add_subdirectory(app/blinky)
-    add_subdirectory(app/threads)
+
+    if(MSOS_TARGET STREQUAL "pynq-z2")
+        add_subdirectory(app/hello)
+    else()
+        add_subdirectory(kernel)
+        add_subdirectory(app/blinky)
+        add_subdirectory(app/threads)
+    endif()
 
 else()
     # ---------- Host build (unit tests) ----------

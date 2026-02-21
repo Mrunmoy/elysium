@@ -7,6 +7,7 @@ namespace hal
 {
     enum class UartId : std::uint8_t
     {
+        Uart0 = 0,      // Zynq PS UART0
         Usart1 = 1,
         Usart2 = 2,
         Usart3 = 3,
