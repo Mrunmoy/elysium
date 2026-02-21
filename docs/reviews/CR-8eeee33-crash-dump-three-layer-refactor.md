@@ -315,7 +315,7 @@ None found.
 - **File:** `kernel/src/arch/cortex-m3/CrashDumpArch.cpp` line 71,
   `kernel/src/arch/cortex-m4/CrashDumpArch.cpp` line 71,
   `kernel/src/board/stm32f207zgt6/CrashDumpBoard.cpp` line 45,
-  `kernel/src/board/stm32f407vet6/CrashDumpBoard.cpp` line 45
+  `kernel/src/board/stm32f407zgt6/CrashDumpBoard.cpp` line 45
 - **Line(s):** 71 (arch files), 45 (board files)
 - **Severity:** MINOR
 - **Description:** The `reg()` helper:

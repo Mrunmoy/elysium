@@ -3,7 +3,7 @@
 ## Overview
 
 Fault handler and diagnostic system for ms-os on ARM Cortex-M (STM32F207ZGT6,
-STM32F407VET6) and future Cortex-A targets. When the CPU hits an unrecoverable
+STM32F407ZGT6) and future Cortex-A targets. When the CPU hits an unrecoverable
 fault (HardFault, MemManage, BusFault, UsageFault), the system captures register
 state, fault status, and thread context, then outputs a structured crash dump
 via UART. A host-side Python tool monitors the serial port and automatically
@@ -18,7 +18,7 @@ logic from CPU-specific and board-specific code:
 |-------|-----------|-------------|---------|
 | **Common** | `kernel/src/core/` | Nothing -- pure formatting | crash dump structure, hex conversion |
 | **Arch** | `kernel/src/arch/{cortex-m3,cortex-m4}/` | CPU core | SCB fault registers, stack frame layout, CFSR decoding, test fault instructions |
-| **Board** | `kernel/src/board/{stm32f207zgt6,stm32f407vet6}/` | SoC peripherals | UART init/output, LED blink, clock-based delay |
+| **Board** | `kernel/src/board/{stm32f207zgt6,stm32f407zgt6}/` | SoC peripherals | UART init/output, LED blink, clock-based delay |
 
 ### Call Flow
 
@@ -50,7 +50,7 @@ faultHandlerC(stackFrame, excReturn)        [CrashDumpCommon.cpp]  COMMON
 | `kernel/src/arch/cortex-m3/FaultHandlers.s` | Arch | Naked ASM entry points for fault exceptions |
 | `kernel/src/arch/cortex-m4/FaultHandlers.s` | Arch | Naked ASM entry points for fault exceptions |
 | `kernel/src/board/stm32f207zgt6/CrashDumpBoard.cpp` | Board | STM32F207 USART1/GPIO/LED output |
-| `kernel/src/board/stm32f407vet6/CrashDumpBoard.cpp` | Board | STM32F407 USART1/GPIO/LED output |
+| `kernel/src/board/stm32f407zgt6/CrashDumpBoard.cpp` | Board | STM32F407 USART1/GPIO/LED output |
 | `test/kernel/MockCrashDump.cpp` | Test | No-op stubs for host testing |
 | `test/kernel/MockCrashDump.h` | Test | Mock state for crash dump output capture |
 | `test/kernel/CrashDumpTest.cpp` | Test | Unit tests for formatting logic |
@@ -64,9 +64,9 @@ The root `CMakeLists.txt` defines `MSOS_BOARD_DIR` alongside `MSOS_ARCH_DIR`:
 set(MSOS_ARCH_DIR cortex-m3)
 set(MSOS_BOARD_DIR stm32f207zgt6)
 
-# stm32f407vet6
+# stm32f407zgt6
 set(MSOS_ARCH_DIR cortex-m4)
-set(MSOS_BOARD_DIR stm32f407vet6)
+set(MSOS_BOARD_DIR stm32f407zgt6)
 ```
 
 `kernel/CMakeLists.txt` uses both variables:

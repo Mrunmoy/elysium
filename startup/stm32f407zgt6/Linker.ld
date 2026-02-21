@@ -1,8 +1,8 @@
 /*
- * Linker script for STM32F407VET6
+ * Linker script for STM32F407ZGT6
  *
  * Memory map:
- *   FLASH  - 512K  at 0x08000000  (main program storage)
+ *   FLASH  - 1024K at 0x08000000  (main program storage)
  *   CCM    - 64K   at 0x10000000  (core-coupled memory, not DMA-accessible)
  *   SRAM   - 128K  at 0x20000000  (SRAM1 112K + SRAM2 16K contiguous)
  */
@@ -14,7 +14,7 @@ _heap_size  = 16K;
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1024K
     CCM   (rw)  : ORIGIN = 0x10000000, LENGTH = 64K
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }

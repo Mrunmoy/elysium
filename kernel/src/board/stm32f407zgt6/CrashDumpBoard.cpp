@@ -1,4 +1,4 @@
-// STM32F407VET6 board-specific crash dump output.
+// STM32F407ZGT6 board-specific crash dump output.
 //
 // Provides polled UART (USART1 on PA9) and LED blink (PC13) for
 // crash dump output. Uses direct register access -- no HAL, no RTOS,

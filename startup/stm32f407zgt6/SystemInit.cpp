@@ -1,4 +1,4 @@
-// SystemInit -- Clock configuration for STM32F407VET6
+// SystemInit -- Clock configuration for STM32F407ZGT6
 //
 // Configures: PWR voltage scaling, flash latency, HSE, PLL for 168 MHz SYSCLK,
 // AHB/APB1/APB2 prescalers, FPU coprocessor access.

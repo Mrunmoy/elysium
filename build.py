@@ -4,7 +4,7 @@ ms-os build script.
 
 Usage:
     python3 build.py                          # Cross-compile firmware (F207 default)
-    python3 build.py --target stm32f407vet6   # Cross-compile for F407
+    python3 build.py --target stm32f407zgt6   # Cross-compile for F407
     python3 build.py -c                       # Clean build
     python3 build.py -t                       # Build + run host tests
     python3 build.py -e                       # Build + examples (same as default for now)
@@ -26,7 +26,7 @@ TOOLCHAIN_FILE = os.path.join(PROJECT_DIR, "cmake", "arm-none-eabi-gcc.cmake")
 # Map MSOS_TARGET to J-Link device name
 JLINK_DEVICE_MAP = {
     "stm32f207zgt6": "STM32F207ZG",
-    "stm32f407vet6": "STM32F407VE",
+    "stm32f407zgt6": "STM32F407ZG",
 }
 
 
@@ -133,7 +133,7 @@ def main():
     parser.add_argument("-f", "--flash", action="store_true", help="Flash to target")
     parser.add_argument("--app", default="threads", help="App to flash (default: threads)")
     parser.add_argument("--target", default="stm32f207zgt6",
-                        choices=["stm32f207zgt6", "stm32f407vet6"],
+                        choices=["stm32f207zgt6", "stm32f407zgt6"],
                         help="Target MCU (default: stm32f207zgt6)")
     args = parser.parse_args()
 

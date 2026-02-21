@@ -1,5 +1,5 @@
 /**
- * Startup code for STM32F407VET6
+ * Startup code for STM32F407ZGT6
  *
  * Vector table, Reset_Handler (data copy, bss zero, C++ init, main call),
  * and default exception/IRQ handlers (weak infinite loops).

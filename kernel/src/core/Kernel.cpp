@@ -142,6 +142,7 @@ namespace kernel
         }
 
         arch::exitCritical();
+        arch::triggerContextSwitch();
     }
 
     void sleep(std::uint32_t ticks)
@@ -217,5 +218,6 @@ extern "C" void SysTick_Handler()
         {
             kernel::g_nextTcb = nextTcb;
         }
+        kernel::arch::triggerContextSwitch();
     }
 }
