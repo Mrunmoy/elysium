@@ -9,7 +9,7 @@
 // allocated) prevents coalescing past heap end.
 
 #include "kernel/Heap.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 
 #include <cstdint>
 #include <cstring>

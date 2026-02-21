@@ -5,7 +5,7 @@
 
 #include "kernel/Semaphore.h"
 #include "kernel/Scheduler.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 #include "WaitQueue.h"
 
 #include <cstring>

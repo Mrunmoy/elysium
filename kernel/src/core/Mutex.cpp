@@ -9,7 +9,7 @@
 
 #include "kernel/Mutex.h"
 #include "kernel/Scheduler.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 #include "WaitQueue.h"
 
 #include <cstring>

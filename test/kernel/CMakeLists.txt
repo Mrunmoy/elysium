@@ -7,7 +7,7 @@ add_executable(kernel_tests
     BlockPoolTest.cpp
     HeapTest.cpp
     MpuTest.cpp
-    MockCortexM.cpp
+    MockArch.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
     MockMpu.cpp

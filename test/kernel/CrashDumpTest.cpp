@@ -11,7 +11,7 @@
 #include "kernel/CrashDumpArch.h"
 #include "kernel/CrashDumpBoard.h"
 #include "kernel/Thread.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 
 #include "MockCrashDump.h"
 #include "MockKernel.h"

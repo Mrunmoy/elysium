@@ -12,7 +12,7 @@ add_library(kernel STATIC
     src/core/Heap.cpp
     src/core/HeapOperators.cpp
     src/arch/${MSOS_ARCH_DIR}/ContextSwitch.s
-    src/arch/${MSOS_ARCH_DIR}/CortexM.cpp
+    src/arch/${MSOS_ARCH_DIR}/Arch.cpp
     src/arch/${MSOS_ARCH_DIR}/FaultHandlers.s
     src/arch/${MSOS_ARCH_DIR}/Mpu.cpp
 )

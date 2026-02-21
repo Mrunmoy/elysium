@@ -2,8 +2,8 @@
 
 // Mock state recording for kernel host-side testing.
 //
-// The kernel arch layer (CortexM.h) accesses Cortex-M3 hardware registers
-// (NVIC, SysTick, SCB). On the host, these addresses are not mapped.
+// The kernel arch layer (Arch.h) accesses hardware registers (NVIC, SysTick,
+// GIC, etc). On the host, these addresses are not mapped.
 //
 // This mock records calls to arch functions so tests can verify the kernel
 // core logic (thread creation, scheduling, context switch triggers) without

@@ -1,7 +1,7 @@
-// Mock Cortex-M3 arch layer for host-side testing.
-// Replaces kernel/src/arch/cortex-m3/CortexM.cpp at link time.
+// Mock arch layer for host-side testing.
+// Replaces kernel/src/arch/*/Arch.cpp at link time.
 
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 
 #include "MockKernel.h"
 
@@ -39,6 +39,11 @@ namespace arch
     void setInterruptPriorities()
     {
         // No-op for tests
+    }
+
+    std::uint32_t initialStatusRegister()
+    {
+        return 0x01000000u;    // xPSR: Thumb bit (matches Cortex-M)
     }
 
 }  // namespace arch

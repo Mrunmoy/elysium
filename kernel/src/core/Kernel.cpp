@@ -5,7 +5,7 @@
 
 #include "kernel/Kernel.h"
 #include "kernel/Scheduler.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 #include "kernel/CrashDump.h"
 #include "kernel/Heap.h"
 #include "kernel/Mpu.h"
@@ -20,7 +20,7 @@ extern "C" std::uint8_t _heap_end;
 namespace kernel
 {
     // Global TCB pointers read/written by ContextSwitch.s (PendSV_Handler)
-    // Must be extern "C" for assembly linkage (declared in CortexM.h)
+    // Must be extern "C" for assembly linkage (declared in Arch.h)
     ThreadControlBlock *g_currentTcb = nullptr;
     ThreadControlBlock *g_nextTcb = nullptr;
 

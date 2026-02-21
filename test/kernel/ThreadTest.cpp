@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "kernel/Thread.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 
 #include "MockKernel.h"
 

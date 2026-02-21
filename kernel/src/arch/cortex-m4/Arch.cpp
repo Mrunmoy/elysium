@@ -1,7 +1,10 @@
-// Cortex-M3 architecture-specific kernel support.
+// Cortex-M4 architecture-specific kernel support.
 // NVIC priority configuration, SysTick setup, critical sections, PendSV trigger.
+//
+// All SCB, SysTick, and NVIC registers are at identical addresses across
+// Cortex-M3 and Cortex-M4 (part of the ARMv7-M architecture).
 
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 
 #include <cstdint>
 
@@ -70,12 +73,17 @@ namespace arch
 
     void setInterruptPriorities()
     {
-        // Cortex-M3 priority: lower number = higher priority
+        // Cortex-M4 priority: lower number = higher priority
         // PendSV: 0xFF (lowest possible, ensures context switch after all ISRs)
         // SysTick: 0xFE (just above PendSV)
         //
         // SHPR3 layout: [31:24] = SysTick, [23:16] = PendSV
         reg(kScbShpr3) = (0xFEU << 24) | (0xFFU << 16);
+    }
+
+    std::uint32_t initialStatusRegister()
+    {
+        return 0x01000000u;    // xPSR: Thumb bit set
     }
 
 }  // namespace arch

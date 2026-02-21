@@ -2,7 +2,7 @@
 // This module has zero hardware dependencies -- fully testable on host.
 
 #include "kernel/Scheduler.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 
 #include <cstring>
 

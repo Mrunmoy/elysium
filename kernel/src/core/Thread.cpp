@@ -2,7 +2,7 @@
 // This module has zero hardware dependencies -- fully testable on host.
 
 #include "kernel/Thread.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 #include "kernel/Mpu.h"
 
 #include <cstdint>
@@ -71,11 +71,11 @@ namespace kernel
 
         // Build the 16-word initial stack frame (64 bytes, naturally 8-byte aligned)
         // Layout from high to low address:
-        //   xPSR, PC, LR, r12, r3, r2, r1, r0   (8 words: hw exception frame)
-        //   r11, r10, r9, r8, r7, r6, r5, r4     (8 words: sw-saved context)
+        //   StatusReg, PC, LR, r12, r3, r2, r1, r0   (8 words: exception frame)
+        //   r11, r10, r9, r8, r7, r6, r5, r4         (8 words: sw-saved context)
         //
-        // EXC_RETURN is NOT on the stack -- PendSV/SVC handlers use hardcoded
-        // 0xFFFFFFFD (thread mode, PSP, no FPU) since Cortex-M3 has no FPU.
+        // StatusReg is xPSR (Cortex-M) or CPSR (Cortex-A9).
+        // The value is architecture-specific, provided by arch::initialStatusRegister().
 
         stackTop -= 16;
 
@@ -101,7 +101,7 @@ namespace kernel
             reinterpret_cast<std::uintptr_t>(&kernelThreadExit));          // LR
         stackTop[14] = static_cast<std::uint32_t>(
             reinterpret_cast<std::uintptr_t>(config.function));            // PC
-        stackTop[15] = 0x01000000u;                                        // xPSR (Thumb)
+        stackTop[15] = arch::initialStatusRegister();                         // xPSR or CPSR
 
         tcb.stackPointer = stackTop;
 

@@ -8,7 +8,7 @@
 #include "kernel/Kernel.h"
 #include "kernel/BlockPool.h"
 #include "kernel/Heap.h"
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"

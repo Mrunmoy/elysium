@@ -2,7 +2,7 @@
 // Provides g_currentTcb, g_nextTcb, kernelThreadExit, and the
 // internal::scheduler() accessor that Mutex.cpp/Semaphore.cpp need.
 
-#include "kernel/CortexM.h"
+#include "kernel/Arch.h"
 #include "kernel/Scheduler.h"
 #include "kernel/Thread.h"
 
