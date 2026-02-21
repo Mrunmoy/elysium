@@ -20,13 +20,13 @@
     .type _vector_table, %function
 _vector_table:
     b       _boot                   // Reset
-    b       _undef_handler          // Undefined instruction
-    b       _svc_handler            // Supervisor call (SWI)
-    b       _pabt_handler           // Prefetch abort
-    b       _dabt_handler           // Data abort
+    b       Undefined_Handler       // Undefined instruction
+    b       SVC_Handler             // Supervisor call (SWI)
+    b       PrefetchAbort_Handler   // Prefetch abort
+    b       DataAbort_Handler       // Data abort
     nop                             // Reserved
-    b       _irq_handler            // IRQ
-    b       _fiq_handler            // FIQ
+    b       IRQ_Handler             // IRQ
+    b       FIQ_Handler             // FIQ
 
 // ---------- Boot Sequence ----------
 
@@ -134,37 +134,37 @@ _cpu1_wait:
     b       _cpu1_wait
 
 // ---------- Default Exception Handlers ----------
-// Weak symbols so the kernel can override them in Phase 4B.
+// Weak symbols so the kernel can override them with strong definitions.
 
-    .weak   _undef_handler
-    .type   _undef_handler, %function
-_undef_handler:
-    b       _undef_handler
+    .weak   Undefined_Handler
+    .type   Undefined_Handler, %function
+Undefined_Handler:
+    b       Undefined_Handler
 
-    .weak   _svc_handler
-    .type   _svc_handler, %function
-_svc_handler:
-    b       _svc_handler
+    .weak   SVC_Handler
+    .type   SVC_Handler, %function
+SVC_Handler:
+    b       SVC_Handler
 
-    .weak   _pabt_handler
-    .type   _pabt_handler, %function
-_pabt_handler:
-    b       _pabt_handler
+    .weak   PrefetchAbort_Handler
+    .type   PrefetchAbort_Handler, %function
+PrefetchAbort_Handler:
+    b       PrefetchAbort_Handler
 
-    .weak   _dabt_handler
-    .type   _dabt_handler, %function
-_dabt_handler:
-    b       _dabt_handler
+    .weak   DataAbort_Handler
+    .type   DataAbort_Handler, %function
+DataAbort_Handler:
+    b       DataAbort_Handler
 
-    .weak   _irq_handler
-    .type   _irq_handler, %function
-_irq_handler:
-    b       _irq_handler
+    .weak   IRQ_Handler
+    .type   IRQ_Handler, %function
+IRQ_Handler:
+    b       IRQ_Handler
 
-    .weak   _fiq_handler
-    .type   _fiq_handler, %function
-_fiq_handler:
-    b       _fiq_handler
+    .weak   FIQ_Handler
+    .type   FIQ_Handler, %function
+FIQ_Handler:
+    b       FIQ_Handler
 
 // ---------- _init / _fini stubs ----------
 // Required by __libc_init_array when linking with -nostartfiles.
