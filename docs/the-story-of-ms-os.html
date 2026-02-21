@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Story of ms-os</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2.5cm 2cm;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 11.5pt;
+    line-height: 1.65;
+    color: #1a1a1a;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 2cm 1.5cm;
+    background: #fff;
+  }
+
+  /* ---- Title Page ---- */
+  .title-page {
+    text-align: center;
+    page-break-after: always;
+    padding-top: 6cm;
+  }
+  .title-page h1 {
+    font-size: 36pt;
+    font-weight: 700;
+    color: #1a3a5c;
+    letter-spacing: 2px;
+    margin-bottom: 0.2em;
+  }
+  .title-page .subtitle {
+    font-size: 14pt;
+    color: #5a7a9a;
+    font-style: italic;
+    margin-bottom: 3cm;
+  }
+  .title-page .meta {
+    font-size: 11pt;
+    color: #666;
+    line-height: 2;
+  }
+
+  /* ---- Chapter headings ---- */
+  h2.chapter {
+    font-size: 22pt;
+    color: #1a3a5c;
+    border-bottom: 3px solid #c0392b;
+    padding-bottom: 8px;
+    margin-top: 2.5em;
+    page-break-before: always;
+  }
+  h2.chapter .ch-num {
+    display: block;
+    font-size: 11pt;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #c0392b;
+    font-weight: 400;
+    margin-bottom: 4px;
+  }
+
+  h3 {
+    font-size: 14pt;
+    color: #2c3e50;
+    margin-top: 1.8em;
+    margin-bottom: 0.5em;
+  }
+
+  h4 {
+    font-size: 12pt;
+    color: #555;
+    font-style: italic;
+    margin-top: 1.4em;
+    margin-bottom: 0.4em;
+  }
+
+  /* ---- Body text ---- */
+  p { margin: 0.8em 0; text-align: justify; }
+
+  strong { color: #1a3a5c; }
+
+  em { color: #555; }
+
+  .highlight {
+    background: #fef9e7;
+    border-left: 4px solid #f39c12;
+    padding: 10px 14px;
+    margin: 1.2em 0;
+    font-size: 10.5pt;
+  }
+
+  .key-decision {
+    background: #eaf2f8;
+    border-left: 4px solid #2980b9;
+    padding: 10px 14px;
+    margin: 1.2em 0;
+    font-size: 10.5pt;
+  }
+
+  .lesson {
+    background: #fdedec;
+    border-left: 4px solid #c0392b;
+    padding: 10px 14px;
+    margin: 1.2em 0;
+    font-size: 10.5pt;
+  }
+
+  /* ---- Diagrams ---- */
+  .diagram {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin: 1.5em 0;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    line-height: 1.4;
+    white-space: pre;
+    overflow-x: auto;
+    color: #2c3e50;
+  }
+  .diagram .label {
+    color: #c0392b;
+    font-weight: bold;
+  }
+  .diagram .comment {
+    color: #7f8c8d;
+  }
+
+  /* ---- Code ---- */
+  code {
+    font-family: 'Courier New', monospace;
+    font-size: 10pt;
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #c0392b;
+  }
+
+  pre {
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 14px 18px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 1.2em 0;
+  }
+  pre .kw { color: #e74c3c; }
+  pre .str { color: #2ecc71; }
+  pre .cmt { color: #7f8c8d; }
+  pre .fn { color: #f39c12; }
+  pre .num { color: #9b59b6; }
+
+  /* ---- Tables ---- */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.2em 0;
+    font-size: 10pt;
+  }
+  th {
+    background: #1a3a5c;
+    color: white;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #ddd;
+  }
+  tr:nth-child(even) { background: #f8f9fa; }
+
+  /* ---- Timeline ---- */
+  .timeline {
+    position: relative;
+    padding-left: 30px;
+    margin: 1.5em 0;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #1a3a5c;
+  }
+  .timeline .event {
+    position: relative;
+    margin-bottom: 1.2em;
+    padding-left: 10px;
+  }
+  .timeline .event::before {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 6px;
+    width: 12px;
+    height: 12px;
+    background: #c0392b;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #1a3a5c;
+  }
+  .timeline .event-title {
+    font-weight: 700;
+    color: #1a3a5c;
+  }
+
+  /* ---- Figures ---- */
+  .figure {
+    text-align: center;
+    margin: 1.5em 0;
+  }
+  .figure .caption {
+    font-size: 9.5pt;
+    color: #666;
+    font-style: italic;
+    margin-top: 6px;
+  }
+
+  /* ---- Print ---- */
+  @media print {
+    body { padding: 0; max-width: none; }
+    .no-print { display: none; }
+    h2.chapter { page-break-before: always; }
+    .diagram, pre, table, .highlight, .key-decision, .lesson {
+      page-break-inside: avoid;
+    }
+  }
+
+  /* ---- Epigraph ---- */
+  .epigraph {
+    font-style: italic;
+    color: #666;
+    text-align: right;
+    margin: 2em 0;
+    padding-right: 1em;
+    font-size: 11pt;
+  }
+  .epigraph .attribution {
+    font-size: 9.5pt;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!--                        TITLE PAGE                            -->
+<!-- ============================================================ -->
+<div class="title-page">
+  <h1>ms-os</h1>
+  <div class="subtitle">Building a Real-Time Operating System from Scratch</div>
+  <div style="width: 60%; margin: 0 auto; border-top: 2px solid #1a3a5c; padding-top: 1.5cm;">
+    <div class="meta">
+      Target: ARM Cortex-M3 / M4 / A9<br>
+      Language: C++17 + Assembly<br>
+      Architecture: Microkernel<br>
+      <br>
+      February 2025 &mdash; Present
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!--                    TABLE OF CONTENTS                         -->
+<!-- ============================================================ -->
+<h2 class="chapter" style="page-break-before: always;">
+  <span class="ch-num">&nbsp;</span>
+  Contents
+</h2>
+
+<div style="font-size: 11pt; line-height: 2.2;">
+  <strong>Prologue</strong> &mdash; Why Build an OS?<br>
+  <strong>Chapter 1</strong> &mdash; Laying the Foundation (Phase 0)<br>
+  <strong>Chapter 2</strong> &mdash; The Kernel Comes Alive (Phase 1)<br>
+  <strong>Chapter 3</strong> &mdash; Teaching the OS to Multitask (Phase 2)<br>
+  <strong>Chapter 4</strong> &mdash; Guarding Memory (Phase 3)<br>
+  <strong>Chapter 5</strong> &mdash; New Horizons: The PYNQ-Z2 (Phase 4)<br>
+  <strong>Epilogue</strong> &mdash; The Road Ahead<br>
+  <strong>Appendix A</strong> &mdash; Hardware Targets<br>
+  <strong>Appendix B</strong> &mdash; Project Timeline
+</div>
+
+<!-- ============================================================ -->
+<!--                        PROLOGUE                              -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Prologue</span>
+  Why Build an OS?
+</h2>
+
+<div class="epigraph">
+  "What I cannot create, I do not understand."
+  <div class="attribution">&mdash; Richard Feynman</div>
+</div>
+
+<p>
+Every embedded engineer has, at some point, stared at a blinking LED and
+thought: <em>what if I built the entire software stack beneath this?</em>
+Not just the blink loop, not just the HAL, but the scheduler that decides
+when the LED thread runs, the memory allocator that gives it stack space,
+the fault handler that catches it when things go wrong.
+</p>
+
+<p>
+That question is the seed of <strong>ms-os</strong>.
+</p>
+
+<p>
+The goal was ambitious but clear: build a <strong>real-time operating system
+from scratch</strong>, in modern C++17, targeting real ARM hardware. Not a
+toy. Not a simulation. A kernel that boots on silicon, switches contexts in
+microseconds, inherits priorities through mutexes, and prints a crash dump
+when the world falls apart.
+</p>
+
+<p>
+We chose a <strong>microkernel architecture</strong>&mdash;minimal kernel
+with user-space services&mdash;inspired by Minix and QNX. The kernel would
+handle only scheduling, synchronization, and memory protection. Everything
+else&mdash;drivers, IPC, process management&mdash;would live outside.
+</p>
+
+<p>
+The first target was an <strong>STM32F207ZGT6</strong>: a Cortex-M3 at 120 MHz
+with 1 MB of flash and 128 KB of SRAM. Small enough to understand every byte,
+powerful enough to run real applications. Later, a Cortex-M4 (STM32F407) and
+a Cortex-A9 (Zynq-7020 on the PYNQ-Z2) would join the family.
+</p>
+
+<p>
+This is the story of how we built it, one phase at a time.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 1                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 1</span>
+  Laying the Foundation
+</h2>
+
+<h4>Phase 0: Toolchain, HAL, and First Light</h4>
+
+<p>
+Before you can build an OS, you need to build the ground it stands on.
+Phase 0 was about establishing the entire development infrastructure:
+the cross-compilation toolchain, the Hardware Abstraction Layer (HAL),
+the startup code, and the build system.
+</p>
+
+<h3>The Dual Build System</h3>
+
+<p>
+One of the earliest architectural decisions was the <strong>dual build system</strong>.
+The same CMake project produces two completely different outputs depending on context:
+</p>
+
+<div class="diagram">
+                    CMakeLists.txt
+                         |
+            +------------+------------+
+            |                         |
+    CMAKE_CROSSCOMPILING?       Host Build (x86)
+            |                         |
+   ARM Firmware (.elf)          Unit Tests
+   arm-none-eabi-gcc            Native GCC
+   startup + hal + app          GoogleTest + mocks
+   -> build/                    -> build-test/
+</div>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> Link-time mock substitution. The same HAL headers
+are shared between real hardware implementations and test mocks. On x86, mock
+implementations record calls into global vectors. Tests assert on the recorded
+state. No <code>#ifdef</code> in any <code>.cpp</code> file&mdash;platform
+selection is purely through directory structure and CMake.
+</div>
+
+<h3>The Register-Level HAL</h3>
+
+<p>
+We deliberately chose <strong>not</strong> to use ST's HAL library. Instead,
+every peripheral driver reads and writes registers directly through volatile
+pointers. This may seem masochistic, but it serves the microkernel philosophy:
+<em>understand every instruction between your code and the silicon</em>.
+</p>
+
+<p>
+The first three HAL modules were <strong>GPIO</strong> (for the LED on PC13),
+<strong>RCC</strong> (clock tree configuration), and <strong>USART</strong>
+(serial output on PA9). Each followed the same pattern:
+</p>
+
+<div class="diagram">
+  hal/
+    inc/hal/          <span class="comment">&lt;-- Public headers (shared with tests)</span>
+      Gpio.h
+      Uart.h
+      Rcc.h
+    src/stm32f4/      <span class="comment">&lt;-- Real implementation (register access)</span>
+      Gpio.cpp
+      Uart.cpp
+      Rcc.cpp
+  test/hal/           <span class="comment">&lt;-- Mock implementation + tests</span>
+      MockGpio.cpp
+      GpioTest.cpp
+</div>
+
+<h3>Startup: From Reset to main()</h3>
+
+<p>
+The startup assembly (<code>Startup.s</code>) handles the delicate moment
+between power-on and C++ code. On the STM32F207, the sequence is:
+</p>
+
+<div class="diagram">
+  <span class="label">Reset_Handler</span>
+       |
+       +---> Copy .data from FLASH to SRAM
+       +---> Zero .bss
+       +---> __libc_init_array()     <span class="comment">// C++ static constructors</span>
+       +---> SystemInit()
+       |        |
+       |        +---> Configure PLL: HSE 25MHz -> 120 MHz SYSCLK
+       |        +---> Flash: 3 wait states, prefetch, I/D caches
+       |        +---> APB1 = 30 MHz, APB2 = 60 MHz
+       |
+       +---> main()
+</div>
+
+<h3>First Light</h3>
+
+<p>
+The moment of truth came when the LED on PC13 blinked for the first time.
+A simple delay loop, a GPIO toggle, and&mdash;confirmed through a webcam
+pointed at the board&mdash;the LED was alive. Serial output followed shortly
+after: <code>"ms-os on STM32F207"</code> at 115200 baud.
+</p>
+
+<p>
+Phase 0 was complete. We had a working toolchain, a tested HAL, and
+a binary running on real hardware. The foundation was solid.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 2                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 2</span>
+  The Kernel Comes Alive
+</h2>
+
+<h4>Phase 1: Threads, Context Switching, and Crash Dumps</h4>
+
+<p>
+With the foundation in place, it was time to build the kernel's core:
+the ability to run multiple threads of execution on a single CPU.
+This is the heart of any RTOS&mdash;the context switch.
+</p>
+
+<h3>The Thread Control Block</h3>
+
+<p>
+Every thread in ms-os is represented by a <strong>Thread Control Block (TCB)</strong>,
+a 44-byte structure that holds everything the kernel needs to manage a thread's life:
+</p>
+
+<table>
+<tr><th>Field</th><th>Size</th><th>Purpose</th></tr>
+<tr><td><code>stackPointer</code></td><td>4B</td><td>Current SP (offset 0 for assembly)</td></tr>
+<tr><td><code>state</code></td><td>1B</td><td>Inactive / Ready / Running / Blocked</td></tr>
+<tr><td><code>id</code></td><td>1B</td><td>Thread ID (0-7)</td></tr>
+<tr><td><code>basePriority</code></td><td>1B</td><td>Assigned priority (immutable)</td></tr>
+<tr><td><code>currentPriority</code></td><td>1B</td><td>Effective (may be boosted)</td></tr>
+<tr><td><code>name</code></td><td>4B</td><td>Debug name for crash dumps</td></tr>
+<tr><td><code>stackBase</code></td><td>4B</td><td>Bottom of stack</td></tr>
+<tr><td><code>stackSize</code></td><td>4B</td><td>Size in bytes</td></tr>
+<tr><td><code>mpuStackRbar</code></td><td>4B</td><td>Pre-computed MPU region (Phase 3)</td></tr>
+<tr><td><code>mpuStackRasr</code></td><td>4B</td><td>Pre-computed MPU config (Phase 3)</td></tr>
+</table>
+
+<p>
+The <code>stackPointer</code> field sits at offset 0 deliberately. This means
+the context switch assembly can load it with a single <code>ldr r0, [TCB, #0]</code>
+instruction&mdash;no offset calculation needed in the hottest path of the kernel.
+</p>
+
+<h3>The Context Switch</h3>
+
+<p>
+On Cortex-M, context switching uses the <strong>PendSV</strong> exception.
+PendSV runs at the lowest interrupt priority, guaranteeing it fires only after
+all other ISRs complete. This is the entire context switch, in 11 steps:
+</p>
+
+<div class="diagram">
+  <span class="label">PendSV_Handler</span> (Cortex-M)
+
+   1. cpsid i              <span class="comment">// Disable interrupts</span>
+   2. mrs r0, psp          <span class="comment">// Get thread's stack pointer</span>
+   3. stmdb r0!, {r4-r11}  <span class="comment">// Push callee-saved registers</span>
+   4. str r0, [currentTCB] <span class="comment">// Save SP in outgoing TCB</span>
+   5. currentTCB = nextTCB <span class="comment">// Switch the global pointer</span>
+   6. Load MPU RBAR/RASR   <span class="comment">// Update memory protection</span>
+   7. ldr r0, [nextTCB]    <span class="comment">// Load incoming SP</span>
+   8. ldmia r0!, {r4-r11}  <span class="comment">// Pop callee-saved registers</span>
+   9. msr psp, r0          <span class="comment">// Set new stack pointer</span>
+  10. cpsie i              <span class="comment">// Re-enable interrupts</span>
+  11. bx 0xFFFFFFFD        <span class="comment">// Return to thread mode</span>
+</div>
+
+<p>
+The magic number <code>0xFFFFFFFD</code> is the <strong>EXC_RETURN</strong>
+value that tells the Cortex-M hardware: "return to Thread mode using the
+Process Stack Pointer." The hardware automatically restores r0-r3, r12, LR,
+PC, and xPSR from the stack.
+</p>
+
+<div class="highlight">
+<strong>Performance:</strong> The entire context switch takes approximately
+<strong>50 nanoseconds</strong> at 120 MHz, including the MPU region update
+added in Phase 3. That's about 6 clock cycles for the software part.
+</div>
+
+<h3>The Initial Stack Frame</h3>
+
+<p>
+When a thread is created, we build a fake stack frame that looks exactly like
+the thread was interrupted mid-execution. When the context switch "restores"
+this frame, the CPU seamlessly begins executing the thread function:
+</p>
+
+<div class="diagram">
+  High address (top of stack):
+    +----------+
+    |   xPSR   |  Thumb bit set (0x01000000)
+    |    PC    |  --> thread entry function
+    |    LR    |  --> kernelThreadExit()
+    |   r12    |  0
+    |  r3..r0  |  r0 = thread argument
+    +----------+  <span class="comment">---- hardware restores above ----</span>
+    | r11..r4  |  all zero (software-saved)
+    +----------+
+         ^
+    stackPointer stored in TCB
+</div>
+
+<h3>When Things Go Wrong: Crash Dumps</h3>
+
+<p>
+An RTOS that silently hangs on a fault is useless. Phase 1 introduced a
+<strong>three-layer crash dump system</strong> that prints a detailed
+diagnostic over the serial port when a HardFault, MemManage, BusFault,
+or UsageFault occurs:
+</p>
+
+<div class="diagram">
+  <span class="label">Crash Dump Architecture</span>
+
+  +-------------------+
+  | FaultHandlers.s   |  Layer 1: Assembly
+  | (arch-specific)   |  Captures registers, calls C++
+  +-------------------+
+           |
+           v
+  +-------------------+
+  | CrashDumpArch.cpp |  Layer 2: Architecture decode
+  | (arch-specific)   |  Decodes fault registers (CFSR, etc.)
+  +-------------------+
+           |
+           v
+  +-------------------+
+  | CrashDump.cpp     |  Layer 3: Portable formatting
+  | (shared)          |  Prints register dump, stack trace
+  +-------------------+
+           |
+           v
+  +-------------------+
+  | CrashDumpBoard.cpp|  Board-specific UART output
+  | (board-specific)  |  Polled TX, no interrupts, no RTOS
+  +-------------------+
+</div>
+
+<p>
+The crash dump output is designed to be <em>self-contained</em>: it uses polled
+UART with no interrupts, no dynamic allocation, and no RTOS services. It can
+print from any fault context, even if the kernel itself is corrupted.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 3                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 3</span>
+  Teaching the OS to Multitask
+</h2>
+
+<h4>Phase 2: The Priority Scheduler, Mutexes, and Semaphores</h4>
+
+<p>
+A context switch is just the mechanism. Phase 2 added the <em>policy</em>:
+a preemptive priority-based scheduler that decides <em>which</em> thread
+runs and <em>when</em> it runs.
+</p>
+
+<h3>The Bitmap Scheduler</h3>
+
+<p>
+The scheduler supports <strong>32 priority levels</strong> (0 = highest,
+31 = lowest), with a per-priority FIFO queue. The key insight is a single
+32-bit bitmap:
+</p>
+
+<div class="diagram">
+  m_readyBitmap:
+
+  Bit:  31 30 29 28  ...  3  2  1  0
+        [0][0][1][0] ... [1][0][0][1]
+                ^          ^        ^
+                |          |        |
+           Priority 29  Prio 3   Prio 0
+           (1 thread)  (1 thread) (highest ready)
+
+  Highest ready = __builtin_ctz(bitmap) = 0
+  ARM instruction: RBIT + CLZ  -->  <span class="label">O(1)</span>
+</div>
+
+<p>
+Each set bit indicates that at least one thread is ready at that priority level.
+Finding the highest-priority ready thread is a single <code>__builtin_ctz</code>
+(Count Trailing Zeros), which maps directly to the ARM <code>RBIT + CLZ</code>
+instruction pair. <strong>O(1) scheduling, regardless of thread count.</strong>
+</p>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> 32 priorities with bitmap indexing. This matches
+the Cortex-M NVIC convention (lower number = higher priority) and provides
+constant-time scheduling. FreeRTOS uses a similar approach.
+</div>
+
+<h3>Time Slicing</h3>
+
+<p>
+Within the same priority level, threads share the CPU using <strong>round-robin
+time slicing</strong>. Each thread has a configurable time slice (in ticks).
+When a thread's slice expires, the scheduler moves it to the tail of its
+priority queue and runs the next thread at the same level:
+</p>
+
+<div class="diagram">
+  Priority 8 queue:    [Thread A] --> [Thread B] --> [Thread C]
+                           ^                            |
+                           |____________________________|
+                                (round-robin rotation)
+
+  SysTick fires every 1 ms.
+  Thread A's slice expires after 10 ticks.
+  A moves to tail, B runs next.
+</div>
+
+<h3>The Priority Inversion Problem</h3>
+
+<p>
+One of the most subtle bugs in RTOS design is <strong>priority inversion</strong>.
+Imagine three threads:
+</p>
+
+<div class="diagram">
+  Thread H (high priority)   -- needs Mutex M
+  Thread M (medium priority) -- CPU-bound, doesn't need M
+  Thread L (low priority)    -- holds Mutex M
+
+  Without priority inheritance:
+    1. L runs, acquires Mutex M
+    2. H wakes up, preempts L, tries to lock M --> blocked
+    3. M wakes up, preempts L (medium > low)
+    4. M runs indefinitely. H starves.
+       L can never finish to release M!
+
+  <span class="label">Result: High-priority thread blocked by medium-priority thread.</span>
+</div>
+
+<p>
+The solution is <strong>priority inheritance</strong>: when Thread H blocks on
+a mutex held by Thread L, the kernel <em>temporarily boosts</em> L's priority
+to match H's. This prevents Thread M from preempting L, allowing L to finish
+quickly and release the mutex.
+</p>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> Priority inheritance is mandatory on all mutexes.
+There is no option to create a non-inheriting mutex. This eliminates an entire
+class of bugs at the cost of slightly more complex mutex code.
+</div>
+
+<h3>Synchronization Primitives</h3>
+
+<p>
+Phase 2 delivered two synchronization primitives:
+</p>
+
+<table>
+<tr><th>Primitive</th><th>Properties</th><th>Use Case</th></tr>
+<tr>
+  <td><strong>Mutex</strong></td>
+  <td>Recursive, priority-inheriting, ownership-tracked</td>
+  <td>Protecting shared data structures</td>
+</tr>
+<tr>
+  <td><strong>Semaphore</strong></td>
+  <td>Counting (0..maxCount), no ownership, priority-sorted waiters</td>
+  <td>Producer-consumer, resource counting</td>
+</tr>
+</table>
+
+<p>
+Both use a shared <strong>priority-sorted wait queue</strong>: when multiple
+threads are waiting, the highest-priority one is woken first.
+</p>
+
+<h3>Sleep and the Tick</h3>
+
+<p>
+The <strong>SysTick</strong> timer fires every 1 millisecond. Each tick:
+</p>
+
+<ol>
+  <li>Increments the global tick counter</li>
+  <li>Checks sleeping threads (wake any whose timeout expired)</li>
+  <li>Calls <code>scheduler.tick()</code> to check preemption and time slices</li>
+  <li>If a context switch is needed, pends PendSV</li>
+</ol>
+
+<p>
+<code>sleep(1000)</code> blocks a thread for approximately one second.
+The wakeup is checked every tick, giving 1 ms resolution.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 4                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 4</span>
+  Guarding Memory
+</h2>
+
+<h4>Phase 3: Block Pool, Heap, and the MPU</h4>
+
+<p>
+With scheduling working, the next challenge was memory management.
+An RTOS needs two things: fast, deterministic allocation for kernel objects,
+and flexible allocation for user applications. Phase 3 delivered both,
+plus hardware memory protection.
+</p>
+
+<h3>The Block Pool: O(1) Fixed-Size Allocation</h3>
+
+<p>
+For kernel-internal objects (TCBs, message buffers, timer blocks), we need
+allocation that is <strong>deterministic</strong> and <strong>ISR-safe</strong>.
+The Block Pool provides this through an embedded free-list:
+</p>
+
+<div class="diagram">
+  <span class="label">Block Pool (embedded free-list)</span>
+
+  freeHead
+     |
+     v
+  +------+    +------+    +------+    +------+
+  | next-+--->| next-+--->| next-+--->| NULL |
+  |      |    |      |    |      |    |      |
+  | 32B  |    | 32B  |    | 32B  |    | 32B  |
+  +------+    +------+    +------+    +------+
+
+  allocate(): pop head      <span class="comment">--> O(1)</span>
+  free(ptr):  push to head  <span class="comment">--> O(1)</span>
+
+  Each free block stores the "next" pointer in its own memory.
+  No separate metadata table needed.
+</div>
+
+<p>
+The minimum block size is <code>sizeof(void*)</code> (4 bytes on ARM), since
+each free block must hold the next pointer. The <code>free()</code> function
+validates bounds and alignment before accepting a pointer back.
+</p>
+
+<h3>The Heap: First-Fit with Coalescing</h3>
+
+<p>
+For user applications&mdash;<code>std::vector</code>, <code>std::unique_ptr</code>,
+<code>new</code>/<code>delete</code>&mdash;we built a variable-size heap allocator
+using the classic <strong>first-fit free-list with immediate coalescing</strong>:
+</p>
+
+<div class="diagram">
+  <span class="label">Heap Free List (address-sorted)</span>
+
+  sentinel                                          sentinel
+  (head)                                            (end)
+     |                                                 |
+     v                                                 v
+  +------+    +--------+    +--------+    +---------+  +------+
+  | sz=0 |    | sz=64  |    | sz=256 |    | sz=1024 |  | sz=0 |
+  | next-+--->| next  -+--->| next  -+--->| next   -+->| NULL |
+  +------+    | (free) |    | ALLOC  |    | (free)  |  +------+
+              +--------+    +--------+    +---------+
+              0x20001000    0x20001040    0x20001140
+
+  <span class="comment">Allocation: walk list, find first block >= size</span>
+  <span class="comment">Free: insert at correct address, merge with neighbors</span>
+</div>
+
+<p>
+The free list is kept <strong>sorted by address</strong>. This is the crucial
+insight: when freeing a block, we can check if the previous and next blocks
+in the list are physically adjacent. If so, we <strong>coalesce immediately</strong>,
+merging them into a single larger block. This prevents fragmentation from
+accumulating over time.
+</p>
+
+<div class="highlight">
+<strong>Block header:</strong> 8 bytes. Bit 0 of the size field doubles as the
+allocated/free flag. A sentinel block at the heap end (size=0, allocated)
+eliminates boundary checks during coalescing.
+</div>
+
+<h3>C++ Operator Overloads</h3>
+
+<p>
+To make the heap seamless for C++ applications, we override the global
+<code>operator new</code> and <code>operator delete</code> to route through
+our heap. A <code>_sbrk</code> stub prevents newlib's malloc from competing.
+This means standard C++ works naturally:
+</p>
+
+<pre>
+<span class="kw">auto</span> vec = <span class="kw">std::make_unique</span>&lt;std::vector&lt;<span class="kw">int</span>&gt;&gt;();
+vec-&gt;push_back(<span class="num">42</span>);  <span class="cmt">// Allocates from kernel heap</span>
+<span class="cmt">// vec automatically freed when unique_ptr goes out of scope</span>
+</pre>
+
+<h3>The MPU: Hardware-Enforced Boundaries</h3>
+
+<p>
+The ARMv7-M Memory Protection Unit provides hardware enforcement of memory
+access rules. We configure 6 of the 8 available regions:
+</p>
+
+<div class="diagram">
+  <span class="label">MPU Region Map</span>
+
+  Region 0: FLASH (0x08000000)      [Priv+Unpriv RO] [Execute OK]
+  Region 1: Kernel SRAM (0x20000000) [Priv RW only]   [No Execute]
+  Region 2: Peripherals (0x40000000) [Priv RW only]   [No Execute]
+  Region 3: System (0xE0000000)      [Priv RW only]   [No Execute]
+  Region 4: Thread Stack (dynamic)   [Full Access]    [No Execute]
+  Region 5: Heap (from linker)       [Full Access]    [No Execute]
+
+  Region 4 is updated on every context switch.
+  RBAR/RASR pre-computed in TCB for speed.
+</div>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> <code>PRIVDEFENA = 1</code> (privileged default
+map enabled). All threads currently run in privileged mode with default
+memory access. The MPU primarily protects against wild pointer writes
+and code execution from data regions. Full unprivileged thread isolation
+is deferred to a future phase.
+</div>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 5                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 5</span>
+  New Horizons: The PYNQ-Z2
+</h2>
+
+<h4>Phase 4: Porting to Cortex-A9</h4>
+
+<p>
+With the RTOS running on two Cortex-M targets (F207 and F407), we turned
+to something fundamentally different: the <strong>PYNQ-Z2</strong> board,
+built around the <strong>Xilinx Zynq-7020 SoC</strong>&mdash;a dual
+Cortex-A9 MPCore at 650 MHz with 512 MB of DDR3.
+</p>
+
+<p>
+This wasn't just a new chip. It was a <strong>new architecture</strong>.
+Cortex-A9 (ARMv7-A) differs from Cortex-M (ARMv7-M) in almost every
+system-level detail:
+</p>
+
+<table>
+<tr><th>Feature</th><th>Cortex-M</th><th>Cortex-A9</th></tr>
+<tr><td>Instruction set</td><td>Thumb-2</td><td>ARM (32-bit)</td></tr>
+<tr><td>Exception model</td><td>NVIC (nested, automatic stacking)</td><td>Banked modes (IRQ, SVC, ABT, etc.)</td></tr>
+<tr><td>Context switch</td><td>PendSV (dedicated exception)</td><td>IRQ epilogue + SGI</td></tr>
+<tr><td>Tick timer</td><td>SysTick (built-in)</td><td>SCU Private Timer</td></tr>
+<tr><td>Memory protection</td><td>MPU (8 regions)</td><td>MMU (page tables)</td></tr>
+<tr><td>Stack pointer</td><td>MSP/PSP (hardware banked)</td><td>Per-mode banked SP</td></tr>
+<tr><td>First thread launch</td><td>SVC + EXC_RETURN</td><td>SVC + RFE</td></tr>
+<tr><td>CPU count</td><td>Single core</td><td>Dual core (SMP capable)</td></tr>
+</table>
+
+<h3>Phase 4A: Bare-Metal Bringup</h3>
+
+<p>
+The first step was proving the toolchain and basic I/O worked. We wrote new
+startup assembly (ARM mode, not Thumb), a DDR-based linker script, and a
+Zynq PS UART driver:
+</p>
+
+<div class="diagram">
+  <span class="label">PYNQ-Z2 Boot Sequence (via JTAG)</span>
+
+  Power On
+     |
+     v
+  [BootROM] --> [FSBL from SD] --> [u-boot] --> [Linux]
+                                       |
+                                   <span class="label">We halt here via JTAG</span>
+                                       |
+                                       v
+                              [Disable MMU on both CPUs]
+                              [Clear GIC pending IRQs]
+                              [Load our ELF to DDR]
+                              [Resume at 0x00100000]
+                                       |
+                                       v
+                              [_boot: cpsid if]
+                              [Set VBAR, stacks]
+                              [Zero BSS]
+                              [SystemInit, main()]
+</div>
+
+<h3>Phase 4B: The RTOS Port</h3>
+
+<p>
+With bare-metal I/O working, we ported the full RTOS kernel. The biggest
+change was the context switch. Without PendSV, Cortex-A9 uses the
+<strong>IRQ handler epilogue</strong>:
+</p>
+
+<div class="diagram">
+  <span class="label">Cortex-A9 Context Switch (in IRQ handler)</span>
+
+  IRQ Entry:
+    sub lr, lr, #4          <span class="comment">// Adjust return address</span>
+    srsdb sp!, #0x1F        <span class="comment">// Save {PC, CPSR} to SYS stack</span>
+    cps #0x1F               <span class="comment">// Switch to SYS mode</span>
+    push {r0-r3, r12, lr}   <span class="comment">// Save exception frame</span>
+
+  Dispatch interrupt (timer / SGI / other)
+
+  IRQ Epilogue:
+    if g_currentTcb != g_nextTcb:
+      push {r4-r11}         <span class="comment">// Save callee-saved</span>
+      Save SP to outgoing TCB
+      Switch TCB pointers
+      Load SP from incoming TCB
+      pop {r4-r11}          <span class="comment">// Restore callee-saved</span>
+
+    pop {r0-r3, r12, lr}    <span class="comment">// Restore exception frame</span>
+    rfeia sp!                <span class="comment">// Atomically restore PC + CPSR</span>
+</div>
+
+<p>
+The <code>SRS</code> (Store Return State) and <code>RFE</code> (Return From
+Exception) instructions are the A-profile equivalents of the M-profile's
+automatic stacking and EXC_RETURN. They atomically save/restore PC and CPSR
+to/from the stack.
+</p>
+
+<h3>The Architecture Abstraction</h3>
+
+<p>
+To support both Cortex-M and Cortex-A9, we introduced an architecture
+abstraction layer through <code>kernel/inc/kernel/Arch.h</code>:
+</p>
+
+<div class="diagram">
+  <span class="label">Arch.h (common interface)</span>
+
+  arch::triggerContextSwitch()    <span class="comment">// M: PendSV    A9: SGI #0</span>
+  arch::configureSysTick(ticks)   <span class="comment">// M: SysTick   A9: Private Timer</span>
+  arch::enterCritical()           <span class="comment">// M: cpsid i   A9: cpsid i</span>
+  arch::exitCritical()            <span class="comment">// M: cpsie i   A9: cpsie i</span>
+  arch::startFirstThread()        <span class="comment">// M: SVC       A9: SVC</span>
+  arch::initialStatusRegister()   <span class="comment">// M: 0x01000000 (Thumb)</span>
+                                  <span class="comment">// A9: 0x1F (SYS mode, ARM)</span>
+</div>
+
+<p>
+CMake selects the correct implementation directory at build time based on
+<code>MSOS_ARCH_DIR</code>. No <code>#ifdef</code> needed.
+</p>
+
+<h3>The Debugging Saga</h3>
+
+<p>
+Hardware bringup on the PYNQ-Z2 proved to be the most challenging part of
+the entire project. Debugging a dual Cortex-A9 running Linux via JTAG
+is fundamentally different from single-core Cortex-M with SWD:
+</p>
+
+<div class="lesson">
+<strong>Lesson 1:</strong> Linux leaves extensive hardware state. The GIC has
+pending timer interrupts that fire <em>before your first instruction executes</em>.
+You must disable the GIC and clear all pending IRQs via OpenOCD before resuming.
+</div>
+
+<div class="lesson">
+<strong>Lesson 2:</strong> CPU1's MMU interferes with debug memory access.
+Even with CPU0's MMU disabled, OpenOCD routes some reads through CPU1.
+Disable MMU on <em>both</em> CPUs before any bare-metal work.
+</div>
+
+<div class="lesson">
+<strong>Lesson 3:</strong> Always cross-reference register definitions against
+the TRM. We spent hours debugging silent UART output, only to discover the
+Control Register bit definitions were wrong&mdash;we were asserting STARTBRK
+(forcing TXD permanently LOW) instead of resetting the TX FIFO.
+</div>
+
+<div class="lesson">
+<strong>Lesson 4:</strong> WFE on Cortex-A9 can gate the debug clock domain,
+making the CPU unreachable via JTAG. Use infinite <code>b .</code> loops
+instead of WFE during early bringup.
+</div>
+
+<!-- ============================================================ -->
+<!--                      EPILOGUE                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Epilogue</span>
+  The Road Ahead
+</h2>
+
+<div class="epigraph">
+  "The best way to predict the future is to implement it."
+  <div class="attribution">&mdash; Alan Kay</div>
+</div>
+
+<p>
+As of February 2025, ms-os runs on three hardware targets with 136 passing
+unit tests. The kernel can schedule 8 threads across 32 priority levels,
+protect memory with the MPU, allocate from both fixed-size pools and a
+coalescing heap, and print detailed crash dumps when things go wrong.
+</p>
+
+<p>
+But the journey is far from over. The roadmap includes:
+</p>
+
+<ul>
+  <li><strong>Vivado BSP integration</strong> &mdash; Use Xilinx-generated
+      <code>ps7_init</code> for proper Zynq PS initialization, enabling JTAG
+      boot without Linux</li>
+  <li><strong>IPC message passing</strong> &mdash; Microkernel inter-process
+      communication using the ms-ipc library as inspiration</li>
+  <li><strong>Unprivileged threads</strong> &mdash; Run user threads in
+      unprivileged mode with MPU/MMU enforcement</li>
+  <li><strong>User-space drivers</strong> &mdash; Move device drivers out
+      of the kernel into user-space services</li>
+  <li><strong>SMP support</strong> &mdash; Utilize the PYNQ-Z2's second
+      Cortex-A9 core</li>
+  <li><strong>Device tree</strong> &mdash; YAML-based hardware description
+      for runtime configuration</li>
+  <li><strong>Custom bootloader</strong> &mdash; Replace u-boot with our own</li>
+</ul>
+
+<p>
+Each phase builds on the last. Each line of assembly teaches something that
+no textbook can. And somewhere in the intersection of silicon and software,
+an operating system continues to grow.
+</p>
+
+<!-- ============================================================ -->
+<!--                    APPENDIX A                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Appendix A</span>
+  Hardware Targets
+</h2>
+
+<table>
+<tr>
+  <th>Board</th>
+  <th>SoC</th>
+  <th>Core</th>
+  <th>Clock</th>
+  <th>Flash</th>
+  <th>RAM</th>
+</tr>
+<tr>
+  <td>Custom (F207)</td>
+  <td>STM32F207ZGT6</td>
+  <td>Cortex-M3</td>
+  <td>120 MHz</td>
+  <td>1 MB</td>
+  <td>128 KB SRAM</td>
+</tr>
+<tr>
+  <td>Custom (F407)</td>
+  <td>STM32F407ZGT6</td>
+  <td>Cortex-M4</td>
+  <td>168 MHz</td>
+  <td>1 MB</td>
+  <td>128 KB + 64 KB CCM</td>
+</tr>
+<tr>
+  <td>PYNQ-Z2</td>
+  <td>Zynq-7020</td>
+  <td>Dual Cortex-A9</td>
+  <td>650 MHz</td>
+  <td>(SD card)</td>
+  <td>512 MB DDR3</td>
+</tr>
+</table>
+
+<h3>Build Sizes (Threads App)</h3>
+
+<table>
+<tr><th>Target</th><th>.text</th><th>.data</th><th>.bss</th><th>Total</th></tr>
+<tr><td>STM32F207</td><td>8,240 B</td><td>12 B</td><td>35,840 B</td><td>44,092 B</td></tr>
+<tr><td>STM32F407</td><td>8,360 B</td><td>12 B</td><td>35,840 B</td><td>44,212 B</td></tr>
+<tr><td>PYNQ-Z2</td><td>10,504 B</td><td>8 B</td><td>31,872 B</td><td>42,384 B</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!--                    APPENDIX B                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Appendix B</span>
+  Project Timeline
+</h2>
+
+<div class="timeline">
+  <div class="event">
+    <div class="event-title">Phase 0 &mdash; Foundation</div>
+    Toolchain, HAL (GPIO, UART, RCC), startup assembly, dual build system,
+    link-time mock testing. First LED blink and serial output on F207.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 1 &mdash; Kernel Core</div>
+    Thread creation, PendSV context switch, SVC first-thread launch,
+    SysTick tick handler, three-layer crash dump system. Hardware verified
+    on F207 and F407.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 2 &mdash; Scheduling</div>
+    32-priority bitmap scheduler, round-robin time slicing, mutex with
+    mandatory priority inheritance, counting semaphore, sleep/yield,
+    wait queues. 136 host tests passing.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 3 &mdash; Memory Management</div>
+    Block pool (O(1) fixed-size), heap (first-fit + coalescing), MPU
+    configuration (6 regions, per-thread stack protection), C++ operator
+    new/delete overloads.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 4A &mdash; PYNQ-Z2 Bringup</div>
+    ARM mode startup, DDR linker script, Zynq UART/RCC/GPIO HAL,
+    OpenOCD JTAG configuration. Cross-compilation for Cortex-A9.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 4B &mdash; Cortex-A9 RTOS Port</div>
+    Arch.h abstraction, GIC/private timer drivers, IRQ-based context
+    switch with SRS/RFE, fault handlers, crash dump for A9.
+    UART register bugs found and fixed. Hardware verification in progress.
+  </div>
+</div>
+
+<div style="text-align: center; margin-top: 4cm; color: #999; font-style: italic;">
+  &mdash; End &mdash;
+</div>
+
+</body>
+</html>
