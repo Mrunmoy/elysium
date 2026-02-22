@@ -96,6 +96,11 @@ namespace kernel
             return false;
         }
 
+        if (arch::inIsrContext())
+        {
+            return false;
+        }
+
         arch::enterCritical();
 
         MutexControlBlock &mcb = s_mutexPool[id];
@@ -214,12 +219,36 @@ namespace kernel
             return true;
         }
 
-        // Restore the owner's base priority (undo inheritance)
+        // Restore priority: scan all other mutexes still held by this thread
+        // and keep the highest inherited priority (lowest numeric value).
         ThreadControlBlock *ownerTcb = threadGetTcb(currentId);
         if (ownerTcb != nullptr &&
             ownerTcb->currentPriority != ownerTcb->basePriority)
         {
-            sched.setThreadPriority(currentId, ownerTcb->basePriority);
+            std::uint8_t restorePriority = ownerTcb->basePriority;
+            for (MutexId m = 0; m < kMaxMutexes; ++m)
+            {
+                if (m == id)
+                {
+                    continue;  // Skip the mutex being released
+                }
+                if (!s_mutexPool[m].active || s_mutexPool[m].owner != currentId)
+                {
+                    continue;
+                }
+                // Check the highest-priority waiter on this other held mutex
+                ThreadId wid = s_mutexPool[m].waitHead;
+                while (wid != kInvalidThreadId)
+                {
+                    ThreadControlBlock *wtcb = threadGetTcb(wid);
+                    if (wtcb != nullptr && wtcb->currentPriority < restorePriority)
+                    {
+                        restorePriority = wtcb->currentPriority;
+                    }
+                    wid = wtcb->nextWait;
+                }
+            }
+            sched.setThreadPriority(currentId, restorePriority);
         }
 
         // Release the mutex

@@ -58,7 +58,7 @@ namespace kernel
             }
             if (tcb->state == ThreadState::Blocked && tcb->wakeupTick != 0)
             {
-                if (now >= tcb->wakeupTick)
+                if (static_cast<std::int32_t>(now - tcb->wakeupTick) >= 0)
                 {
                     tcb->wakeupTick = 0;
                     s_scheduler.unblockThread(i);
@@ -155,6 +155,11 @@ namespace kernel
 
     void sleep(std::uint32_t ticks)
     {
+        if (arch::inIsrContext())
+        {
+            return;
+        }
+
         if (ticks == 0)
         {
             yield();

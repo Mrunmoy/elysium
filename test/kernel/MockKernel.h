@@ -42,6 +42,7 @@ namespace test
     inline std::vector<CriticalSectionAction> g_criticalSectionActions;
     inline bool g_schedulerStarted = false;
     inline std::uint32_t g_basePriority = 0;
+    inline bool g_isrContext = false;
 
     inline void resetKernelMockState()
     {
@@ -50,6 +51,7 @@ namespace test
         g_criticalSectionActions.clear();
         g_schedulerStarted = false;
         g_basePriority = 0;
+        g_isrContext = false;
     }
 
 }  // namespace test

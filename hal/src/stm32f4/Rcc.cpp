@@ -13,6 +13,20 @@ namespace
     {
         return *reinterpret_cast<volatile std::uint32_t *>(addr);
     }
+
+    // Interrupt guard: save PRIMASK and disable IRQs
+    std::uint32_t disableIrq()
+    {
+        std::uint32_t primask;
+        __asm volatile("mrs %0, primask" : "=r"(primask));
+        __asm volatile("cpsid i" ::: "memory");
+        return primask;
+    }
+
+    void restoreIrq(std::uint32_t primask)
+    {
+        __asm volatile("msr primask, %0" ::"r"(primask) : "memory");
+    }
 }  // namespace
 
 namespace hal
@@ -20,11 +34,14 @@ namespace hal
     void rccEnableGpioClock(Port port)
     {
         // GPIO clocks are on AHB1, bits 0..8 for GPIOA..GPIOI
+        std::uint32_t saved = disableIrq();
         reg(kRccBase + kRccAhb1enr) |= (1U << static_cast<std::uint8_t>(port));
+        restoreIrq(saved);
     }
 
     void rccEnableUartClock(UartId id)
     {
+        std::uint32_t saved = disableIrq();
         switch (id)
         {
             case UartId::Usart1:
@@ -48,5 +65,6 @@ namespace hal
             default:
                 break;
         }
+        restoreIrq(saved);
     }
 }  // namespace hal

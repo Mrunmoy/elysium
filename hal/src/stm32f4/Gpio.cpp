@@ -28,6 +28,20 @@ namespace
     {
         return *reinterpret_cast<volatile std::uint32_t *>(addr);
     }
+
+    // Interrupt guard: save PRIMASK and disable IRQs
+    std::uint32_t disableIrq()
+    {
+        std::uint32_t primask;
+        __asm volatile("mrs %0, primask" : "=r"(primask));
+        __asm volatile("cpsid i" ::: "memory");
+        return primask;
+    }
+
+    void restoreIrq(std::uint32_t primask)
+    {
+        __asm volatile("msr primask, %0" ::"r"(primask) : "memory");
+    }
 }  // namespace
 
 namespace hal
@@ -36,6 +50,8 @@ namespace hal
     {
         std::uint32_t base = portBase(config.port);
         std::uint32_t pin = config.pin;
+
+        std::uint32_t saved = disableIrq();
 
         // Mode (2 bits per pin)
         std::uint32_t tmp = reg(base + kModer);
@@ -71,6 +87,8 @@ namespace hal
             tmp |= (static_cast<std::uint32_t>(config.alternateFunction) << shift);
             reg(base + afrOffset) = tmp;
         }
+
+        restoreIrq(saved);
     }
 
     void gpioSet(Port port, std::uint8_t pin)
@@ -86,7 +104,9 @@ namespace hal
     void gpioToggle(Port port, std::uint8_t pin)
     {
         std::uint32_t base = portBase(port);
+        std::uint32_t saved = disableIrq();
         reg(base + kOdr) ^= (1U << pin);
+        restoreIrq(saved);
     }
 
     bool gpioRead(Port port, std::uint8_t pin)

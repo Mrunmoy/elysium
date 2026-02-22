@@ -46,5 +46,10 @@ namespace arch
         return 0x01000000u;    // xPSR: Thumb bit (matches Cortex-M)
     }
 
+    bool inIsrContext()
+    {
+        return test::g_isrContext;
+    }
+
 }  // namespace arch
 }  // namespace kernel

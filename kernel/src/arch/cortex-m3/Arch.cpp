@@ -83,5 +83,12 @@ namespace arch
         return 0x01000000u;    // xPSR: Thumb bit set
     }
 
+    bool inIsrContext()
+    {
+        // ICSR bits 8:0 (VECTACTIVE) hold the active exception number.
+        // Non-zero means we are in an exception handler.
+        return (reg(kScbIcsr) & 0x1FFu) != 0;
+    }
+
 }  // namespace arch
 }  // namespace kernel

@@ -70,6 +70,11 @@ namespace kernel
             return false;
         }
 
+        if (arch::inIsrContext())
+        {
+            return false;
+        }
+
         arch::enterCritical();
 
         SemaphoreControlBlock &scb = s_semPool[id];

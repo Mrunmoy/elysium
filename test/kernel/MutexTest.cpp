@@ -321,3 +321,65 @@ TEST_F(MutexTest, Unlock_WakesHighestPriorityWaiter)
     EXPECT_EQ(mcb->owner, t3);
     EXPECT_EQ(mcb->waitCount, 1u);  // t2 still waiting
 }
+
+// ---- Multi-mutex priority inheritance ----
+
+TEST_F(MutexTest, PriorityInheritance_MultiMutex_PartialRestore)
+{
+    // Thread A (base priority 30) holds M1 and M2.
+    // Thread B (priority 10) waits on M1 -> A boosted to 10.
+    // Thread C (priority 5) waits on M2 -> A boosted to 5.
+    // Unlock M2: A should stay at 10 (B still waits on M1).
+    // Unlock M1: A should restore to 30 (no more waiters).
+    kernel::ThreadId tA = createThread("A", g_stack1, sizeof(g_stack1), 30);
+    kernel::ThreadId tB = createThread("B", g_stack2, sizeof(g_stack2), 10);
+    kernel::ThreadId tC = createThread("C", g_stack3, sizeof(g_stack3), 5);
+
+    kernel::MutexId m1 = kernel::mutexCreate("m1");
+    kernel::MutexId m2 = kernel::mutexCreate("m2");
+
+    // A locks both mutexes
+    forceCurrent(tA);
+    kernel::mutexLock(m1);
+    kernel::mutexLock(m2);
+
+    // B blocks on M1 -> A boosted to 10
+    forceCurrent(tB);
+    kernel::mutexLock(m1);
+    kernel::ThreadControlBlock *tcbA = kernel::threadGetTcb(tA);
+    EXPECT_EQ(tcbA->currentPriority, 10u);
+
+    // C blocks on M2 -> A boosted to 5
+    forceCurrent(tC);
+    kernel::mutexLock(m2);
+    EXPECT_EQ(tcbA->currentPriority, 5u);
+
+    // A unlocks M2: C wakes, but B still waits on M1 -> A stays at 10
+    forceCurrent(tA);
+    kernel::mutexUnlock(m2);
+    EXPECT_EQ(tcbA->currentPriority, 10u);
+
+    // A unlocks M1: B wakes, no more held mutexes -> A restores to 30
+    forceCurrent(tA);
+    kernel::mutexUnlock(m1);
+    EXPECT_EQ(tcbA->currentPriority, 30u);
+}
+
+// ---- ISR context rejection ----
+
+TEST_F(MutexTest, Lock_RejectsFromIsrContext)
+{
+    kernel::ThreadId tid = createThread("t1", g_stack1, sizeof(g_stack1));
+    makeRunning(tid);
+
+    kernel::MutexId mid = kernel::mutexCreate("mtx");
+
+    // Simulate ISR context
+    test::g_isrContext = true;
+    EXPECT_FALSE(kernel::mutexLock(mid));
+
+    // Mutex should remain unowned
+    kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
+    EXPECT_EQ(mcb->owner, kernel::kInvalidThreadId);
+    EXPECT_EQ(mcb->lockCount, 0u);
+}

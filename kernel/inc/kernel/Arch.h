@@ -46,5 +46,10 @@ namespace arch
     // Cortex-A9: 0x1F (CPSR: SYS mode, ARM state, IRQ/FIQ enabled).
     std::uint32_t initialStatusRegister();
 
+    // Return true if currently executing in an interrupt/exception handler.
+    // Cortex-M: ICSR VECTACTIVE != 0.
+    // Cortex-A9: CPSR mode bits != USR (0x10) and != SYS (0x1F).
+    bool inIsrContext();
+
 }  // namespace arch
 }  // namespace kernel

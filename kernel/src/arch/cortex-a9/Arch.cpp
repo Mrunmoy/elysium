@@ -149,6 +149,16 @@ namespace arch
         return 0x1Fu;
     }
 
+    bool inIsrContext()
+    {
+        // Read CPSR mode bits (4:0).
+        // USR=0x10 and SYS=0x1F are thread modes; anything else is a handler.
+        std::uint32_t cpsr;
+        __asm volatile("mrs %0, cpsr" : "=r"(cpsr));
+        std::uint32_t mode = cpsr & 0x1Fu;
+        return (mode != 0x10u) && (mode != 0x1Fu);
+    }
+
 }  // namespace arch
 }  // namespace kernel
 

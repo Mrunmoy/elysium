@@ -278,6 +278,8 @@ namespace kernel
 
     HeapStats heapGetStats()
     {
+        arch::enterCritical();
+
         HeapStats stats;
         stats.totalSize = s_totalSize;
         stats.usedSize = s_usedSize;
@@ -297,6 +299,8 @@ namespace kernel
             }
             curr = curr->next;
         }
+
+        arch::exitCritical();
 
         return stats;
     }

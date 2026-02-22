@@ -307,6 +307,19 @@ TEST_F(HeapTest, StressTest_AllocFreeRandomPattern)
     EXPECT_EQ(s.freeSize, s.totalSize);
 }
 
+TEST_F(HeapTest, GetStats_UsesCriticalSection)
+{
+    // Verify that heapGetStats() wraps its reads in enterCritical/exitCritical
+    test::g_criticalSectionActions.clear();
+    kernel::heapGetStats();
+
+    ASSERT_GE(test::g_criticalSectionActions.size(), 2u);
+    EXPECT_EQ(test::g_criticalSectionActions.front().type,
+              test::CriticalSectionAction::Type::Enter);
+    EXPECT_EQ(test::g_criticalSectionActions.back().type,
+              test::CriticalSectionAction::Type::Exit);
+}
+
 TEST_F(HeapTest, AllocAll_FreeAll_AllocAll)
 {
     std::vector<void *> ptrs;

@@ -274,3 +274,18 @@ TEST_F(SemaphoreTest, CountingSemaphore_MultipleResources)
     EXPECT_TRUE(kernel::semaphoreSignal(sid));
     EXPECT_EQ(scb->count, 3u);
 }
+
+// ---- ISR context rejection ----
+
+TEST_F(SemaphoreTest, Wait_RejectsFromIsrContext)
+{
+    kernel::SemaphoreId sid = kernel::semaphoreCreate(3, 5);
+
+    // Simulate ISR context
+    test::g_isrContext = true;
+    EXPECT_FALSE(kernel::semaphoreWait(sid));
+
+    // Count should be unchanged
+    kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
+    EXPECT_EQ(scb->count, 3u);
+}

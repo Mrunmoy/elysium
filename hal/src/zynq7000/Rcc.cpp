@@ -34,18 +34,35 @@ namespace
     {
         reg(kSlcrBase + kSlcrUnlock) = kSlcrUnlockKey;
     }
+
+    // Interrupt guard: save CPSR and disable IRQs
+    std::uint32_t disableIrq()
+    {
+        std::uint32_t cpsr;
+        __asm volatile("mrs %0, cpsr" : "=r"(cpsr));
+        __asm volatile("cpsid i" ::: "memory");
+        return cpsr;
+    }
+
+    void restoreIrq(std::uint32_t cpsr)
+    {
+        __asm volatile("msr cpsr_c, %0" ::"r"(cpsr) : "memory");
+    }
 }  // namespace
 
 namespace hal
 {
     void rccEnableGpioClock(Port /* port */)
     {
+        std::uint32_t saved = disableIrq();
         slcrUnlock();
         reg(kSlcrBase + kAperClkCtrl) |= (1U << kGpioClkBit);
+        restoreIrq(saved);
     }
 
     void rccEnableUartClock(UartId id)
     {
+        std::uint32_t saved = disableIrq();
         slcrUnlock();
         switch (id)
         {
@@ -57,5 +74,6 @@ namespace hal
                 reg(kSlcrBase + kAperClkCtrl) |= (1U << kUart1ClkBit);
                 break;
         }
+        restoreIrq(saved);
     }
 }  // namespace hal
