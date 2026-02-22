@@ -7,6 +7,7 @@ add_executable(kernel_tests
     BlockPoolTest.cpp
     HeapTest.cpp
     MpuTest.cpp
+    IpcTest.cpp
     MockArch.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
@@ -19,6 +20,7 @@ add_executable(kernel_tests
     ${CMAKE_SOURCE_DIR}/kernel/src/core/CrashDumpCommon.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/BlockPool.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Heap.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Ipc.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE
