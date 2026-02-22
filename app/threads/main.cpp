@@ -139,6 +139,7 @@ namespace
                 kernel::arch::exitCritical();
 
                 char buf[16];
+                kernel::arch::enterCritical();
                 hal::uartWriteString(hal::UartId::Usart1, "mem ok pool=");
                 uintToStr(ps.freeBlocks, buf, sizeof(buf));
                 hal::uartWriteString(hal::UartId::Usart1, buf);
@@ -152,47 +153,42 @@ namespace
                 uintToStr(hs.totalSize, buf, sizeof(buf));
                 hal::uartWriteString(hal::UartId::Usart1, buf);
                 hal::uartWriteString(hal::UartId::Usart1, "\r\n");
+                kernel::arch::exitCritical();
             }
             else
             {
+                kernel::arch::enterCritical();
                 hal::uartWriteString(hal::UartId::Usart1, "mem FAIL\r\n");
+                kernel::arch::exitCritical();
             }
         }
     }
 
     void ledThread(void *)
     {
-        std::uint32_t lastToggle = 0;
         while (true)
         {
-            std::uint32_t now = kernel::tickCount();
-            if (now - lastToggle >= 500)
-            {
-                hal::gpioToggle(hal::Port::C, 13);
-                lastToggle = now;
-            }
-            kernel::yield();
+            hal::gpioToggle(hal::Port::C, 13);
+            kernel::sleep(500);
         }
     }
 
     void uartThread(void *)
     {
         std::uint32_t counter = 0;
-        std::uint32_t lastPrint = 0;
         while (true)
         {
-            std::uint32_t now = kernel::tickCount();
-            if (now - lastPrint >= 1000)
-            {
-                char buf[16];
-                hal::uartWriteString(hal::UartId::Usart1, "tick ");
-                uintToStr(counter, buf, sizeof(buf));
-                hal::uartWriteString(hal::UartId::Usart1, buf);
-                hal::uartWriteString(hal::UartId::Usart1, "\r\n");
-                ++counter;
-                lastPrint = now;
-            }
-            kernel::yield();
+            char buf[16];
+            uintToStr(counter, buf, sizeof(buf));
+
+            kernel::arch::enterCritical();
+            hal::uartWriteString(hal::UartId::Usart1, "tick ");
+            hal::uartWriteString(hal::UartId::Usart1, buf);
+            hal::uartWriteString(hal::UartId::Usart1, "\r\n");
+            kernel::arch::exitCritical();
+
+            ++counter;
+            kernel::sleep(1000);
         }
     }
 }  // namespace

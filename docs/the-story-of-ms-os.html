@@ -1945,50 +1945,290 @@ console showed the full RTOS output. Clean boot. No JTAG needed.
 <h4>The Remaining Battles</h4>
 
 <p>
-The RTOS was running, but not perfectly. Two issues remained:
+The RTOS was running, but not perfectly. Two issues remained: thread state
+corruption and UART output garbling. What followed was one of the most
+satisfying debugging sessions of the entire project.
+</p>
+
+<h4>The Hunt for the Register Ghost</h4>
+
+<p>
+<strong>Symptom 1:</strong> When running two threads (LED + UART), the UART
+thread's tick counter showed bizarre behavior. Instead of counting 0, 1, 2,
+3..., the serial output flooded with two alternating values:
+<code>"tick 30"</code> and <code>"tick 1"</code>, repeating thousands of times
+per second. The counter was stuck.
 </p>
 
 <p>
-<strong>1. The sleep() Bug:</strong> After about 10 seconds, thread sleep
-durations stopped being honored. The memThread, which calls
-<code>sleep(5000)</code> between memory test iterations, started flooding
-the UART with output every tick instead of every 5 seconds. The tick counter
-appeared frozen when read via JTAG (showing <code>0x2710 = 10000</code>),
-though this might be a cache coherency artifact&mdash;JTAG reads bypass
-the CPU's D-cache and see stale DRAM values.
+The first experiment was to comment out the memThread and add critical sections
+(<code>enterCritical</code>/<code>exitCritical</code>) around the UART writes
+in the uartThread. This eliminated the garbled output (confirming the
+interleaving theory), but the counter corruption remained.
 </p>
 
 <p>
-The suspected root cause is a <strong>scheduler race condition</strong>
-specific to Cortex-A9. On Cortex-M, the context switch trigger (PendSV)
-runs at the <em>lowest</em> interrupt priority. It physically cannot fire
-during any other ISR. On Cortex-A9, context switches use SGI #0 at
-priority 0xF0, but the timer runs at priority 0xA0 (higher). This means
-the timer ISR can fire <em>between</em> a thread calling
-<code>exitCritical()</code> and <code>triggerContextSwitch()</code> in
-<code>sleep()</code> or <code>yield()</code>, potentially calling
-<code>switchContext()</code> while the scheduler is in an inconsistent state.
-This is a fundamental architectural difference that needs a careful fix.
+<strong>Initial hypothesis:</strong> A scheduler race condition specific to
+Cortex-A9. On Cortex-M, PendSV runs at the <em>lowest</em> interrupt priority,
+creating a natural deferred context switch. On Cortex-A9, the SGI fires at
+priority 0xF0 while the timer runs at 0xA0 (higher). Could the timer ISR
+fire between <code>exitCritical()</code> and <code>triggerContextSwitch()</code>?
 </p>
 
 <p>
-<strong>2. UART Thread Safety:</strong> Three threads write to UART0
-concurrently without any synchronization. <code>hal::uartWriteString()</code>
-outputs character by character, and an interrupt can fire between any two
-characters, allowing another thread's output to interleave. This produces
-garbled output like <code>"tixk 1mem 2ok"</code>. The fix is a UART mutex,
-but the scheduler race must be fixed first (otherwise the mutex itself may
-exhibit the same timing issues).
+We dug deep into <code>Kernel.cpp</code>, <code>Scheduler.cpp</code>,
+<code>ContextSwitch.s</code>, and <code>Thread.cpp</code>, tracing every
+path through <code>yield()</code> and <code>sleep()</code>. The scheduler
+race was real but would cause missed or double switches&mdash;not counter
+corruption. Something else was at work.
+</p>
+
+<p>
+<strong>The pivotal experiment:</strong> We switched the threads from
+yield-based timing to <code>sleep()</code>-based timing:
+</p>
+
+<pre>
+<span class="kw">void</span> <span class="fn">uartThread</span>(<span class="kw">void</span> *)
+{
+    std::uint32_t counter = <span class="num">0</span>;
+    <span class="kw">while</span> (<span class="kw">true</span>)
+    {
+        <span class="cmt">// ... print counter ...</span>
+        ++counter;
+        kernel::<span class="fn">sleep</span>(<span class="num">1000</span>);
+    }
+}
+</pre>
+
+<p>
+The output was devastating:
+</p>
+
+<pre>
+tick 4176478465
+tick 4176478465
+tick 4176478465
+tick 4176478465
+</pre>
+
+<p>
+The counter was stuck at <strong>4,176,478,465</strong>. In hex:
+<code>0xF8F00101</code>. That number looked familiar...
+</p>
+
+<p>
+<code>0xF8F00100</code> is the <strong>GIC CPU interface base address</strong>.
+And <code>0xF8F00101</code> is that value plus one&mdash;exactly what
+<code>++counter</code> would produce if <code>counter</code> had been
+overwritten with <code>0xF8F00100</code>.
+</p>
+
+<div class="highlight">
+<strong>Smoking gun:</strong> <code>0xF8F00101 = GIC_CPU_BASE + 1</code>.
+The compiler placed the thread's <code>counter</code> variable in register
+<code>r4</code>. Something was writing the GIC base address into
+<code>r4</code> during context switches.
+</div>
+
+<h4>Root Cause: Callee-Saved Register Clobbering</h4>
+
+<p>
+The bug was in <code>ContextSwitch.s</code>, the Cortex-A9 IRQ handler.
+Here is the original code (simplified):
+</p>
+
+<pre>
+<span class="fn">IRQ_Handler</span>:
+    sub     lr, lr, #<span class="num">4</span>
+    srsdb   sp!, #<span class="num">0x1F</span>
+    cps     #<span class="num">0x1F</span>
+    push    {r0-r3, r12, lr}
+
+    <span class="cmt">/* Read GIC ICCIAR to get interrupt ID */</span>
+    ldr     <span class="kw">r4</span>, =GIC_CPU_BASE       <span class="cmt">/* BUG: clobbers r4! */</span>
+    ldr     <span class="kw">r5</span>, [<span class="kw">r4</span>, #ICCIAR_OFFSET]  <span class="cmt">/* BUG: clobbers r5! */</span>
+    ...
+    <span class="cmt">/* Context switch */</span>
+    push    {r4-r11}     <span class="cmt">/* Saves WRONG r4/r5! */</span>
+    str     sp, [r2, #<span class="num">0</span>]
+</pre>
+
+<p>
+The IRQ handler used <code>r4</code> and <code>r5</code> for GIC register
+access <em>before</em> the context switch saved them with
+<code>push {r4-r11}</code>. On entry, <code>r0-r3</code> are saved, but
+<code>r4-r11</code> belong to the <strong>interrupted thread</strong>.
+They are callee-saved registers&mdash;the thread expects their values to be
+preserved across function calls and interrupts.
+</p>
+
+<p>
+By loading <code>GIC_CPU_BASE</code> into <code>r4</code>, the handler
+destroyed whatever value the thread had in <code>r4</code>. When the context
+switch later did <code>push {r4-r11}</code> to "save" the thread's state,
+it saved the <em>handler's</em> <code>r4</code> (= <code>0xF8F00100</code>)
+instead of the thread's <code>r4</code> (= <code>counter</code>). When the
+thread was restored, its local variable <code>counter</code> contained the
+GIC base address.
+</p>
+
+<p>
+The reason <code>r4</code> and <code>r5</code> were used is that they are
+callee-saved: their values survive across the C function calls
+(<code>bl PrivateTimer_Handler</code>, <code>bl SysTick_Handler</code>) that
+the IRQ handler makes. Using <code>r0-r3</code> for the GIC address would
+lose them across those calls. The original author needed registers that
+persisted&mdash;but those same registers belonged to the interrupted thread.
+</p>
+
+<div class="diagram">
+<span class="label">BEFORE (buggy):</span>
+
+Thread running with counter=42 in r4
+    |
+    v
+IRQ fires -> hardware saves LR_irq, SPSR_irq
+    |
+    v
+Handler:  push {r0-r3, r12, lr}   -- saves caller-saved
+          ldr  r4, =0xF8F00100    -- OVERWRITES thread's r4 (was 42)
+          ldr  r5, [r4, #0x0C]    -- OVERWRITES thread's r5
+          ...bl PrivateTimer_Handler...
+          ...bl SysTick_Handler...
+    |
+    v
+Context switch:
+          push {r4-r11}           -- saves r4=0xF8F00100, NOT 42!
+          str  sp, [outgoing]
+          ldr  sp, [incoming]
+          pop  {r4-r11}           -- loads incoming thread
+    |
+    v
+Later, original thread restored:
+          pop  {r4-r11}           -- r4 = 0xF8F00100 (was 42!)
+          counter is now 0xF8F00100
+          ++counter => 0xF8F00101 = 4176478465
+</div>
+
+<h4>The Fix</h4>
+
+<p>
+The fix is simple but required understanding the constraint: between the
+initial <code>push {r0-r3, r12, lr}</code> and the context switch's
+<code>push {r4-r11}</code>, only <code>r0-r3</code> (already saved) and
+the stack may be used. The ICCIAR value that must survive across C calls
+goes on the stack instead:
+</p>
+
+<pre>
+<span class="fn">IRQ_Handler</span>:
+    sub     lr, lr, #<span class="num">4</span>
+    srsdb   sp!, #<span class="num">0x1F</span>
+    cps     #<span class="num">0x1F</span>
+    push    {r0-r3, r12, lr}
+
+    <span class="cmt">/* CRITICAL: Do NOT use r4-r11 before the context switch!
+     * Those registers belong to the interrupted thread. */</span>
+
+    ldr     r0, =GIC_CPU_BASE
+    ldr     r1, [r0, #ICCIAR_OFFSET]
+    push    {r1}                <span class="cmt">/* Save ICCIAR on stack */</span>
+
+    ubfx    r0, r1, #<span class="num">0</span>, #<span class="num">10</span>   <span class="cmt">/* Extract IRQ ID */</span>
+    cmp     r0, #PRIVATE_TIMER_IRQ
+    beq     .Ltimer_irq
+    ...
+
+.Lirq_eoi:
+    pop     {r1}                <span class="cmt">/* Restore ICCIAR from stack */</span>
+    ldr     r0, =GIC_CPU_BASE
+    str     r1, [r0, #ICCEOIR_OFFSET]
+
+    <span class="cmt">/* Now r4-r11 are still the interrupted thread's values */</span>
+    push    {r4-r11}            <span class="cmt">/* Correct! */</span>
+    ...
+</pre>
+
+<p>
+After the fix, serial output was perfect:
+</p>
+
+<pre>
+$ python3 -c "import serial; s = serial.Serial('/dev/ttyUSB1', 115200, timeout=15); ..."
+ms-os kernel starting
+tick 0
+tick 1
+tick 2
+tick 3
+tick 4
+mem ok pool=8/8 heap=0/16376
+tick 5
+tick 6
+tick 7
+tick 8
+tick 9
+mem ok pool=8/8 heap=0/16376
+tick 10
+...
+</pre>
+
+<p>
+Monotonically incrementing tick counter. Memory tests passing every 5 seconds.
+No garbled output. All three threads running correctly.
+</p>
+
+<h4>Thread-Safe UART</h4>
+
+<p>
+With the context switch fixed, the UART thread safety was straightforward.
+Each platform's <code>uartWrite()</code> now saves the interrupt state,
+disables IRQs for the duration of the write, and restores the previous state:
+</p>
+
+<pre>
+<span class="cmt">/* Zynq (Cortex-A9): save/restore CPSR */</span>
+<span class="kw">void</span> <span class="fn">uartWrite</span>(UartId id, <span class="kw">const</span> <span class="kw">char</span> *data, std::size_t length)
+{
+    std::uint32_t saved = <span class="fn">disableIrq</span>();  <span class="cmt">// mrs cpsr + cpsid i</span>
+    <span class="kw">for</span> (std::size_t i = <span class="num">0</span>; i &lt; length; ++i)
+        <span class="fn">uartPutChar</span>(id, data[i]);
+    <span class="fn">restoreIrq</span>(saved);                   <span class="cmt">// msr cpsr_c</span>
+}
+
+<span class="cmt">/* STM32 (Cortex-M): save/restore PRIMASK */</span>
+<span class="kw">void</span> <span class="fn">uartWrite</span>(UartId id, <span class="kw">const</span> <span class="kw">char</span> *data, std::size_t length)
+{
+    std::uint32_t saved = <span class="fn">disableIrq</span>();  <span class="cmt">// mrs primask + cpsid i</span>
+    <span class="kw">for</span> (std::size_t i = <span class="num">0</span>; i &lt; length; ++i)
+        <span class="fn">uartPutChar</span>(id, data[i]);
+    <span class="fn">restoreIrq</span>(saved);                   <span class="cmt">// msr primask</span>
+}
+</pre>
+
+<p>
+This makes each <code>uartWriteString()</code> call atomic. The application
+still uses critical sections around multi-call sequences (e.g.,
+<code>"tick " + number + "\r\n"</code>) to prevent interleaving between
+calls, but the HAL itself is now safe for concurrent access.
 </p>
 
 <div class="lesson">
-<strong>Lesson 5:</strong> PendSV on Cortex-M is not just a convenience&mdash;
-it's a critical architectural guarantee. Running at the lowest priority means
-the context switch is <em>deferred</em> until all ISRs complete, creating a
-natural critical section. On Cortex-A9, you must implement this guarantee
-yourself, either by disabling interrupts around the scheduler state
-transitions or by restructuring the context switch trigger to fire only
-from the lowest-priority interrupt context.
+<strong>Lesson 5:</strong> On Cortex-A9, the IRQ handler runs in the
+interrupted thread's register context. Registers <code>r4-r11</code> are
+<em>not free scratch space</em>&mdash;they belong to the interrupted thread
+and must not be touched between entry and the context switch save. On
+Cortex-M, PendSV has the same constraint, but the hardware exception frame
+automatically saves <code>r0-r3, r12, LR, PC, xPSR</code>. On Cortex-A9,
+you must be even more disciplined because the save is entirely manual.
+</div>
+
+<div class="lesson">
+<strong>Lesson 5a:</strong> When a variable takes on an impossible value,
+convert it to hex. <code>4176478465</code> means nothing.
+<code>0xF8F00101</code> is immediately recognizable as a hardware register
+address (GIC CPU interface + 1). The hex representation turned a mystery
+into a smoking gun.
 </div>
 
 <h3>The Debugging Lessons</h3>
@@ -2051,26 +2291,22 @@ the problem.
 <h3>Where We Stand</h3>
 
 <p>
-The PYNQ-Z2 port is operational. The full RTOS&mdash;scheduler, context
-switching, memory management, crash dumps&mdash;runs on Cortex-A9. The
-architecture abstraction works: the same kernel source code, the same
-application code, builds and runs on Cortex-M3, Cortex-M4, and Cortex-A9
-by selecting the target at build time.
-</p>
-
-<p>
-Two bugs remain (the scheduler race and UART thread safety), both understood
-and with clear paths to resolution. These are the kind of bugs you only find
-on real hardware, under real timing conditions&mdash;exactly why hardware
-bringup matters.
+The PYNQ-Z2 port is fully operational. The r4/r5 register clobbering bug
+is fixed, UART output is thread-safe at the HAL level, and all three
+threads run correctly on Cortex-A9. The full RTOS&mdash;scheduler, context
+switching, memory management, crash dumps&mdash;works on all three hardware
+targets. The architecture abstraction delivers on its promise: the same
+kernel source code, the same application code, builds and runs on Cortex-M3,
+Cortex-M4, and Cortex-A9 by selecting the target at build time.
 </p>
 
 <div class="highlight">
 <strong>Status after Phase 4:</strong> ms-os runs on <strong>three hardware
 targets</strong> spanning two ARM architecture families (ARMv7-M and ARMv7-A),
 with <strong>136 host unit tests</strong>, three cross-compiled applications,
-and a fully operational JTAG development workflow. Binary size for the full
-RTOS with three threads: <strong>10,696 bytes</strong> of code on Cortex-A9.
+thread-safe UART, and a fully operational JTAG development workflow. All bugs
+resolved. Binary size for the full RTOS with three threads:
+<strong>10,740 bytes</strong> of code on Cortex-A9.
 </div>
 
 <!-- ============================================================ -->
@@ -2091,16 +2327,21 @@ As of February 2026, ms-os runs on three hardware targets spanning two ARM
 architecture families, with 136 passing unit tests. The kernel schedules
 8 threads across 32 priority levels, protects memory with the MPU, allocates
 from both fixed-size pools and a coalescing heap, prints detailed crash dumps
-when things go wrong, and context-switches on both Cortex-M and Cortex-A9.
+when things go wrong, context-switches correctly on both Cortex-M and
+Cortex-A9, and outputs thread-safe serial on all platforms.
 </p>
 
 <p>
-The PYNQ-Z2 bringup proved that the architecture was sound. Code written for
-a 120 MHz Cortex-M3 with 128 KB of SRAM runs on a 650 MHz Cortex-A9 with
-512 MB of DDR3. The same scheduler, the same mutex, the same heap allocator&mdash;
-just a different set of assembly files and HAL implementations selected at
-build time. That portability didn't happen by accident. It was the result of
-disciplined abstraction from day one.
+The PYNQ-Z2 bringup proved that the architecture was sound&mdash;and the
+debugging proved it was fragile in the right ways. The r4/r5 register
+clobbering bug could only manifest on real hardware under real preemption.
+It taught us that callee-saved registers in an IRQ handler are not free
+scratch space. Code written for a 120 MHz Cortex-M3 with 128 KB of SRAM
+runs on a 650 MHz Cortex-A9 with 512 MB of DDR3. The same scheduler, the
+same mutex, the same heap allocator&mdash;just a different set of assembly
+files and HAL implementations selected at build time. That portability
+didn't happen by accident. It was the result of disciplined abstraction
+from day one.
 </p>
 
 <p>
@@ -2108,9 +2349,6 @@ But the journey is far from over. The roadmap includes:
 </p>
 
 <ul>
-  <li><strong>Scheduler race fix</strong> &mdash; Resolve the Cortex-A9
-      timing issue where timer ISR can preempt the context switch trigger</li>
-  <li><strong>UART mutex</strong> &mdash; Thread-safe serial output</li>
   <li><strong>IPC message passing</strong> &mdash; Microkernel inter-process
       communication using the ms-ipc library as inspiration</li>
   <li><strong>Unprivileged threads</strong> &mdash; Run user threads in
@@ -2181,7 +2419,7 @@ continues to grow.
 <tr><th>Target</th><th>.text</th><th>.data</th><th>.bss</th><th>Total</th></tr>
 <tr><td>STM32F207</td><td>8,240 B</td><td>12 B</td><td>35,840 B</td><td>44,092 B</td></tr>
 <tr><td>STM32F407</td><td>8,360 B</td><td>12 B</td><td>35,840 B</td><td>44,212 B</td></tr>
-<tr><td>PYNQ-Z2</td><td>10,696 B</td><td>8 B</td><td>48,256 B</td><td>58,960 B</td></tr>
+<tr><td>PYNQ-Z2</td><td>10,740 B</td><td>8 B</td><td>54,272 B</td><td>65,020 B</td></tr>
 </table>
 
 <!-- ============================================================ -->
@@ -2233,6 +2471,15 @@ continues to grow.
     ID mapping (Usart1 to Uart0). Discovered L2 cache stale code problem
     on JTAG reload; solved with OpenOCD TCL cache invalidation script.
     Full RTOS verified running on PYNQ-Z2 via both JTAG and SD card boot.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 4 &mdash; The Register Ghost</div>
+    Identified and fixed r4/r5 callee-saved register clobbering in the
+    Cortex-A9 IRQ handler. The GIC base address (0xF8F00100) was being
+    written to r4 before the context switch saved it, destroying interrupted
+    threads' local variables. Added thread-safe UART at the HAL level
+    with interrupt save/restore guards. All three threads verified correct
+    on PYNQ-Z2 hardware.
   </div>
 </div>
 

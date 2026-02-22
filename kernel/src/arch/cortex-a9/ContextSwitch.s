@@ -67,16 +67,21 @@ IRQ_Handler:
      * Save the rest of the exception frame: r0-r3, r12, LR (thread) */
     push    {r0-r3, r12, lr}
 
+    /* CRITICAL: Do NOT use r4-r11 before saving them in the context switch!
+     * Those registers belong to the interrupted thread. If we clobber them
+     * here and a context switch happens, the outgoing thread's callee-saved
+     * registers would be corrupted with our values instead of the thread's.
+     * Use only r0-r3 (already saved above) and the stack for temporaries. */
+
     /* Read GIC ICCIAR to acknowledge the interrupt (get interrupt ID) */
-    ldr     r4, =GIC_CPU_BASE
-    ldr     r0, [r4, #ICCIAR_OFFSET]
-    /* r0 = interrupt ID (bits 9:0) */
+    ldr     r0, =GIC_CPU_BASE
+    ldr     r1, [r0, #ICCIAR_OFFSET]
 
-    /* Save full ICCIAR value for later EOI */
-    mov     r5, r0
-    ubfx    r0, r0, #0, #10     /* extract interrupt ID (bits 9:0) */
+    /* Save full ICCIAR value on stack for later EOI (replaces use of r5) */
+    push    {r1}
 
-    /* Dispatch based on interrupt ID */
+    /* Extract interrupt ID (bits 9:0) and dispatch */
+    ubfx    r0, r1, #0, #10
     cmp     r0, #PRIVATE_TIMER_IRQ
     beq     .Ltimer_irq
 
@@ -98,9 +103,10 @@ IRQ_Handler:
     b       .Lirq_eoi
 
 .Lirq_eoi:
-    /* Signal End of Interrupt to GIC */
-    ldr     r4, =GIC_CPU_BASE
-    str     r5, [r4, #ICCEOIR_OFFSET]
+    /* Restore ICCIAR value from stack and write EOI */
+    pop     {r1}
+    ldr     r0, =GIC_CPU_BASE
+    str     r1, [r0, #ICCEOIR_OFFSET]
 
     /* -- Context switch check -- */
     ldr     r0, =g_currentTcb
@@ -111,7 +117,9 @@ IRQ_Handler:
     beq     .Lno_switch         /* Same thread -- skip context switch */
 
     /* -- Save outgoing context -- */
-    /* Push r4-r11 onto thread stack (software-saved context) */
+    /* Push r4-r11 onto thread stack (software-saved context).
+     * These are the INTERRUPTED THREAD'S register values, untouched
+     * since we only used r0-r3 above. */
     push    {r4-r11}
 
     /* Save SP into g_currentTcb->stackPointer (offset 0) */

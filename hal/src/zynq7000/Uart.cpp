@@ -66,6 +66,21 @@ namespace
     {
         return *reinterpret_cast<volatile std::uint32_t *>(addr);
     }
+
+    // Interrupt guard for thread-safe UART output.
+    // Saves CPSR and disables IRQs; restore re-enables only if they were enabled before.
+    std::uint32_t disableIrq()
+    {
+        std::uint32_t cpsr;
+        __asm volatile("mrs %0, cpsr" : "=r"(cpsr));
+        __asm volatile("cpsid i" ::: "memory");
+        return cpsr;
+    }
+
+    void restoreIrq(std::uint32_t cpsr)
+    {
+        __asm volatile("msr cpsr_c, %0" ::"r"(cpsr) : "memory");
+    }
 }  // namespace
 
 namespace hal
@@ -114,10 +129,12 @@ namespace hal
 
     void uartWrite(UartId id, const char *data, std::size_t length)
     {
+        std::uint32_t saved = disableIrq();
         for (std::size_t i = 0; i < length; ++i)
         {
             uartPutChar(id, data[i]);
         }
+        restoreIrq(saved);
     }
 
     void uartWriteString(UartId id, const char *str)
