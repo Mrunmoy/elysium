@@ -7,6 +7,7 @@
 #include "kernel/Kernel.h"
 #include "kernel/Ipc.h"
 #include "kernel/Arch.h"
+#include "BoardConfig.h"
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"
@@ -74,15 +75,15 @@ namespace
     void uartPrint(const char *s)
     {
         kernel::arch::enterCritical();
-        hal::uartWriteString(hal::UartId::Usart1, s);
+        hal::uartWriteString(board::kConsoleUart, s);
         kernel::arch::exitCritical();
     }
 
     void uartPrintLine(const char *s)
     {
         kernel::arch::enterCritical();
-        hal::uartWriteString(hal::UartId::Usart1, s);
-        hal::uartWriteString(hal::UartId::Usart1, "\r\n");
+        hal::uartWriteString(board::kConsoleUart, s);
+        hal::uartWriteString(board::kConsoleUart, "\r\n");
         kernel::arch::exitCritical();
     }
 
@@ -286,7 +287,10 @@ namespace
     {
         while (true)
         {
-            hal::gpioToggle(hal::Port::C, 13);
+            if constexpr (board::kHasLed)
+            {
+                hal::gpioToggle(board::kLedPort, board::kLedPin);
+            }
             kernel::sleep(500);
         }
     }
@@ -294,36 +298,41 @@ namespace
 
 int main()
 {
-    // Enable peripheral clocks
-    hal::rccEnableGpioClock(hal::Port::C);
-    hal::rccEnableGpioClock(hal::Port::A);
-    hal::rccEnableUartClock(hal::UartId::Usart1);
+    // Enable peripheral clocks and configure pins from board config
+    if constexpr (board::kHasLed)
+    {
+        hal::rccEnableGpioClock(board::kLedPort);
 
-    // Configure LED pin: PC13
-    hal::GpioConfig ledConfig{};
-    ledConfig.port = hal::Port::C;
-    ledConfig.pin = 13;
-    ledConfig.mode = hal::PinMode::Output;
-    ledConfig.speed = hal::OutputSpeed::Low;
-    ledConfig.outputType = hal::OutputType::PushPull;
-    hal::gpioInit(ledConfig);
+        hal::GpioConfig ledConfig{};
+        ledConfig.port = board::kLedPort;
+        ledConfig.pin = board::kLedPin;
+        ledConfig.mode = hal::PinMode::Output;
+        ledConfig.speed = hal::OutputSpeed::Low;
+        ledConfig.outputType = hal::OutputType::PushPull;
+        hal::gpioInit(ledConfig);
+    }
 
-    // Configure USART1 TX: PA9 AF7
-    hal::GpioConfig txConfig{};
-    txConfig.port = hal::Port::A;
-    txConfig.pin = 9;
-    txConfig.mode = hal::PinMode::AlternateFunction;
-    txConfig.speed = hal::OutputSpeed::VeryHigh;
-    txConfig.alternateFunction = 7;
-    hal::gpioInit(txConfig);
+    if constexpr (board::kHasConsoleTx)
+    {
+        hal::rccEnableGpioClock(board::kConsoleTxPort);
 
-    // Initialize UART: 115200 8N1
+        hal::GpioConfig txConfig{};
+        txConfig.port = board::kConsoleTxPort;
+        txConfig.pin = board::kConsoleTxPin;
+        txConfig.mode = hal::PinMode::AlternateFunction;
+        txConfig.speed = hal::OutputSpeed::VeryHigh;
+        txConfig.alternateFunction = board::kConsoleTxAf;
+        hal::gpioInit(txConfig);
+    }
+
+    hal::rccEnableUartClock(board::kConsoleUart);
+
     hal::UartConfig uartConfig{};
-    uartConfig.id = hal::UartId::Usart1;
-    uartConfig.baudRate = 115200;
+    uartConfig.id = board::kConsoleUart;
+    uartConfig.baudRate = board::kConsoleBaud;
     hal::uartInit(uartConfig);
 
-    hal::uartWriteString(hal::UartId::Usart1, "ms-os ipc-demo starting\r\n");
+    hal::uartWriteString(board::kConsoleUart, "ms-os ipc-demo starting\r\n");
 
     // Initialize kernel
     kernel::init();

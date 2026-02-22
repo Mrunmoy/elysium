@@ -70,6 +70,12 @@ if(CMAKE_CROSSCOMPILING)
         )
     endif()
 
+    # Board configuration (generated BoardConfig.h per target)
+    add_library(board_config INTERFACE)
+    target_include_directories(board_config INTERFACE
+        ${CMAKE_SOURCE_DIR}/boards/${MSOS_BOARD_DIR}
+    )
+
     add_subdirectory(startup)
     add_subdirectory(hal)
 

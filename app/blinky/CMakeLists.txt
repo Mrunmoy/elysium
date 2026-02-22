@@ -5,6 +5,7 @@ add_executable(blinky
 target_link_libraries(blinky PRIVATE
     hal
     startup
+    board_config
 )
 
 target_compile_options(blinky PRIVATE

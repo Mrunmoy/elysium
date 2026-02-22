@@ -1,0 +1,23 @@
+# Board description: PYNQ-Z2 (Zynq-7020, dual Cortex-A9, 650 MHz, 512 MB DDR3)
+
+board:
+  name: PYNQ-Z2
+  mcu: Zynq-7020
+  arch: cortex-a9
+
+clocks:
+  system: 650000000
+  apb1: 100000000
+  apb2: 100000000
+
+memory:
+  ddr:
+    base: 0x00100000
+    size: 0x1FF00000
+
+console:
+  uart: uart0
+  baud: 115200
+
+features:
+  fpu: true
