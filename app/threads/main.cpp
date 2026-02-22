@@ -9,6 +9,7 @@
 #include "kernel/BlockPool.h"
 #include "kernel/Heap.h"
 #include "kernel/Arch.h"
+#include "BoardConfig.h"
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"
@@ -140,25 +141,25 @@ namespace
 
                 char buf[16];
                 kernel::arch::enterCritical();
-                hal::uartWriteString(hal::UartId::Usart1, "mem ok pool=");
+                hal::uartWriteString(board::kConsoleUart, "mem ok pool=");
                 uintToStr(ps.freeBlocks, buf, sizeof(buf));
-                hal::uartWriteString(hal::UartId::Usart1, buf);
-                hal::uartWriteString(hal::UartId::Usart1, "/");
+                hal::uartWriteString(board::kConsoleUart, buf);
+                hal::uartWriteString(board::kConsoleUart, "/");
                 uintToStr(ps.totalBlocks, buf, sizeof(buf));
-                hal::uartWriteString(hal::UartId::Usart1, buf);
-                hal::uartWriteString(hal::UartId::Usart1, " heap=");
+                hal::uartWriteString(board::kConsoleUart, buf);
+                hal::uartWriteString(board::kConsoleUart, " heap=");
                 uintToStr(hs.usedSize, buf, sizeof(buf));
-                hal::uartWriteString(hal::UartId::Usart1, buf);
-                hal::uartWriteString(hal::UartId::Usart1, "/");
+                hal::uartWriteString(board::kConsoleUart, buf);
+                hal::uartWriteString(board::kConsoleUart, "/");
                 uintToStr(hs.totalSize, buf, sizeof(buf));
-                hal::uartWriteString(hal::UartId::Usart1, buf);
-                hal::uartWriteString(hal::UartId::Usart1, "\r\n");
+                hal::uartWriteString(board::kConsoleUart, buf);
+                hal::uartWriteString(board::kConsoleUart, "\r\n");
                 kernel::arch::exitCritical();
             }
             else
             {
                 kernel::arch::enterCritical();
-                hal::uartWriteString(hal::UartId::Usart1, "mem FAIL\r\n");
+                hal::uartWriteString(board::kConsoleUart, "mem FAIL\r\n");
                 kernel::arch::exitCritical();
             }
         }
@@ -168,7 +169,10 @@ namespace
     {
         while (true)
         {
-            hal::gpioToggle(hal::Port::C, 13);
+            if constexpr (board::kHasLed)
+            {
+                hal::gpioToggle(board::kLedPort, board::kLedPin);
+            }
             kernel::sleep(500);
         }
     }
@@ -182,9 +186,9 @@ namespace
             uintToStr(counter, buf, sizeof(buf));
 
             kernel::arch::enterCritical();
-            hal::uartWriteString(hal::UartId::Usart1, "tick ");
-            hal::uartWriteString(hal::UartId::Usart1, buf);
-            hal::uartWriteString(hal::UartId::Usart1, "\r\n");
+            hal::uartWriteString(board::kConsoleUart, "tick ");
+            hal::uartWriteString(board::kConsoleUart, buf);
+            hal::uartWriteString(board::kConsoleUart, "\r\n");
             kernel::arch::exitCritical();
 
             ++counter;
@@ -195,36 +199,41 @@ namespace
 
 int main()
 {
-    // Enable peripheral clocks
-    hal::rccEnableGpioClock(hal::Port::C);
-    hal::rccEnableGpioClock(hal::Port::A);
-    hal::rccEnableUartClock(hal::UartId::Usart1);
+    // Enable peripheral clocks and configure pins from board config
+    if constexpr (board::kHasLed)
+    {
+        hal::rccEnableGpioClock(board::kLedPort);
 
-    // Configure LED pin: PC13, push-pull output
-    hal::GpioConfig ledConfig{};
-    ledConfig.port = hal::Port::C;
-    ledConfig.pin = 13;
-    ledConfig.mode = hal::PinMode::Output;
-    ledConfig.speed = hal::OutputSpeed::Low;
-    ledConfig.outputType = hal::OutputType::PushPull;
-    hal::gpioInit(ledConfig);
+        hal::GpioConfig ledConfig{};
+        ledConfig.port = board::kLedPort;
+        ledConfig.pin = board::kLedPin;
+        ledConfig.mode = hal::PinMode::Output;
+        ledConfig.speed = hal::OutputSpeed::Low;
+        ledConfig.outputType = hal::OutputType::PushPull;
+        hal::gpioInit(ledConfig);
+    }
 
-    // Configure USART1 TX pin: PA9, alternate function 7
-    hal::GpioConfig txConfig{};
-    txConfig.port = hal::Port::A;
-    txConfig.pin = 9;
-    txConfig.mode = hal::PinMode::AlternateFunction;
-    txConfig.speed = hal::OutputSpeed::VeryHigh;
-    txConfig.alternateFunction = 7;
-    hal::gpioInit(txConfig);
+    if constexpr (board::kHasConsoleTx)
+    {
+        hal::rccEnableGpioClock(board::kConsoleTxPort);
 
-    // Initialize UART: 115200 8N1
+        hal::GpioConfig txConfig{};
+        txConfig.port = board::kConsoleTxPort;
+        txConfig.pin = board::kConsoleTxPin;
+        txConfig.mode = hal::PinMode::AlternateFunction;
+        txConfig.speed = hal::OutputSpeed::VeryHigh;
+        txConfig.alternateFunction = board::kConsoleTxAf;
+        hal::gpioInit(txConfig);
+    }
+
+    hal::rccEnableUartClock(board::kConsoleUart);
+
     hal::UartConfig uartConfig{};
-    uartConfig.id = hal::UartId::Usart1;
-    uartConfig.baudRate = 115200;
+    uartConfig.id = board::kConsoleUart;
+    uartConfig.baudRate = board::kConsoleBaud;
     hal::uartInit(uartConfig);
 
-    hal::uartWriteString(hal::UartId::Usart1, "ms-os kernel starting\r\n");
+    hal::uartWriteString(board::kConsoleUart, "ms-os kernel starting\r\n");
 
     // Initialize kernel
     kernel::init();

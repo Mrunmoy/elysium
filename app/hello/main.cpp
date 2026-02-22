@@ -3,6 +3,7 @@
 // Prints "ms-os on PYNQ-Z2" then loops printing "hello N" over PS UART0.
 // No RTOS kernel, no interrupts -- just startup + HAL.
 
+#include "BoardConfig.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"
 
@@ -37,16 +38,16 @@ namespace
 
 int main()
 {
-    // Enable UART0 peripheral clock
-    hal::rccEnableUartClock(hal::UartId::Uart0);
+    // Enable console UART peripheral clock
+    hal::rccEnableUartClock(board::kConsoleUart);
 
-    // Initialize UART0: 115200 8N1
+    // Initialize console UART from board config
     hal::UartConfig cfg;
-    cfg.id = hal::UartId::Uart0;
-    cfg.baudRate = 115200;
+    cfg.id = board::kConsoleUart;
+    cfg.baudRate = board::kConsoleBaud;
     hal::uartInit(cfg);
 
-    hal::uartWriteString(hal::UartId::Uart0, "ms-os on PYNQ-Z2\r\n");
+    hal::uartWriteString(board::kConsoleUart, "ms-os on PYNQ-Z2\r\n");
 
     std::uint32_t n = 0;
     while (true)
@@ -58,9 +59,9 @@ int main()
 
         char buf[12];
         uintToStr(n, buf);
-        hal::uartWriteString(hal::UartId::Uart0, "hello ");
-        hal::uartWriteString(hal::UartId::Uart0, buf);
-        hal::uartWriteString(hal::UartId::Uart0, "\r\n");
+        hal::uartWriteString(board::kConsoleUart, "hello ");
+        hal::uartWriteString(board::kConsoleUart, buf);
+        hal::uartWriteString(board::kConsoleUart, "\r\n");
         ++n;
     }
 }

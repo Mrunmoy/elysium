@@ -6,6 +6,7 @@ target_link_libraries(ipc-demo PRIVATE
     -Wl,--whole-archive kernel -Wl,--no-whole-archive
     hal
     startup
+    board_config
 )
 
 target_compile_options(ipc-demo PRIVATE

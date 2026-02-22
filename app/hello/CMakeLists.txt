@@ -5,6 +5,7 @@ add_executable(hello
 target_link_libraries(hello PRIVATE
     hal
     startup
+    board_config
 )
 
 target_compile_options(hello PRIVATE

@@ -1,0 +1,35 @@
+# Board description: STM32F207ZGT6 (Cortex-M3, 120 MHz, 1 MB FLASH, 128 KB SRAM)
+
+board:
+  name: STM32F207ZGT6
+  mcu: STM32F207ZGT6
+  arch: cortex-m3
+
+clocks:
+  system: 120000000
+  apb1: 30000000
+  apb2: 60000000
+  hse: 25000000
+
+memory:
+  flash:
+    base: 0x08000000
+    size: 0x100000
+  sram:
+    base: 0x20000000
+    size: 0x20000
+
+console:
+  uart: usart1
+  baud: 115200
+  tx:
+    port: A
+    pin: 9
+    af: 7
+
+led:
+  port: C
+  pin: 13
+
+features:
+  fpu: false

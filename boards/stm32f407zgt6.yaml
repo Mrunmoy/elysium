@@ -1,0 +1,38 @@
+# Board description: STM32F407ZGT6 (Cortex-M4, 168 MHz, 1 MB FLASH, 128 KB SRAM)
+
+board:
+  name: STM32F407ZGT6
+  mcu: STM32F407ZGT6
+  arch: cortex-m4
+
+clocks:
+  system: 168000000
+  apb1: 42000000
+  apb2: 84000000
+  hse: 8000000
+
+memory:
+  flash:
+    base: 0x08000000
+    size: 0x100000
+  sram:
+    base: 0x20000000
+    size: 0x20000
+  ccm:
+    base: 0x10000000
+    size: 0x10000
+
+console:
+  uart: usart1
+  baud: 115200
+  tx:
+    port: A
+    pin: 9
+    af: 7
+
+led:
+  port: C
+  pin: 13
+
+features:
+  fpu: true
