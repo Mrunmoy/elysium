@@ -26,6 +26,7 @@ class BoardDescription:
     console_uart: str
     console_baud: int
     console_tx: Optional[Dict] = None
+    console_rx: Optional[Dict] = None
     led: Optional[Dict] = None
     features: Dict[str, bool] = field(default_factory=dict)
 
@@ -102,6 +103,15 @@ def parse_board_yaml(yaml_str: str) -> BoardDescription:
             "af": int(_require(tx, "af", "console.tx")),
         }
 
+    console_rx = None
+    if "rx" in console_section and console_section["rx"] is not None:
+        rx = console_section["rx"]
+        console_rx = {
+            "port": str(_require(rx, "port", "console.rx")),
+            "pin": int(_require(rx, "pin", "console.rx")),
+            "af": int(_require(rx, "af", "console.rx")),
+        }
+
     # ---- led section (optional) ----
     led = None
     if "led" in data and data["led"] is not None:
@@ -127,6 +137,7 @@ def parse_board_yaml(yaml_str: str) -> BoardDescription:
         console_uart=console_uart,
         console_baud=console_baud,
         console_tx=console_tx,
+        console_rx=console_rx,
         led=led,
         features=features,
     )

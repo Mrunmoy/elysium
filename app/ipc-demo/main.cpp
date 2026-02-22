@@ -357,6 +357,18 @@ int main()
         hal::gpioInit(txConfig);
     }
 
+    if constexpr (board::kHasConsoleRx)
+    {
+        hal::rccEnableGpioClock(board::kConsoleRxPort);
+
+        hal::GpioConfig rxConfig{};
+        rxConfig.port = board::kConsoleRxPort;
+        rxConfig.pin = board::kConsoleRxPin;
+        rxConfig.mode = hal::PinMode::AlternateFunction;
+        rxConfig.alternateFunction = board::kConsoleRxAf;
+        hal::gpioInit(rxConfig);
+    }
+
     hal::rccEnableUartClock(board::kConsoleUart);
 
     hal::UartConfig uartConfig{};

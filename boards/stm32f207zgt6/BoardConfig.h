@@ -34,6 +34,10 @@ namespace board
     constexpr hal::Port kConsoleTxPort = hal::Port::A;
     constexpr std::uint8_t kConsoleTxPin = 9;
     constexpr std::uint8_t kConsoleTxAf = 7;
+    constexpr bool kHasConsoleRx = true;
+    constexpr hal::Port kConsoleRxPort = hal::Port::A;
+    constexpr std::uint8_t kConsoleRxPin = 10;
+    constexpr std::uint8_t kConsoleRxAf = 7;
 
     // LED
     constexpr bool kHasLed = true;

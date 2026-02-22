@@ -56,7 +56,11 @@ def emit_board_config_h(
     lines.append("#include <cstdint>")
     lines.append("")
 
-    needs_gpio = bd.led is not None or bd.console_tx is not None
+    needs_gpio = (
+        bd.led is not None
+        or bd.console_tx is not None
+        or bd.console_rx is not None
+    )
     if needs_gpio:
         lines.append('#include "hal/Gpio.h"')
     lines.append('#include "hal/Uart.h"')
@@ -127,6 +131,20 @@ def emit_board_config_h(
         )
         lines.append(f"    constexpr std::uint8_t kConsoleTxPin = {pin};")
         lines.append(f"    constexpr std::uint8_t kConsoleTxAf = {af};")
+
+    has_rx = bd.console_rx is not None
+    lines.append(
+        f"    constexpr bool kHasConsoleRx = {'true' if has_rx else 'false'};"
+    )
+    if has_rx:
+        port = bd.console_rx["port"]
+        pin = bd.console_rx["pin"]
+        af = bd.console_rx["af"]
+        lines.append(
+            f"    constexpr hal::Port kConsoleRxPort = hal::Port::{port};"
+        )
+        lines.append(f"    constexpr std::uint8_t kConsoleRxPin = {pin};")
+        lines.append(f"    constexpr std::uint8_t kConsoleRxAf = {af};")
     lines.append("")
 
     # ---- LED ----

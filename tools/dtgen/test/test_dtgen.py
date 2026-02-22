@@ -95,6 +95,17 @@ class TestParseConsole:
         bd = parse_board_yaml(pynq_yaml)
         assert bd.console_tx is None
 
+    def test_rx_pin(self, stm32f407_yaml):
+        bd = parse_board_yaml(stm32f407_yaml)
+        assert bd.console_rx is not None
+        assert bd.console_rx["port"] == "A"
+        assert bd.console_rx["pin"] == 10
+        assert bd.console_rx["af"] == 7
+
+    def test_no_rx_pin_when_absent(self, pynq_yaml):
+        bd = parse_board_yaml(pynq_yaml)
+        assert bd.console_rx is None
+
     def test_pynq_uart0(self, pynq_yaml):
         bd = parse_board_yaml(pynq_yaml)
         assert bd.console_uart == "uart0"
@@ -419,8 +430,35 @@ class TestEmitterConsole:
         bd = parse_board_yaml(pynq_yaml)
         code = emit_board_config_h(bd)
         assert "kHasConsoleTx" in code
-        assert "false" in code
         assert "kConsoleTxPort" not in code
+
+    def test_console_rx_port(self, stm32f407_yaml):
+        bd = parse_board_yaml(stm32f407_yaml)
+        code = emit_board_config_h(bd)
+        assert "kConsoleRxPort" in code
+        assert "hal::Port::A" in code
+
+    def test_console_rx_pin(self, stm32f407_yaml):
+        bd = parse_board_yaml(stm32f407_yaml)
+        code = emit_board_config_h(bd)
+        assert "kConsoleRxPin" in code
+        assert "= 10" in code
+
+    def test_console_rx_af(self, stm32f407_yaml):
+        bd = parse_board_yaml(stm32f407_yaml)
+        code = emit_board_config_h(bd)
+        assert "kConsoleRxAf" in code
+
+    def test_has_console_rx_flag(self, stm32f407_yaml):
+        bd = parse_board_yaml(stm32f407_yaml)
+        code = emit_board_config_h(bd)
+        assert "kHasConsoleRx = true" in code
+
+    def test_no_console_rx_on_pynq(self, pynq_yaml):
+        bd = parse_board_yaml(pynq_yaml)
+        code = emit_board_config_h(bd)
+        assert "kHasConsoleRx = false" in code
+        assert "kConsoleRxPort" not in code
 
     def test_pynq_uart0(self, pynq_yaml):
         bd = parse_board_yaml(pynq_yaml)
