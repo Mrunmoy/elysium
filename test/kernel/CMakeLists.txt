@@ -8,6 +8,7 @@ add_executable(kernel_tests
     HeapTest.cpp
     MpuTest.cpp
     IpcTest.cpp
+    PowerTest.cpp
     MockArch.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
