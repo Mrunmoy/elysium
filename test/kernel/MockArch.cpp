@@ -51,5 +51,30 @@ namespace arch
         return test::g_isrContext;
     }
 
+    void waitForInterrupt()
+    {
+        ++test::g_wfiCount;
+    }
+
+    void enableSleepOnExit()
+    {
+        test::g_sleepOnExit = true;
+    }
+
+    void disableSleepOnExit()
+    {
+        test::g_sleepOnExit = false;
+    }
+
+    void enableDeepSleep()
+    {
+        test::g_deepSleep = true;
+    }
+
+    void disableDeepSleep()
+    {
+        test::g_deepSleep = false;
+    }
+
 }  // namespace arch
 }  // namespace kernel

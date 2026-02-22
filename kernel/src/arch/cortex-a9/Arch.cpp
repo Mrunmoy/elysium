@@ -159,6 +159,17 @@ namespace arch
         return (mode != 0x10u) && (mode != 0x1Fu);
     }
 
+    void waitForInterrupt()
+    {
+        __asm volatile("wfi" ::: "memory");
+    }
+
+    // Cortex-A9 has no SCB->SCR equivalent for sleep-on-exit or deep sleep.
+    void enableSleepOnExit() {}
+    void disableSleepOnExit() {}
+    void enableDeepSleep() {}
+    void disableDeepSleep() {}
+
 }  // namespace arch
 }  // namespace kernel
 

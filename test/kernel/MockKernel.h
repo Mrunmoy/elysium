@@ -43,6 +43,9 @@ namespace test
     inline bool g_schedulerStarted = false;
     inline std::uint32_t g_basePriority = 0;
     inline bool g_isrContext = false;
+    inline std::uint32_t g_wfiCount = 0;
+    inline bool g_sleepOnExit = false;
+    inline bool g_deepSleep = false;
 
     inline void resetKernelMockState()
     {
@@ -52,6 +55,9 @@ namespace test
         g_schedulerStarted = false;
         g_basePriority = 0;
         g_isrContext = false;
+        g_wfiCount = 0;
+        g_sleepOnExit = false;
+        g_deepSleep = false;
     }
 
 }  // namespace test

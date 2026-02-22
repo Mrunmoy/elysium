@@ -12,6 +12,11 @@ namespace
     constexpr std::uint32_t kScbShpr2 = kScbBase + 0x1C;  // SVCall priority
     constexpr std::uint32_t kScbShpr3 = kScbBase + 0x20;  // PendSV + SysTick priority
     constexpr std::uint32_t kScbIcsr = kScbBase + 0x04;    // Interrupt control state
+    constexpr std::uint32_t kScbScr = kScbBase + 0x10;     // System control register
+
+    // SCR bits
+    constexpr std::uint32_t kScrSleepOnExit = 1U << 1;
+    constexpr std::uint32_t kScrSleepDeep = 1U << 2;
 
     // SysTick registers
     constexpr std::uint32_t kSysTickCtrl = 0xE000E010;
@@ -88,6 +93,31 @@ namespace arch
         // ICSR bits 8:0 (VECTACTIVE) hold the active exception number.
         // Non-zero means we are in an exception handler.
         return (reg(kScbIcsr) & 0x1FFu) != 0;
+    }
+
+    void waitForInterrupt()
+    {
+        __asm volatile("wfi" ::: "memory");
+    }
+
+    void enableSleepOnExit()
+    {
+        reg(kScbScr) |= kScrSleepOnExit;
+    }
+
+    void disableSleepOnExit()
+    {
+        reg(kScbScr) &= ~kScrSleepOnExit;
+    }
+
+    void enableDeepSleep()
+    {
+        reg(kScbScr) |= kScrSleepDeep;
+    }
+
+    void disableDeepSleep()
+    {
+        reg(kScbScr) &= ~kScrSleepDeep;
     }
 
 }  // namespace arch

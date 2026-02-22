@@ -76,4 +76,29 @@ namespace hal
         }
         restoreIrq(saved);
     }
+
+    void rccDisableGpioClock(Port /* port */)
+    {
+        std::uint32_t saved = disableIrq();
+        slcrUnlock();
+        reg(kSlcrBase + kAperClkCtrl) &= ~(1U << kGpioClkBit);
+        restoreIrq(saved);
+    }
+
+    void rccDisableUartClock(UartId id)
+    {
+        std::uint32_t saved = disableIrq();
+        slcrUnlock();
+        switch (id)
+        {
+            case UartId::Uart0:
+            case UartId::Usart1:
+                reg(kSlcrBase + kAperClkCtrl) &= ~(1U << kUart0ClkBit);
+                break;
+            default:
+                reg(kSlcrBase + kAperClkCtrl) &= ~(1U << kUart1ClkBit);
+                break;
+        }
+        restoreIrq(saved);
+    }
 }  // namespace hal

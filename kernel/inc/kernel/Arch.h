@@ -51,5 +51,25 @@ namespace arch
     // Cortex-A9: CPSR mode bits != USR (0x10) and != SYS (0x1F).
     bool inIsrContext();
 
+    // Wait for interrupt (WFI). Puts the CPU into low-power sleep until
+    // any enabled interrupt fires. The CPU resumes execution at the next
+    // instruction after the interrupt handler returns.
+    void waitForInterrupt();
+
+    // Enable/disable sleep-on-exit. When enabled, the processor enters
+    // sleep mode (WFI) automatically when returning from an ISR to thread
+    // mode, without executing any thread code first.
+    // Cortex-M: sets/clears SLEEPONEXIT bit in SCB->SCR.
+    // Cortex-A9: no-op (no hardware equivalent).
+    void enableSleepOnExit();
+    void disableSleepOnExit();
+
+    // Enable/disable deep sleep mode. When enabled, WFI enters a deeper
+    // sleep state (Stop mode on STM32, where HSI/HSE PLLs are disabled).
+    // Cortex-M: sets/clears SLEEPDEEP bit in SCB->SCR.
+    // Cortex-A9: no-op.
+    void enableDeepSleep();
+    void disableDeepSleep();
+
 }  // namespace arch
 }  // namespace kernel

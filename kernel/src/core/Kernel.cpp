@@ -41,7 +41,7 @@ namespace kernel
     {
         while (true)
         {
-            // WFI would go here on real hardware to save power
+            arch::waitForInterrupt();
         }
     }
 
