@@ -1,0 +1,25 @@
+// Echo service: simple request/reply for IPC demonstration.
+//
+// The server echoes back the value it receives, optionally transformed.
+
+service Echo
+{
+    // Echo the value back unchanged.
+    [method=1]
+    int Ping([in] uint32 value, [out] uint32 result);
+
+    // Add two numbers and return the sum.
+    [method=2]
+    int Add([in] uint32 a, [in] uint32 b, [out] uint32 sum);
+
+    // Return a running counter (no input needed).
+    [method=3]
+    int GetCount([out] uint32 count);
+};
+
+notifications Echo
+{
+    // Server notifies when counter changes.
+    [notify=1]
+    void CountChanged([in] uint32 newCount);
+};

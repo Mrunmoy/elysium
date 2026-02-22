@@ -8,6 +8,7 @@
 #include "kernel/Arch.h"
 #include "kernel/CrashDump.h"
 #include "kernel/Heap.h"
+#include "kernel/Ipc.h"
 #include "kernel/Mpu.h"
 #include "startup/SystemClock.h"
 
@@ -72,6 +73,7 @@ namespace kernel
         crashDumpInit();
         heapInit(&_heap_start, &_heap_end);
         mpuInit();
+        ipcInit();
         threadReset();
         s_scheduler.init();
         s_tickCount = 0;
