@@ -6,6 +6,7 @@
 
 #include "kernel/Kernel.h"
 #include "kernel/Ipc.h"
+#include "kernel/Shell.h"
 #include "kernel/Arch.h"
 #include "BoardConfig.h"
 #include "hal/Gpio.h"
@@ -24,6 +25,7 @@ namespace
     alignas(1024) std::uint32_t g_serverStack[256];   // 1024 bytes
     alignas(1024) std::uint32_t g_clientStack[256];   // 1024 bytes
     alignas(1024) std::uint32_t g_ledStack[256];      // 1024 bytes
+    alignas(1024) std::uint32_t g_shellStack[256];    // 1024 bytes
 
     // Server thread ID (set in main, read by client)
     volatile kernel::ThreadId g_serverTid = kernel::kInvalidThreadId;
@@ -294,6 +296,36 @@ namespace
             kernel::sleep(500);
         }
     }
+
+    // ---- Shell ----
+
+    void shellWrite(const char *str)
+    {
+        hal::uartWriteString(board::kConsoleUart, str);
+    }
+
+    void shellThread(void *)
+    {
+        kernel::ShellConfig shellConfig{};
+        shellConfig.writeFn = shellWrite;
+        kernel::shellInit(shellConfig);
+
+        uartPrintLine("shell: ready");
+        kernel::shellPrompt();
+
+        while (true)
+        {
+            char c;
+            if (hal::uartTryGetChar(board::kConsoleUart, &c))
+            {
+                kernel::shellProcessChar(c);
+            }
+            else
+            {
+                kernel::sleep(10);
+            }
+        }
+    }
 }  // namespace
 
 int main()
@@ -348,6 +380,10 @@ int main()
     // Create LED heartbeat thread
     kernel::createThread(ledThread, nullptr, "led",
                          g_ledStack, sizeof(g_ledStack), 15);
+
+    // Create shell thread (low priority, just above idle)
+    kernel::createThread(shellThread, nullptr, "shell",
+                         g_shellStack, sizeof(g_shellStack), 20);
 
     // Start scheduler -- does not return
     kernel::startScheduler();

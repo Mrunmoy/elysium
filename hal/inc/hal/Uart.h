@@ -30,4 +30,11 @@ namespace hal
     void uartWrite(UartId id, const char *data, std::size_t length);
     void uartWriteString(UartId id, const char *str);
 
+    // Receive: poll for a character (blocking)
+    char uartGetChar(UartId id);
+
+    // Receive: try to read a character (non-blocking).
+    // Returns true if a character was available.
+    bool uartTryGetChar(UartId id, char *c);
+
 }  // namespace hal

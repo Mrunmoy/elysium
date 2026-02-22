@@ -46,6 +46,7 @@ namespace test
     inline std::uint32_t g_wfiCount = 0;
     inline bool g_sleepOnExit = false;
     inline bool g_deepSleep = false;
+    inline std::uint32_t g_tickCount = 0;
 
     inline void resetKernelMockState()
     {
@@ -58,6 +59,7 @@ namespace test
         g_wfiCount = 0;
         g_sleepOnExit = false;
         g_deepSleep = false;
+        g_tickCount = 0;
     }
 
 }  // namespace test

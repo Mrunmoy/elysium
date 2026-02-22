@@ -28,6 +28,7 @@ namespace
     constexpr std::uint32_t kCr1Re = 1U << 2;     // Receiver enable
 
     // SR bits
+    constexpr std::uint32_t kSrRxne = 1U << 5;    // Read data register not empty
     constexpr std::uint32_t kSrTxe = 1U << 7;     // Transmit data register empty
     constexpr std::uint32_t kSrTc = 1U << 6;      // Transmission complete
 
@@ -141,5 +142,25 @@ namespace hal
     void uartWriteString(UartId id, const char *str)
     {
         uartWrite(id, str, std::strlen(str));
+    }
+
+    char uartGetChar(UartId id)
+    {
+        std::uint32_t base = uartBase(id);
+        while ((reg(base + kSr) & kSrRxne) == 0)
+        {
+        }
+        return static_cast<char>(reg(base + kDr) & 0xFFU);
+    }
+
+    bool uartTryGetChar(UartId id, char *c)
+    {
+        std::uint32_t base = uartBase(id);
+        if ((reg(base + kSr) & kSrRxne) == 0)
+        {
+            return false;
+        }
+        *c = static_cast<char>(reg(base + kDr) & 0xFFU);
+        return true;
     }
 }  // namespace hal
