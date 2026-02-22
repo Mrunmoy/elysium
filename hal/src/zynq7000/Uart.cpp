@@ -43,8 +43,9 @@ namespace
     constexpr std::uint32_t kMr8n1 = (0x4U << 3);   // PAR=100 (no parity), rest 0
 
     // SR bits
-    constexpr std::uint32_t kSrTxFull  = 1U << 4;   // TX FIFO full
-    constexpr std::uint32_t kSrTxEmpty = 1U << 3;    // TX FIFO empty
+    constexpr std::uint32_t kSrRxEmpty = 1U << 1;    // RX FIFO empty
+    constexpr std::uint32_t kSrTxFull  = 1U << 4;    // TX FIFO full
+    constexpr std::uint32_t kSrTxEmpty = 1U << 3;     // TX FIFO empty
 
     // Default baud rate divider (BDIV + 1 divides the CD output)
     constexpr std::uint32_t kDefaultBdiv = 4;        // BDIV register value
@@ -140,5 +141,25 @@ namespace hal
     void uartWriteString(UartId id, const char *str)
     {
         uartWrite(id, str, std::strlen(str));
+    }
+
+    char uartGetChar(UartId id)
+    {
+        std::uint32_t base = uartBase(id);
+        while ((reg(base + kSr) & kSrRxEmpty) != 0)
+        {
+        }
+        return static_cast<char>(reg(base + kFifo) & 0xFFU);
+    }
+
+    bool uartTryGetChar(UartId id, char *c)
+    {
+        std::uint32_t base = uartBase(id);
+        if ((reg(base + kSr) & kSrRxEmpty) != 0)
+        {
+            return false;
+        }
+        *c = static_cast<char>(reg(base + kFifo) & 0xFFU);
+        return true;
     }
 }  // namespace hal

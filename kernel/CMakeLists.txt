@@ -12,6 +12,7 @@ add_library(kernel STATIC
     src/core/Heap.cpp
     src/core/HeapOperators.cpp
     src/core/Ipc.cpp
+    src/core/Shell.cpp
     src/arch/${MSOS_ARCH_DIR}/ContextSwitch.s
     src/arch/${MSOS_ARCH_DIR}/Arch.cpp
     src/arch/${MSOS_ARCH_DIR}/FaultHandlers.s
