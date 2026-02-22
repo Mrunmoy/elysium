@@ -150,6 +150,14 @@ SECTIONS
         __sys_stack_end = .;
     } > DDR
 
+    /* MMU L1 translation table (4096 entries * 4 bytes = 16KB, 16KB aligned) */
+    .mmu_table (NOLOAD) :
+    {
+        . = ALIGN(16K);
+        _mmu_table = .;
+        . += 16K;
+    } > DDR
+
     /* Heap (for future use) */
     .heap (NOLOAD) :
     {

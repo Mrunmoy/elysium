@@ -285,7 +285,14 @@
 
 <div style="font-size: 11pt; line-height: 2.2;">
   <strong>Prologue</strong> &mdash; Why Build an OS?<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    Why Build One at All? / Why Start Simple? / The Architecture
+  </div>
   <strong>Chapter 1</strong> &mdash; Laying the Foundation (Phase 0)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    Setting Up the Environment / Test-Driven Development / The Dual Build System /
+    The Register-Level HAL / Startup / First Light
+  </div>
   <strong>Chapter 2</strong> &mdash; The Kernel Comes Alive (Phase 1)<br>
   <strong>Chapter 3</strong> &mdash; Teaching the OS to Multitask (Phase 2)<br>
   <strong>Chapter 4</strong> &mdash; Guarding Memory (Phase 3)<br>
@@ -322,24 +329,62 @@ That question is the seed of <strong>ms-os</strong>.
 
 <p>
 The goal was ambitious but clear: build a <strong>real-time operating system
-from scratch</strong>, in modern C++17, targeting real ARM hardware. Not a
-toy. Not a simulation. A kernel that boots on silicon, switches contexts in
-microseconds, inherits priorities through mutexes, and prints a crash dump
-when the world falls apart.
+from scratch</strong>, in modern C++17, targeting real ARM hardware. A kernel
+that boots on silicon, switches contexts in microseconds, inherits priorities
+through mutexes, and prints a crash dump when the world falls apart.
 </p>
+
+<h3>Why Build One at All?</h3>
+
+<p>
+There is no shortage of excellent RTOSes in the world. FreeRTOS is battle-tested
+and runs on billions of devices. ThreadX powers Azure IoT. Zephyr has a
+thriving open-source community. We studied all three&mdash;their source code
+lives on our development machine as reference implementations&mdash;and we
+could have picked any of them and started writing applications immediately.
+</p>
+
+<p>
+But using an RTOS and <em>understanding</em> an RTOS are two very different
+things. We wanted to know what happens in the 50 nanoseconds between one
+thread stopping and another starting. We wanted to understand <em>why</em>
+PendSV runs at the lowest priority, not just that it does. We wanted to feel
+the difference between a bitmap scheduler and a linked-list walk, not just
+read about it in a textbook. The only way to truly learn these things is to
+build them yourself, debug them on real hardware, and watch them break in
+ways no tutorial ever warns you about.
+</p>
+
+<h3>Why Start Simple?</h3>
+
+<p>
+We chose an <strong>STM32F207ZGT6</strong> as the first target: a Cortex-M3
+running at 120 MHz with 1 MB of flash and 128 KB of SRAM. This was a
+deliberate choice. The Cortex-M3 is one of the simplest ARM cores that still
+has a real exception model, an NVIC, and hardware stack frame management on
+interrupt entry. There is no MMU, no cache hierarchy, no multi-core
+complexity. When something goes wrong, there are fewer places to look. The
+chip's reference manual is one document, not five.
+</p>
+
+<p>
+Starting simple meant we could focus on getting the fundamentals right:
+context switching, scheduling algorithms, synchronization primitives. Once
+those worked correctly on a predictable single-core machine, we could
+confidently port to more complex hardware&mdash;knowing that any new bugs
+came from the port, not from the core RTOS logic. Later, a Cortex-M4
+(STM32F407ZGT6) and a dual Cortex-A9 (Zynq-7020 on the PYNQ-Z2 board)
+would join the family, each adding architectural challenges of its own.
+</p>
+
+<h3>The Architecture</h3>
 
 <p>
 We chose a <strong>microkernel architecture</strong>&mdash;minimal kernel
 with user-space services&mdash;inspired by Minix and QNX. The kernel would
 handle only scheduling, synchronization, and memory protection. Everything
-else&mdash;drivers, IPC, process management&mdash;would live outside.
-</p>
-
-<p>
-The first target was an <strong>STM32F207ZGT6</strong>: a Cortex-M3 at 120 MHz
-with 1 MB of flash and 128 KB of SRAM. Small enough to understand every byte,
-powerful enough to run real applications. Later, a Cortex-M4 (STM32F407) and
-a Cortex-A9 (Zynq-7020 on the PYNQ-Z2) would join the family.
+else&mdash;drivers, IPC, process management&mdash;would live outside the
+kernel.
 </p>
 
 <p>
@@ -359,15 +404,124 @@ This is the story of how we built it, one phase at a time.
 <p>
 Before you can build an OS, you need to build the ground it stands on.
 Phase 0 was about establishing the entire development infrastructure:
-the cross-compilation toolchain, the Hardware Abstraction Layer (HAL),
-the startup code, and the build system.
+a reproducible development environment, the cross-compilation toolchain,
+the build system, the testing strategy, and the Hardware Abstraction Layer.
 </p>
+
+<h3>Setting Up the Environment</h3>
+
+<p>
+The very first thing we did&mdash;before writing a single line of C++&mdash;was
+make sure anyone could reproduce the build. We chose <strong>Nix</strong> as our
+package manager, because it provides deterministic, reproducible environments
+that work identically on any Linux machine. A single <code>flake.nix</code> at
+the project root declares everything the project needs:
+</p>
+
+<pre>
+<span class="cmt"># flake.nix -- the entire development environment in one file</span>
+packages = [
+  gcc-arm-embedded     <span class="cmt"># ARM GCC 12.3.1 cross-compiler</span>
+  cmake                <span class="cmt"># Build system generator</span>
+  ninja                <span class="cmt"># Fast parallel build tool</span>
+  openocd              <span class="cmt"># On-chip debugger (JTAG/SWD)</span>
+  gdb                  <span class="cmt"># GNU debugger</span>
+  python3 + pyserial   <span class="cmt"># Serial console + test runner</span>
+  python3 + pytest     <span class="cmt"># Python-level testing</span>
+  git                  <span class="cmt"># Version control</span>
+  stlink               <span class="cmt"># ST-Link utilities</span>
+  clang-tools          <span class="cmt"># clang-format for code style</span>
+];
+</pre>
+
+<p>
+To enter the development environment, you type <code>nix develop</code>. Nix
+downloads and caches the exact versions of every tool, isolated from the host
+system. No manual installation steps, no version conflicts, no "it works on my
+machine" problems. If the flake builds today, it builds identically a year from now.
+</p>
+
+<p>
+Alongside the Nix shell, we created <code>build.py</code>&mdash;a Python wrapper
+around CMake and Ninja that handles the common workflows:
+</p>
+
+<pre>
+python3 build.py                          <span class="cmt"># Cross-compile for F207</span>
+python3 build.py --target stm32f407zgt6   <span class="cmt"># Cross-compile for F407</span>
+python3 build.py --target pynq-z2         <span class="cmt"># Cross-compile for PYNQ-Z2</span>
+python3 build.py -t                       <span class="cmt"># Build + run host unit tests</span>
+python3 build.py -f                       <span class="cmt"># Flash firmware via J-Link</span>
+python3 build.py -c                       <span class="cmt"># Clean everything</span>
+</pre>
+
+<p>
+The script auto-detects target mismatches (if you switch from F207 to F407, it
+cleans and reconfigures automatically) and selects the right flash tool per target
+(J-Link for STM32, OpenOCD for PYNQ-Z2).
+</p>
+
+<h3>The Development Paradigm: Test-Driven Development</h3>
+
+<p>
+From the very beginning, we committed to <strong>test-driven development (TDD)</strong>
+for the entire RTOS. This might sound unusual for embedded systems, where the
+traditional approach is to write code, flash it to hardware, and debug with
+printf or a logic analyzer. But we believed that an RTOS kernel&mdash;where a
+single bug in the scheduler can silently corrupt every thread&mdash;demanded a
+higher standard of confidence.
+</p>
+
+<p>
+The development cycle for every component follows a strict four-phase process:
+</p>
+
+<div class="diagram">
+  <span class="label">Development Phases (mandatory, in order)</span>
+
+  1. DESIGN     Write a design document: architecture, interfaces,
+                data structures, algorithms, edge cases.
+
+  2. TEST       Write unit tests first (Google Test on x86).
+                Mock the hardware. Define the expected behavior
+                before writing the implementation.
+
+  3. IMPLEMENT  Write the real code. Run tests continuously.
+                The implementation is done when all tests pass.
+
+  4. DOCUMENT   Update the design docs with what was actually built.
+                Record any deviations from the original design.
+</div>
+
+<p>
+Why this order? Because writing tests first forces you to think about the
+<em>interface</em> before the implementation. When you write a test for
+<code>heapAlloc()</code> before writing the allocator, you have to decide: what
+does it return on failure? What alignment guarantees does it make? What happens
+if you free a null pointer? These questions get answered in the test, not
+discovered later during debugging on hardware.
+</p>
+
+<p>
+TDD also gives us a safety net for refactoring. When we added MPU support in
+Phase 3, we had to modify thread creation to pre-compute MPU region values.
+The existing 136 tests told us immediately whether we had broken anything.
+Without them, we would have had to re-verify every feature manually on hardware.
+</p>
+
+<div class="highlight">
+<strong>Test count:</strong> By Phase 3, the project has <strong>136 C++ unit
+tests</strong> and <strong>17 Python tests</strong>, all running on the host
+machine in seconds. No hardware required to verify the kernel logic.
+</div>
 
 <h3>The Dual Build System</h3>
 
 <p>
-One of the earliest architectural decisions was the <strong>dual build system</strong>.
-The same CMake project produces two completely different outputs depending on context:
+TDD on embedded hardware requires solving a fundamental problem: the code runs
+on ARM, but we want to test on x86. Our solution was a <strong>dual build
+system</strong>. The same CMake project produces two completely different outputs
+depending on context:
 </p>
 
 <div class="diagram">
@@ -383,27 +537,86 @@ The same CMake project produces two completely different outputs depending on co
    -> build/                    -> build-test/
 </div>
 
+<p>
+The key technique is <strong>link-time mock substitution</strong>. The public HAL
+headers (<code>hal/inc/hal/Gpio.h</code>, etc.) are shared between both builds.
+On ARM, the real implementation files (<code>hal/src/stm32f4/Gpio.cpp</code>)
+access hardware registers through volatile pointers. On x86, mock implementations
+(<code>test/hal/MockGpio.cpp</code>) provide the same function symbols but record
+every call into global vectors. The test files then assert on the recorded state:
+</p>
+
+<pre>
+<span class="cmt">// GpioTest.cpp -- test runs on x86, no hardware needed</span>
+TEST(GpioTest, ToggleSetsOutputDataRegister)
+{
+    hal::GpioConfig cfg{};
+    cfg.port = hal::GpioPort::C;
+    cfg.pin = 13;
+    cfg.mode = hal::GpioMode::Output;
+    hal::gpioInit(cfg);
+
+    hal::gpioToggle(hal::GpioPort::C, 13);
+
+    <span class="cmt">// Assert the mock recorded the correct register write</span>
+    EXPECT_EQ(test::g_gpioWrites.back().port, hal::GpioPort::C);
+    EXPECT_EQ(test::g_gpioWrites.back().pin, 13);
+}
+</pre>
+
 <div class="key-decision">
-<strong>Key Decision:</strong> Link-time mock substitution. The same HAL headers
-are shared between real hardware implementations and test mocks. On x86, mock
-implementations record calls into global vectors. Tests assert on the recorded
-state. No <code>#ifdef</code> in any <code>.cpp</code> file&mdash;platform
-selection is purely through directory structure and CMake.
+<strong>Key Decision:</strong> No <code>#ifdef</code> in any <code>.cpp</code>
+file. Platform selection is purely through directory structure and CMake. The
+real and mock implementations live in different directories, and CMake picks
+the right one at build time. This keeps the code clean and prevents the
+tangled web of conditional compilation that plagues many embedded projects.
 </div>
 
 <h3>The Register-Level HAL</h3>
 
 <p>
-We deliberately chose <strong>not</strong> to use ST's HAL library. Instead,
-every peripheral driver reads and writes registers directly through volatile
-pointers. This may seem masochistic, but it serves the microkernel philosophy:
-<em>understand every instruction between your code and the silicon</em>.
+With the build system and testing strategy in place, we could start writing
+actual hardware code. The first decision was whether to use ST's official HAL
+library (stm32f2xx_hal). We deliberately chose <strong>not to</strong>.
 </p>
 
 <p>
-The first three HAL modules were <strong>GPIO</strong> (for the LED on PC13),
-<strong>RCC</strong> (clock tree configuration), and <strong>USART</strong>
-(serial output on PA9). Each followed the same pattern:
+ST's HAL is a thick abstraction layer with hundreds of source files, its own
+interrupt handler conventions, and opinions about how you should structure
+your application. For an RTOS that needs to own the interrupt vector table,
+manage its own stack pointers, and control exactly when interrupts are enabled
+or disabled, this kind of abstraction gets in the way. We wanted to understand
+every instruction between our code and the silicon.
+</p>
+
+<p>
+Instead, we wrote a minimal <strong>register-level HAL</strong> that reads and
+writes peripheral registers directly through volatile pointers. Only three
+modules were needed to bring the board to life:
+</p>
+
+<table>
+<tr><th>Module</th><th>Purpose</th><th>Key Registers</th></tr>
+<tr>
+  <td><strong>RCC</strong></td>
+  <td>Clock tree: enable peripheral clocks</td>
+  <td>RCC_AHB1ENR, RCC_APB1ENR, RCC_APB2ENR</td>
+</tr>
+<tr>
+  <td><strong>GPIO</strong></td>
+  <td>Pin configuration and toggle (LED on PC13)</td>
+  <td>GPIOx_MODER, GPIOx_ODR, GPIOx_BSRR</td>
+</tr>
+<tr>
+  <td><strong>USART</strong></td>
+  <td>Serial output (TX on PA9, 115200 baud)</td>
+  <td>USART_BRR, USART_CR1, USART_SR, USART_DR</td>
+</tr>
+</table>
+
+<p>
+Each module followed the same directory pattern&mdash;design first, write tests
+against mocks, then implement the real register access:
 </p>
 
 <div class="diagram">
@@ -418,14 +631,16 @@ The first three HAL modules were <strong>GPIO</strong> (for the LED on PC13),
       Rcc.cpp
   test/hal/           <span class="comment">&lt;-- Mock implementation + tests</span>
       MockGpio.cpp
+      MockRegisters.h
       GpioTest.cpp
 </div>
 
 <h3>Startup: From Reset to main()</h3>
 
 <p>
-The startup assembly (<code>Startup.s</code>) handles the delicate moment
-between power-on and C++ code. On the STM32F207, the sequence is:
+With the HAL tested on x86, we needed startup code to actually run on the
+microcontroller. The startup assembly (<code>Startup.s</code>) handles the
+delicate moment between power-on and C++ code. On the STM32F207, the sequence is:
 </p>
 
 <div class="diagram">
@@ -443,6 +658,12 @@ between power-on and C++ code. On the STM32F207, the sequence is:
        +---> main()
 </div>
 
+<p>
+The linker script (<code>Linker.ld</code>) maps the memory regions: 1 MB of flash
+at 0x08000000 for code and constants, 128 KB of SRAM at 0x20000000 for data, BSS,
+a 16 KB heap, and a 4 KB main stack at the top of memory.
+</p>
+
 <h3>First Light</h3>
 
 <p>
@@ -453,8 +674,18 @@ after: <code>"ms-os on STM32F207"</code> at 115200 baud.
 </p>
 
 <p>
-Phase 0 was complete. We had a working toolchain, a tested HAL, and
-a binary running on real hardware. The foundation was solid.
+That first blink was the result of the entire toolchain working end to end:
+Nix providing the compiler, CMake selecting the right sources, the linker
+script placing code at the correct flash address, the startup assembly
+configuring the PLL, and the register-level HAL toggling the right GPIO pin.
+Every layer had been tested independently before this moment, and they all
+came together on the first try.
+</p>
+
+<p>
+Phase 0 was complete. We had a reproducible build environment, a tested HAL,
+a disciplined development process, and a binary running on real hardware.
+The foundation was solid.
 </p>
 
 <!-- ============================================================ -->

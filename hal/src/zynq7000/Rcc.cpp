@@ -50,6 +50,7 @@ namespace hal
         switch (id)
         {
             case UartId::Uart0:
+            case UartId::Usart1:    // Map STM32 "primary serial" to Zynq UART0
                 reg(kSlcrBase + kAperClkCtrl) |= (1U << kUart0ClkBit);
                 break;
             default:
