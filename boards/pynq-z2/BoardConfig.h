@@ -27,6 +27,7 @@ namespace board
     constexpr hal::UartId kConsoleUart = hal::UartId::Uart0;
     constexpr std::uint32_t kConsoleBaud = 115200;
     constexpr bool kHasConsoleTx = false;
+    constexpr bool kHasConsoleRx = false;
 
     // LED
     constexpr bool kHasLed = false;

@@ -26,6 +26,10 @@ console:
     port: A
     pin: 9
     af: 7
+  rx:
+    port: A
+    pin: 10
+    af: 7
 
 led:
   port: C
