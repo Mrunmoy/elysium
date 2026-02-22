@@ -297,6 +297,12 @@
   <strong>Chapter 3</strong> &mdash; Teaching the OS to Multitask (Phase 2)<br>
   <strong>Chapter 4</strong> &mdash; Guarding Memory (Phase 3)<br>
   <strong>Chapter 5</strong> &mdash; New Horizons: The PYNQ-Z2 (Phase 4)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    Getting the Damn Thing to Talk / The RTOS Port / The Alignment Fault /
+    The MMU Fix / The UART ID Problem / The L2 Cache Nightmare /
+    JTAG Reload via Cache Invalidation / Clean SD Card Boot /
+    The Remaining Battles / The Debugging Lessons
+  </div>
   <strong>Epilogue</strong> &mdash; The Road Ahead<br>
   <strong>Appendix A</strong> &mdash; Hardware Targets<br>
   <strong>Appendix B</strong> &mdash; Project Timeline
@@ -1126,6 +1132,12 @@ is deferred to a future phase.
 
 <h4>Phase 4: Porting to Cortex-A9</h4>
 
+<div class="epigraph">
+  "If debugging is the process of removing bugs, then programming
+  must be the process of putting them in."
+  <div class="attribution">&mdash; Edsger W. Dijkstra</div>
+</div>
+
 <p>
 With the RTOS running on two Cortex-M targets (F207 and F407), we turned
 to something fundamentally different: the <strong>PYNQ-Z2</strong> board,
@@ -1135,8 +1147,11 @@ Cortex-A9 MPCore at 650 MHz with 512 MB of DDR3.
 
 <p>
 This wasn't just a new chip. It was a <strong>new architecture</strong>.
-Cortex-A9 (ARMv7-A) differs from Cortex-M (ARMv7-M) in almost every
-system-level detail:
+Everything we knew about Cortex-M had to be re-examined. The exception model,
+the context switch mechanism, the memory system, even the way you set up a
+damn stack pointer&mdash;all different. And the debugging story that followed
+would become the most intense, most frustrating, and ultimately most
+satisfying chapter of this entire project.
 </p>
 
 <table>
@@ -1151,80 +1166,168 @@ system-level detail:
 <tr><td>CPU count</td><td>Single core</td><td>Dual core (SMP capable)</td></tr>
 </table>
 
-<h3>Phase 4A: Bare-Metal Bringup</h3>
+<h3>Phase 4A: Getting the Damn Thing to Talk</h3>
 
 <p>
-The first step was proving the toolchain and basic I/O worked. We wrote new
-startup assembly (ARM mode, not Thumb), a DDR-based linker script, and a
-Zynq PS UART driver:
+The first order of business: prove that we can run <em>any</em> bare-metal
+code on the Zynq. We wrote new startup assembly in ARM mode (not Thumb),
+a DDR-based linker script, and a Zynq PS UART0 driver using the Cadence
+UART IP. Simple stuff, right? The "hello world" of embedded. Spoiler: it
+was anything but simple.
+</p>
+
+<h4>The FTDI Setup</h4>
+
+<p>
+The PYNQ-Z2 has an <strong>FTDI FT2232</strong> dual-channel USB chip.
+Channel 0 is JTAG. Channel 1 is the serial console. On our Linux box, this
+shows up as <code>/dev/ttyUSB1</code> for JTAG and <code>/dev/ttyUSB2</code>
+for serial (because there's another FTDI device already claiming ttyUSB0).
+</p>
+
+<p>
+OpenOCD talks to the JTAG channel. Our first config file:
+</p>
+
+<pre>
+<span class="cmt"># pynq_load.cfg</span>
+adapter driver ftdi
+ftdi vid_pid 0x0403 0x6010
+ftdi channel 0
+ftdi layout_init 0x0008 0x000b
+adapter speed 10000
+
+set CHIPNAME zynq
+source [find target/zynq_7000.cfg]
+</pre>
+
+<p>
+The <code>ftdi layout_init</code> values (0x0008, 0x000b) configure the FTDI
+GPIOs for JTAG signaling. Get these wrong and OpenOCD silently fails to
+detect the TAP. We got these from the PYNQ-Z2 schematic.
+</p>
+
+<h4>Boot Strategy: Let u-boot Do the Hard Work</h4>
+
+<p>
+Zynq PS initialization is brutal. The Processing System (PS) has its own
+PLL tree, DDR controller, MIO pin muxing, SLCR (System Level Control
+Registers)&mdash;hundreds of registers that must be configured in the right
+order before you can even access DDR memory. Xilinx normally generates a
+<code>ps7_init.c</code> from the Vivado hardware design, and the FSBL
+(First Stage Boot Loader) calls it during boot.
+</p>
+
+<p>
+We took a shortcut: let the normal boot process (BootROM -> FSBL -> u-boot)
+initialize the hardware, then halt via JTAG and load our binary into DDR.
+This means u-boot has already configured PLLs, DDR, MIO pins&mdash;everything.
+We just set our clock globals to match and go:
+</p>
+
+<pre>
+<span class="cmt">// SystemInit.cpp for PYNQ-Z2 -- u-boot already configured clocks</span>
+SystemCoreClock = <span class="num">650000000</span>;   <span class="cmt">// CPU at 650 MHz</span>
+g_apb1Clock     = <span class="num">100000000</span>;   <span class="cmt">// UART ref clock at 100 MHz</span>
+g_apb2Clock     = <span class="num">100000000</span>;
+</pre>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> Use u-boot for PS initialization during
+development. This lets us focus on the RTOS itself rather than Zynq PS
+bringup. A proper standalone boot (using <code>ps7_init</code> or our own
+initialization) is deferred to when we write our custom bootloader.
+</div>
+
+<h4>The UART: Cadence IP, Not STM32</h4>
+
+<p>
+The Zynq PS UART is a <strong>Cadence UART</strong> IP core. Completely
+different register layout from the STM32 USART. The baud rate formula alone
+is different:
 </p>
 
 <div class="diagram">
-  <span class="label">PYNQ-Z2 Boot Sequence (via JTAG)</span>
+  <span class="label">Baud Rate Calculation</span>
 
-  Power On
-     |
-     v
-  [BootROM] --> [FSBL from SD] --> [u-boot] --> [Linux]
-                                       |
-                                   <span class="label">We halt here via JTAG</span>
-                                       |
-                                       v
-                              [Disable MMU on both CPUs]
-                              [Clear GIC pending IRQs]
-                              [Load our ELF to DDR]
-                              [Resume at 0x00100000]
-                                       |
-                                       v
-                              [_boot: cpsid if]
-                              [Set VBAR, stacks]
-                              [Zero BSS]
-                              [SystemInit, main()]
+  STM32:  baud = f_pclk / USARTDIV
+  Zynq:   baud = uart_ref_clk / (CD * (BDIV + 1))
+
+  For 115200 baud with 100 MHz ref clock:
+    BDIV = 4   (divider + 1 = 5)
+    CD = 100,000,000 / (115,200 * 5) = 173.6  -->  CD = 173
+
+  Actual baud = 100,000,000 / (173 * 5) = 115,607
+  Error: 0.35%  (well within tolerance)
+</pre>
 </div>
+
+<p>
+PS UART0 lives at <code>0xE0000000</code>. UART1 at <code>0xE0001000</code>.
+On the PYNQ-Z2, UART0 is connected to the FTDI chip for serial console
+output. This distinction would come back to bite us later.
+</p>
+
+<h4>The First UART Bug: STARTBRK</h4>
+
+<p>
+Our first attempt at UART output produced... nothing. Absolute silence.
+The UART was "enabled" according to the status register, but no characters
+came out. We spent hours checking baud rate calculations, MIO pin
+assignments, clock enables.
+</p>
+
+<p>
+The problem? Our UART Control Register bit definitions were <strong>wrong</strong>.
+We had defined bit 8 as "reset TX path" based on a quick read of the
+register map. But bit 8 of the Cadence UART CR is actually
+<code>STARTBRK</code>&mdash;it forces the TXD line permanently LOW,
+asserting a break condition. We were telling the UART to hold the
+line low forever while trying to transmit data on it.
+</p>
+
+<div class="lesson">
+<strong>Lesson learned the hard way:</strong> Always cross-reference
+register bit definitions against the actual TRM, not against quick
+summaries or "similar" peripherals. One wrong bit in a control register
+can produce symptoms that look like a completely different problem.
+The CR register writes <code>STPBRK | TXEN | RXEN = 0x114</code>.
+That took an embarrassingly long time to figure out.
+</div>
+
+<h4>Cross-Compilation Working</h4>
+
+<p>
+With the UART driver fixed and the build system extended for
+<code>--target pynq-z2</code>, we could cross-compile both the hello app
+and the full threads app. The binary sizes:
+</p>
+
+<table>
+<tr><th>App</th><th>.text</th><th>Total</th></tr>
+<tr><td>hello (bare-metal)</td><td>~2 KB</td><td>~2 KB</td></tr>
+<tr><td>threads (full RTOS)</td><td>10,504 B</td><td>~42 KB</td></tr>
+</table>
+
+<p>
+Both compiled cleanly. We loaded hello via JTAG and... got serial output!
+Proof that the toolchain, linker script, startup assembly, and UART driver
+all worked. Time to try the RTOS.
+</p>
 
 <h3>Phase 4B: The RTOS Port</h3>
 
 <p>
-With bare-metal I/O working, we ported the full RTOS kernel. The biggest
-change was the context switch. Without PendSV, Cortex-A9 uses the
-<strong>IRQ handler epilogue</strong>:
+The cross-compilation changes for Cortex-A9 RTOS were substantial. We had
+to rethink every architecture-dependent component.
 </p>
 
-<div class="diagram">
-  <span class="label">Cortex-A9 Context Switch (in IRQ handler)</span>
-
-  IRQ Entry:
-    sub lr, lr, #4          <span class="comment">// Adjust return address</span>
-    srsdb sp!, #0x1F        <span class="comment">// Save {PC, CPSR} to SYS stack</span>
-    cps #0x1F               <span class="comment">// Switch to SYS mode</span>
-    push {r0-r3, r12, lr}   <span class="comment">// Save exception frame</span>
-
-  Dispatch interrupt (timer / SGI / other)
-
-  IRQ Epilogue:
-    if g_currentTcb != g_nextTcb:
-      push {r4-r11}         <span class="comment">// Save callee-saved</span>
-      Save SP to outgoing TCB
-      Switch TCB pointers
-      Load SP from incoming TCB
-      pop {r4-r11}          <span class="comment">// Restore callee-saved</span>
-
-    pop {r0-r3, r12, lr}    <span class="comment">// Restore exception frame</span>
-    rfeia sp!                <span class="comment">// Atomically restore PC + CPSR</span>
-</div>
+<h4>The Architecture Abstraction</h4>
 
 <p>
-The <code>SRS</code> (Store Return State) and <code>RFE</code> (Return From
-Exception) instructions are the A-profile equivalents of the M-profile's
-automatic stacking and EXC_RETURN. They atomically save/restore PC and CPSR
-to/from the stack.
-</p>
-
-<h3>The Architecture Abstraction</h3>
-
-<p>
-To support both Cortex-M and Cortex-A9, we introduced an architecture
-abstraction layer through <code>kernel/inc/kernel/Arch.h</code>:
+To support both Cortex-M and Cortex-A9 from the same kernel source, we
+introduced <code>kernel/inc/kernel/Arch.h</code>&mdash;a common interface
+with per-architecture implementations selected at build time:
 </p>
 
 <div class="diagram">
@@ -1239,17 +1342,660 @@ abstraction layer through <code>kernel/inc/kernel/Arch.h</code>:
                                   <span class="comment">// A9: 0x1F (SYS mode, ARM)</span>
 </div>
 
+<h4>The Context Switch: No PendSV, No Problem (Sort Of)</h4>
+
 <p>
-CMake selects the correct implementation directory at build time based on
-<code>MSOS_ARCH_DIR</code>. No <code>#ifdef</code> needed.
+On Cortex-M, context switching is beautiful. PendSV fires at the lowest
+interrupt priority, guaranteeing it runs after all ISRs complete. The hardware
+automatically saves half the register file on entry. You pend it from anywhere,
+and it just... happens.
 </p>
 
-<h3>The Debugging Saga</h3>
+<p>
+Cortex-A9 has none of that. There is no PendSV. There is no automatic register
+stacking. There is no EXC_RETURN magic value. Instead, you have <strong>banked
+processor modes</strong> (IRQ, SVC, SYS, ABT, UND, FIQ), each with their own
+stack pointer and link register. The context switch happens <em>inside the
+IRQ handler epilogue</em>:
+</p>
+
+<div class="diagram">
+  <span class="label">Cortex-A9 Context Switch (in IRQ handler)</span>
+
+  IRQ Entry:
+    sub lr, lr, #4          <span class="comment">// Adjust return address (ARM pipeline)</span>
+    srsdb sp!, #0x1F        <span class="comment">// Save {LR_irq, SPSR_irq} to SYS stack</span>
+    cps #0x1F               <span class="comment">// Switch to SYS mode</span>
+    push {r0-r3, r12, lr}   <span class="comment">// Save caller-saved regs on SYS stack</span>
+
+  &lt;--- Acknowledge GIC, dispatch handler (timer / SGI) ---&gt;
+
+  IRQ Epilogue (context switch point):
+    if g_currentTcb != g_nextTcb:
+      push {r4-r11}         <span class="comment">// Save callee-saved on outgoing stack</span>
+      Save SP to outgoing TCB
+      Switch TCB pointers
+      Load SP from incoming TCB
+      pop {r4-r11}          <span class="comment">// Restore callee-saved from incoming stack</span>
+
+    pop {r0-r3, r12, lr}    <span class="comment">// Restore caller-saved</span>
+    rfeia sp!                <span class="comment">// Atomically restore PC + CPSR</span>
+</div>
 
 <p>
-Hardware bringup on the PYNQ-Z2 proved to be the most challenging part of
-the entire project. Debugging a dual Cortex-A9 running Linux via JTAG
-is fundamentally different from single-core Cortex-M with SWD:
+The key instructions are <code>SRS</code> (Store Return State) and
+<code>RFE</code> (Return From Exception). <code>SRS</code> saves the
+interrupted thread's PC and CPSR to the <em>SYS mode stack</em>, even
+though we're in IRQ mode when it executes. <code>RFE</code> atomically
+restores both PC and CPSR from the stack, returning to the correct mode
+and address. These are the A-profile equivalents of M-profile's automatic
+stacking and EXC_RETURN.
+</p>
+
+<p>
+For the trigger mechanism, we use <strong>SGI #0</strong> (Software Generated
+Interrupt). When the scheduler decides a context switch is needed, it writes
+to the GIC SGIR register to generate interrupt ID 0. The IRQ handler checks
+the interrupt ID: if it's 29 (private timer), it handles the tick; if it's
+0 (SGI), it's a context switch request. Either way, the epilogue checks
+whether <code>g_currentTcb != g_nextTcb</code> and switches if needed.
+</p>
+
+<h4>The GIC and Private Timer</h4>
+
+<p>
+Cortex-M has the NVIC (simple, memory-mapped, one register per interrupt).
+Cortex-A9 has the <strong>GIC</strong> (Generic Interrupt Controller)&mdash;a
+two-part beast with a Distributor and a CPU Interface:
+</p>
+
+<div class="diagram">
+  <span class="label">GIC Configuration</span>
+
+  Distributor (0xF8F01000):
+    DIST_CTRL = 0x3           <span class="comment">// Enable secure + non-secure</span>
+    EN_SET0   = 0x2000FFFF    <span class="comment">// SGIs 0-15 + IRQ 29 (timer)</span>
+    PRIORITY  = 0xA0 (timer)  <span class="comment">// Timer at priority 0xA0</span>
+                0xF0 (SGI #0) <span class="comment">// SGI at lower priority 0xF0</span>
+
+  CPU Interface (0xF8F00100):
+    CPU_CTRL  = 0x3           <span class="comment">// Enable interface</span>
+    PRI_MASK  = 0xF8          <span class="comment">// Allow priorities 0x00-0xF0</span>
+</div>
+
+<p>
+The <strong>SCU Private Timer</strong> at <code>0xF8F00600</code> replaces
+SysTick. It runs at PERIPHCLK = CPU_CLK/2 = 325 MHz. For a 1 ms tick:
+load value = 325,000,000 / 1000 - 1 = 324,999 (<code>0x4F587</code>).
+Auto-reload, interrupt enabled.
+</p>
+
+<h4>Crash Dumps on A-Profile</h4>
+
+<p>
+Cortex-M has dedicated fault status registers (CFSR, HFSR, MMFAR, BFAR)
+that tell you exactly what went wrong. Cortex-A9 has different registers:
+</p>
+
+<table>
+<tr><th>Cortex-M</th><th>Cortex-A9</th><th>Purpose</th></tr>
+<tr><td>SCB->CFSR</td><td>CP15 DFSR / IFSR</td><td>Fault status (type + domain)</td></tr>
+<tr><td>SCB->MMFAR</td><td>CP15 DFAR / IFAR</td><td>Faulting address</td></tr>
+<tr><td>HardFault</td><td>Data Abort</td><td>Bad memory access</td></tr>
+<tr><td>MemManage</td><td>Prefetch Abort</td><td>Instruction fetch fault</td></tr>
+<tr><td>UsageFault</td><td>Undefined Instruction</td><td>Bad opcode</td></tr>
+</table>
+
+<p>
+Our fault handlers pass a type code in <code>r1</code> (1=DataAbort,
+2=PrefetchAbort, 3=Undefined) to the shared crash dump code. One fun
+difference: ARM does <em>not</em> trap integer divide-by-zero (it returns 0
+silently). For testing the crash dump, we use <code>UDF #0</code> (Undefined
+Instruction) instead.
+</p>
+
+<h3>The Bringup: Where Everything Falls Apart (and Comes Back Together)</h3>
+
+<p>
+The cross-compilation was done. Both hello and threads built cleanly for
+Cortex-A9. Time for hardware. What followed was one of the most intense
+debugging sessions of the entire project&mdash;a roller coaster of
+frustration, discovery, and hard-won victories.
+</p>
+
+<h4>First Boot Attempt: The Alignment Fault</h4>
+
+<p>
+We loaded the threads binary via JTAG, resumed at 0x00100000, and... the
+CPU immediately faulted. Halted at the Data Abort handler. The registers
+told the story:
+</p>
+
+<pre>
+DFSR = 0x00000801
+DFAR = 0x0010686B
+PC   = somewhere in SystemInit()
+</pre>
+
+<p>
+<code>DFSR = 0x801</code>. Bit 0 set = alignment fault. Bit 11 set = write
+access. The faulting address <code>0x10686B</code> is clearly not
+word-aligned&mdash;it ends in 0xB, not 0x0/0x4/0x8/0xC.
+</p>
+
+<p>
+What the hell? We never had alignment problems on Cortex-M. Why would the
+same kind of C++ code suddenly fault on unaligned access?
+</p>
+
+<p>
+The answer hit us like a truck:
+</p>
+
+<div class="highlight">
+<strong>On Cortex-A9 with MMU disabled, all memory is treated as
+Strongly Ordered.</strong> Strongly Ordered memory requires <em>natural
+alignment</em> for every access. A 32-bit store must go to a 4-byte-aligned
+address. An 8-bit store is fine anywhere, but <code>str r4, [sp, #43]</code>
+will fault because <code>sp + 43</code> is not 4-byte aligned.
+</div>
+
+<p>
+GCC doesn't know or care about this. It freely emits unaligned stack accesses
+because on Normal memory (which is what you get with the MMU enabled),
+ARMv7-A handles unaligned access transparently in hardware. But with the
+MMU disabled&mdash;which is the state we boot into&mdash;there is no
+"Normal" memory type. Everything is Strongly Ordered. And Strongly Ordered
+means: align your damn accesses or eat a Data Abort.
+</p>
+
+<p>
+On Cortex-M, the MMU doesn't exist, but the default memory attributes treat
+SRAM as Normal memory, so unaligned access just works. We'd never needed
+to think about this. The M-profile architecture was quietly saving us from
+ourselves. The A-profile was not so forgiving.
+</p>
+
+<h4>The Fix: Build an MMU Before Touching C++</h4>
+
+<p>
+The solution was clear but not trivial: we had to <strong>enable the MMU
+with DDR mapped as Normal memory</strong> in the startup assembly, <em>before
+any C code executes</em>. No calling SystemInit first. No calling <code>
+__libc_init_array</code>. The MMU must be up and running before the first
+<code>bl</code> to a C function, because even a function prologue might
+push registers to an unaligned stack offset.
+</p>
+
+<p>
+We implemented a flat 1:1 L1 translation table&mdash;4096 entries of 1 MB
+sections covering the full 4 GB address space:
+</p>
+
+<div class="diagram">
+  <span class="label">MMU L1 Translation Table (16 KB, 4096 x 4-byte entries)</span>
+
+  Entry  0-511:   DDR (0x00000000 - 0x1FFFFFFF)
+                  Normal, Inner/Outer Write-Back Write-Allocate, Shareable
+                  Descriptor: 0x00011C0E
+                    TEX=001, C=1, B=1, S=1, AP=11, Section (bits[1:0]=10)
+
+  Entry 512-4095: Everything else (peripherals, PL, system registers)
+                  Device, Shareable
+                  Descriptor: 0x00000C06
+                    TEX=000, C=0, B=1, AP=11, Section (bits[1:0]=10)
+</div>
+
+<p>
+We validated the section descriptor bit fields against the Xilinx BSP
+<code>translation_table.S</code> reference. The values match. TEX[2:0]=001,
+C=1, B=1 gives Inner/Outer Write-Back Write-Allocate&mdash;the normal
+cache policy for DDR memory.
+</p>
+
+<p>
+The <code>_setup_mmu</code> routine in Startup.s builds this table at
+runtime, sets TTBR0 (Translation Table Base Register 0), configures
+DACR (Domain Access Control) to Manager mode (no permission checking),
+and enables the MMU + I-cache + D-cache + branch prediction in SCTLR:
+</p>
+
+<pre>
+<span class="cmt">// The critical sequence in Startup.s</span>
+_setup_mmu:
+    push    {r4, lr}
+
+    <span class="cmt">// Fill 4096 entries: 512 Normal + 3584 Device</span>
+    ldr     r0, =_mmu_table
+    mov     r1, #0                  <span class="cmt">// Section base = 0x00000000</span>
+    ldr     r2, =SECT_NORMAL        <span class="cmt">// 0x00011C0E</span>
+    mov     r3, #512
+1:  orr     r4, r2, r1
+    str     r4, [r0], #4
+    add     r1, r1, #0x00100000     <span class="cmt">// Next 1MB</span>
+    subs    r3, r3, #1
+    bne     1b
+
+    ldr     r2, =SECT_DEVICE        <span class="cmt">// 0x00000C06</span>
+    ldr     r3, =(4096 - 512)
+2:  orr     r4, r2, r1
+    str     r4, [r0], #4
+    add     r1, r1, #0x00100000
+    subs    r3, r3, #1
+    bne     2b
+
+    <span class="cmt">// Set TTBR0</span>
+    ldr     r0, =_mmu_table
+    mcr     p15, 0, r0, c2, c0, 0
+
+    <span class="cmt">// DACR = Manager (full access, no permission check)</span>
+    mvn     r0, #0                  <span class="cmt">// 0xFFFFFFFF</span>
+    mcr     p15, 0, r0, c3, c0, 0
+
+    <span class="cmt">// Enable MMU + caches + branch prediction in SCTLR</span>
+    mrc     p15, 0, r0, c1, c0, 0
+    orr     r0, r0, #(1 &lt;&lt; 0)      <span class="cmt">// MMU</span>
+    orr     r0, r0, #(1 &lt;&lt; 2)      <span class="cmt">// D-cache</span>
+    orr     r0, r0, #(1 &lt;&lt; 11)     <span class="cmt">// Branch prediction</span>
+    orr     r0, r0, #(1 &lt;&lt; 12)     <span class="cmt">// I-cache</span>
+    mcr     p15, 0, r0, c1, c0, 0
+    dsb
+    isb
+
+    pop     {r4, pc}
+</pre>
+
+<p>
+The linker script needed a new section for the 16 KB translation table,
+aligned to 16 KB (TTBR0 requires this alignment):
+</p>
+
+<pre>
+.mmu_table (NOLOAD) :
+{
+    . = ALIGN(16K);
+    _mmu_table = .;
+    . += 16K;
+} > DDR
+</pre>
+
+<p>
+The boot sequence now became:
+</p>
+
+<div class="diagram">
+  <span class="label">Updated PYNQ-Z2 Boot Sequence</span>
+
+  _boot:
+    cpsid if                   <span class="comment">// Disable interrupts</span>
+    Check MPIDR, park CPU1     <span class="comment">// Only CPU0 proceeds</span>
+    Set VBAR                   <span class="comment">// Install our vector table</span>
+    Disable MMU + caches       <span class="comment">// Clean slate from FSBL/u-boot</span>
+    Invalidate TLBs            <span class="comment">// Stale translations</span>
+    Invalidate I-cache         <span class="comment">// Stale instructions</span>
+    Invalidate branch predictor
+    Invalidate L1 D-cache      <span class="comment">// 4 ways x 256 sets</span>
+    Disable + invalidate L2    <span class="comment">// PL310 (0xF8F02100)</span>
+    <span class="label">bl _setup_mmu</span>              <span class="comment">// MMU ON before any C code!</span>
+    Set per-mode stacks        <span class="comment">// IRQ, ABT, UND, FIQ, SVC, SYS</span>
+    Zero .bss
+    __libc_init_array          <span class="comment">// C++ static constructors</span>
+    SystemInit                 <span class="comment">// Set clock globals</span>
+    main()
+</div>
+
+<p>
+Built it. The binary grew from 10,504 bytes to 10,696 bytes (the MMU table
+setup code). Moment of truth.
+</p>
+
+<h4>Victory #1: The MMU Fix Works</h4>
+
+<p>
+We loaded the threads binary via JTAG, resumed, waited five seconds, then
+halted CPU0 to check where it was:
+</p>
+
+<pre>
+> targets zynq.cpu0
+> halt
+> reg pc
+pc: 0x00102204
+> reg cpsr
+cpsr: 0x6000001F    <span class="cmt">// SYS mode (0x1F) -- threads run in SYS mode!</span>
+</pre>
+
+<p>
+SCTLR confirmed MMU was ON. The CPU was sitting in
+<code>kernel::arch::exitCritical()</code>&mdash;meaning the scheduler was
+running, threads were switching, the RTOS was <em>alive</em>. No more
+alignment faults.
+</p>
+
+<p>
+We immediately checked the peripheral state via JTAG to verify the full
+system was configured:
+</p>
+
+<pre>
+<span class="cmt"># Private Timer</span>
+LOAD = 0x4F587 (324,999)    <span class="cmt">// 325 MHz / 325,000 = 1 ms tick. Correct!</span>
+CTRL = 0x7                  <span class="cmt">// Enabled + Auto-reload + IRQ. Correct!</span>
+Counter decrementing...      <span class="cmt">// Timer is running!</span>
+
+<span class="cmt"># GIC</span>
+CPU_CTRL  = 0x3             <span class="cmt">// CPU interface enabled. Correct!</span>
+PRI_MASK  = 0xF8            <span class="cmt">// Priority mask. Correct!</span>
+DIST_CTRL = 0x3             <span class="cmt">// Distributor enabled. Correct!</span>
+EN_SET0   = 0x2000FFFF      <span class="cmt">// IRQ 29 (timer) + SGIs enabled. Correct!</span>
+</pre>
+
+<p>
+Every single peripheral register was configured exactly as expected. Timer
+ticking at 1 ms, GIC routing interrupts, context switching happening.
+But... no serial output.
+</p>
+
+<h4>The UART ID Problem</h4>
+
+<p>
+The UART0 status register showed <code>SR = 0x0A</code> (TX FIFO empty,
+RX FIFO empty). UART appeared enabled (<code>CR = 0x114</code>) but nothing
+was being transmitted. We verified the serial link was good by manually
+writing to the TX FIFO via JTAG:
+</p>
+
+<pre>
+> mww 0xE0000030 0x54    <span class="cmt"># 'T'</span>
+> mww 0xE0000030 0x45    <span class="cmt"># 'E'</span>
+> mww 0xE0000030 0x53    <span class="cmt"># 'S'</span>
+> mww 0xE0000030 0x54    <span class="cmt"># 'T'</span>
+</pre>
+
+<p>
+"TEST" appeared on the serial console instantly. The UART hardware was fine.
+The serial cable was fine. Something in our code was writing to the
+<em>wrong UART</em>.
+</p>
+
+<p>
+And then it clicked. The threads app (and all STM32 apps) use
+<code>hal::UartId::Usart1</code> as the "primary serial port." On STM32,
+Usart1 maps to USART1 peripheral. But on the Zynq HAL, the
+<code>uartBase()</code> function only recognized <code>UartId::Uart0</code>
+and <code>UartId::Uart1</code>&mdash;it sent <code>Usart1</code> to the
+<em>default case</em>, which returned the UART1 base address
+(<code>0xE0001000</code>). Our app was dutifully transmitting to
+UART1, which isn't connected to anything on the PYNQ-Z2.
+</p>
+
+<p>
+The fix was two lines:
+</p>
+
+<pre>
+<span class="cmt">// Uart.cpp: uartBase()</span>
+<span class="kw">case</span> hal::UartId::Uart0:
+<span class="kw">case</span> hal::UartId::Usart1:   <span class="cmt">// Map STM32 "primary serial" to Zynq UART0</span>
+    <span class="kw">return</span> kUart0Base;
+
+<span class="cmt">// Rcc.cpp: rccEnableUartClock()</span>
+<span class="kw">case</span> UartId::Uart0:
+<span class="kw">case</span> UartId::Usart1:        <span class="cmt">// Same mapping for clock enable</span>
+    reg(kSlcrBase + kAperClkCtrl) |= (<span class="num">1U</span> &lt;&lt; kUart0ClkBit);
+</pre>
+
+<p>
+Two lines. Hours of debugging for two lines. That's embedded development.
+</p>
+
+<h4>The L2 Cache Nightmare: Why JTAG Reload Stopped Working</h4>
+
+<p>
+With the UART fix in place, we rebuilt and tried to JTAG-load the new binary.
+Nothing. No serial output. CPU halted somewhere unexpected.
+</p>
+
+<p>
+Wait&mdash;this worked five minutes ago! What changed?
+</p>
+
+<p>
+Here's the thing about JTAG loading on a cached system: when OpenOCD writes
+our binary to DDR via the debug port, it writes to <strong>physical DRAM</strong>.
+But the CPU has the <strong>L2 cache (PL310)</strong> sitting between it and
+DRAM. If the L2 cache holds code from the <em>previous</em> binary, the CPU
+will keep fetching that stale cached code even though DRAM now has the new
+binary.
+</p>
+
+<p>
+On the first load, there was no previous binary cached. It worked. On the
+second load, the L2 cache was full of code from the first run. The CPU
+fetched the old code from L2, completely ignoring the new binary in DRAM.
+</p>
+
+<div class="diagram">
+  <span class="label">The L2 Cache Problem</span>
+
+  JTAG Load #1 (cold boot, caches empty):
+    OpenOCD writes binary to DRAM  -->  CPU fetches from DRAM  -->  WORKS
+
+  JTAG Load #2 (warm reload, caches hot):
+    OpenOCD writes NEW binary to DRAM
+    But L2 still has OLD binary cached
+    CPU fetches from L2  -->  executes OLD code  -->  BROKEN
+
+  The fix requires invalidating L2 BEFORE the CPU fetches any code.
+  But our boot code that invalidates L2 is ALSO cached in L2.
+  <span class="label">Catch-22.</span>
+</div>
+
+<p>
+We added L2 cache invalidation to Startup.s:
+</p>
+
+<pre>
+<span class="cmt">// Disable L2 cache (PL310 controller)</span>
+ldr     r0, =<span class="num">0xF8F02100</span>     <span class="cmt">// L2C-310 Control Register</span>
+mov     r1, #<span class="num">0</span>
+str     r1, [r0]            <span class="cmt">// Disable L2</span>
+dsb
+
+<span class="cmt">// Invalidate all L2 ways</span>
+ldr     r0, =<span class="num">0xF8F0277C</span>     <span class="cmt">// Invalidate by Way register</span>
+mov     r1, #<span class="num">0xFF</span>           <span class="cmt">// All 8 ways</span>
+str     r1, [r0]
+<span class="num">3</span>:  ldr     r2, [r0]        <span class="cmt">// Poll until complete</span>
+    tst     r2, #<span class="num">0xFF</span>
+    bne     <span class="num">3</span>b
+dsb
+</pre>
+
+<p>
+But this didn't help for JTAG reload, because the boot code itself was cached
+in L2 from the previous run. The old version of Startup.s (without the L2
+invalidation) was what the CPU actually executed. Classic chicken-and-egg.
+</p>
+
+<h4>The Solution: Cache Invalidation via JTAG</h4>
+
+<p>
+The answer was to invalidate the caches <em>from OpenOCD</em>, before the CPU
+even starts. We wrote a TCL script that does the full dance:
+</p>
+
+<pre>
+<span class="cmt"># pynq_jtag_load.tcl -- load binary with full cache invalidation</span>
+proc jtag_load {elf_path} {
+    init
+    targets zynq.cpu0
+    halt
+    sleep 200
+
+    <span class="cmt"># Disable L1 D-cache and I-cache via SCTLR</span>
+    set sctlr [zynq.cpu0 arm mrc 15 0 1 0 0]
+    set sctlr [expr {$sctlr & ~(1 &lt;&lt; 0)}]    <span class="cmt">;# MMU off</span>
+    set sctlr [expr {$sctlr & ~(1 &lt;&lt; 2)}]    <span class="cmt">;# D-cache off</span>
+    set sctlr [expr {$sctlr & ~(1 &lt;&lt; 12)}]   <span class="cmt">;# I-cache off</span>
+    zynq.cpu0 arm mcr 15 0 1 0 0 $sctlr
+
+    <span class="cmt"># Invalidate L1 I-cache</span>
+    zynq.cpu0 arm mcr 15 0 7 5 0 0
+
+    <span class="cmt"># Invalidate L1 D-cache (all 4 ways x 256 sets)</span>
+    for {set way 0} {$way &lt; 4} {incr way} {
+        for {set set_idx 0} {$set_idx &lt; 256} {incr set_idx} {
+            set val [expr {($way &lt;&lt; 30) | ($set_idx &lt;&lt; 5)}]
+            zynq.cpu0 arm mcr 15 0 7 6 2 $val
+        }
+    }
+
+    <span class="cmt"># Disable L2 cache (PL310)</span>
+    mww 0xF8F02100 0x00000000
+    sleep 10
+
+    <span class="cmt"># Invalidate all L2 ways</span>
+    mww 0xF8F0277C 0x000000FF
+    sleep 50
+
+    <span class="cmt"># Invalidate TLBs</span>
+    zynq.cpu0 arm mcr 15 0 8 7 0 0
+
+    echo "&gt;&gt;&gt; Caches invalidated. Loading ELF..."
+    load_image $elf_path
+    echo "&gt;&gt;&gt; Resuming at 0x00100000..."
+    resume 0x00100000
+}
+</pre>
+
+<p>
+The script halts the CPU, disables all caches and MMU via CP15 coprocessor
+writes through the JTAG debug interface, then invalidates every L1 cache line
+(iterating all 4 ways x 256 sets), disables and invalidates the L2 PL310,
+flushes the TLBs, and <em>only then</em> loads the new binary and resumes.
+</p>
+
+<h4>Victory #2: JTAG Reload Works</h4>
+
+<pre>
+$ openocd -f pynq_load.cfg -f pynq_jtag_load.tcl \
+    -c "jtag_load build/app/threads/threads.elf"
+
+&gt;&gt;&gt; Caches invalidated. Loading ELF...
+&gt;&gt;&gt; Resuming at 0x00100000...
+</pre>
+
+<p>
+Serial console:
+</p>
+
+<pre>
+ms-os kernel starting
+tick 0
+mem ok pool=8/8 heap=0/16376
+tick 1
+tick 2
+tick 3
+...
+</pre>
+
+<p>
+The RTOS was running via JTAG reload. Timer ticking. Three threads switching.
+Memory management operational. Pool allocations working. Heap working. Every
+single component that took months to build on Cortex-M was now running on
+Cortex-A9.
+</p>
+
+<p>
+That moment&mdash;seeing <code>"ms-os kernel starting"</code> on the serial
+console from a completely different processor architecture&mdash;was one of the
+most satisfying moments of the entire project. Months of careful abstraction,
+the Arch.h interface, the platform-separated HAL, the build system that
+selects the right files&mdash;it all paid off in that instant.
+</p>
+
+<h4>Victory #3: Clean SD Card Boot</h4>
+
+<p>
+To confirm the system worked without JTAG cache tricks, we built a BOOT.BIN
+(Xilinx boot image: FSBL + our ELF) and booted from SD card. The FSBL does
+a clean PS initialization, loads our binary to DDR, and jumps to it. No
+stale caches, no u-boot residue.
+</p>
+
+<pre>
+<span class="cmt"># boot.bif -- Xilinx Boot Image Format descriptor</span>
+the_ROM_image:
+{
+    [bootloader]/path/to/zynq_fsbl.elf
+    /path/to/threads.elf
+}
+</pre>
+
+<pre>
+$ bootgen -image boot.bif -o BOOT.BIN -w
+</pre>
+
+<p>
+Copied BOOT.BIN to SD card, inserted into PYNQ-Z2, powered on. The serial
+console showed the full RTOS output. Clean boot. No JTAG needed.
+</p>
+
+<h4>The Remaining Battles</h4>
+
+<p>
+The RTOS was running, but not perfectly. Two issues remained:
+</p>
+
+<p>
+<strong>1. The sleep() Bug:</strong> After about 10 seconds, thread sleep
+durations stopped being honored. The memThread, which calls
+<code>sleep(5000)</code> between memory test iterations, started flooding
+the UART with output every tick instead of every 5 seconds. The tick counter
+appeared frozen when read via JTAG (showing <code>0x2710 = 10000</code>),
+though this might be a cache coherency artifact&mdash;JTAG reads bypass
+the CPU's D-cache and see stale DRAM values.
+</p>
+
+<p>
+The suspected root cause is a <strong>scheduler race condition</strong>
+specific to Cortex-A9. On Cortex-M, the context switch trigger (PendSV)
+runs at the <em>lowest</em> interrupt priority. It physically cannot fire
+during any other ISR. On Cortex-A9, context switches use SGI #0 at
+priority 0xF0, but the timer runs at priority 0xA0 (higher). This means
+the timer ISR can fire <em>between</em> a thread calling
+<code>exitCritical()</code> and <code>triggerContextSwitch()</code> in
+<code>sleep()</code> or <code>yield()</code>, potentially calling
+<code>switchContext()</code> while the scheduler is in an inconsistent state.
+This is a fundamental architectural difference that needs a careful fix.
+</p>
+
+<p>
+<strong>2. UART Thread Safety:</strong> Three threads write to UART0
+concurrently without any synchronization. <code>hal::uartWriteString()</code>
+outputs character by character, and an interrupt can fire between any two
+characters, allowing another thread's output to interleave. This produces
+garbled output like <code>"tixk 1mem 2ok"</code>. The fix is a UART mutex,
+but the scheduler race must be fixed first (otherwise the mutex itself may
+exhibit the same timing issues).
+</p>
+
+<div class="lesson">
+<strong>Lesson 5:</strong> PendSV on Cortex-M is not just a convenience&mdash;
+it's a critical architectural guarantee. Running at the lowest priority means
+the context switch is <em>deferred</em> until all ISRs complete, creating a
+natural critical section. On Cortex-A9, you must implement this guarantee
+yourself, either by disabling interrupts around the scheduler state
+transitions or by restructuring the context switch trigger to fire only
+from the lowest-priority interrupt context.
+</div>
+
+<h3>The Debugging Lessons</h3>
+
+<p>
+The PYNQ-Z2 bringup taught us more about ARM architecture in a few sessions
+than months of reading reference manuals. Every bug was a lesson:
 </p>
 
 <div class="lesson">
@@ -1266,8 +2012,8 @@ Disable MMU on <em>both</em> CPUs before any bare-metal work.
 
 <div class="lesson">
 <strong>Lesson 3:</strong> Always cross-reference register definitions against
-the TRM. We spent hours debugging silent UART output, only to discover the
-Control Register bit definitions were wrong&mdash;we were asserting STARTBRK
+the TRM. We spent hours debugging silent UART output because our Control
+Register bit definitions were wrong&mdash;we were asserting STARTBRK
 (forcing TXD permanently LOW) instead of resetting the TX FIFO.
 </div>
 
@@ -1275,6 +2021,56 @@ Control Register bit definitions were wrong&mdash;we were asserting STARTBRK
 <strong>Lesson 4:</strong> WFE on Cortex-A9 can gate the debug clock domain,
 making the CPU unreachable via JTAG. Use infinite <code>b .</code> loops
 instead of WFE during early bringup.
+</div>
+
+<div class="lesson">
+<strong>Lesson 6:</strong> JTAG reads bypass the CPU's data cache. If your
+code uses write-back caching (which it should, for performance), variables
+read via JTAG will show stale DRAM values, not the current values in the
+D-cache. Don't trust JTAG memory reads for variables that are actively being
+updated by the CPU. Use direct register reads (via CP15 MCR/MRC through
+OpenOCD) instead.
+</div>
+
+<div class="lesson">
+<strong>Lesson 7:</strong> L2 cache invalidation is mandatory for JTAG binary
+reload, but the boot code that does the invalidation is <em>itself</em>
+cached from the previous run. You must invalidate from outside the CPU
+(via the JTAG debug interface) before loading new code.
+</div>
+
+<div class="lesson">
+<strong>Lesson 8:</strong> When bringing up a new architecture, verify
+each subsystem independently. Write "TEST" to the UART FIFO via JTAG
+to confirm the serial link works before debugging your UART driver code.
+Check GIC, timer, and MMU registers via JTAG independently. Don't assume
+the whole system is broken just because you see no output&mdash;isolate
+the problem.
+</div>
+
+<h3>Where We Stand</h3>
+
+<p>
+The PYNQ-Z2 port is operational. The full RTOS&mdash;scheduler, context
+switching, memory management, crash dumps&mdash;runs on Cortex-A9. The
+architecture abstraction works: the same kernel source code, the same
+application code, builds and runs on Cortex-M3, Cortex-M4, and Cortex-A9
+by selecting the target at build time.
+</p>
+
+<p>
+Two bugs remain (the scheduler race and UART thread safety), both understood
+and with clear paths to resolution. These are the kind of bugs you only find
+on real hardware, under real timing conditions&mdash;exactly why hardware
+bringup matters.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 4:</strong> ms-os runs on <strong>three hardware
+targets</strong> spanning two ARM architecture families (ARMv7-M and ARMv7-A),
+with <strong>136 host unit tests</strong>, three cross-compiled applications,
+and a fully operational JTAG development workflow. Binary size for the full
+RTOS with three threads: <strong>10,696 bytes</strong> of code on Cortex-A9.
 </div>
 
 <!-- ============================================================ -->
@@ -1291,10 +2087,20 @@ instead of WFE during early bringup.
 </div>
 
 <p>
-As of February 2025, ms-os runs on three hardware targets with 136 passing
-unit tests. The kernel can schedule 8 threads across 32 priority levels,
-protect memory with the MPU, allocate from both fixed-size pools and a
-coalescing heap, and print detailed crash dumps when things go wrong.
+As of February 2026, ms-os runs on three hardware targets spanning two ARM
+architecture families, with 136 passing unit tests. The kernel schedules
+8 threads across 32 priority levels, protects memory with the MPU, allocates
+from both fixed-size pools and a coalescing heap, prints detailed crash dumps
+when things go wrong, and context-switches on both Cortex-M and Cortex-A9.
+</p>
+
+<p>
+The PYNQ-Z2 bringup proved that the architecture was sound. Code written for
+a 120 MHz Cortex-M3 with 128 KB of SRAM runs on a 650 MHz Cortex-A9 with
+512 MB of DDR3. The same scheduler, the same mutex, the same heap allocator&mdash;
+just a different set of assembly files and HAL implementations selected at
+build time. That portability didn't happen by accident. It was the result of
+disciplined abstraction from day one.
 </p>
 
 <p>
@@ -1302,9 +2108,9 @@ But the journey is far from over. The roadmap includes:
 </p>
 
 <ul>
-  <li><strong>Vivado BSP integration</strong> &mdash; Use Xilinx-generated
-      <code>ps7_init</code> for proper Zynq PS initialization, enabling JTAG
-      boot without Linux</li>
+  <li><strong>Scheduler race fix</strong> &mdash; Resolve the Cortex-A9
+      timing issue where timer ISR can preempt the context switch trigger</li>
+  <li><strong>UART mutex</strong> &mdash; Thread-safe serial output</li>
   <li><strong>IPC message passing</strong> &mdash; Microkernel inter-process
       communication using the ms-ipc library as inspiration</li>
   <li><strong>Unprivileged threads</strong> &mdash; Run user threads in
@@ -1315,13 +2121,15 @@ But the journey is far from over. The roadmap includes:
       Cortex-A9 core</li>
   <li><strong>Device tree</strong> &mdash; YAML-based hardware description
       for runtime configuration</li>
-  <li><strong>Custom bootloader</strong> &mdash; Replace u-boot with our own</li>
+  <li><strong>Custom bootloader</strong> &mdash; Replace u-boot with our own,
+      using <code>ps7_init</code> for standalone Zynq PS initialization</li>
 </ul>
 
 <p>
 Each phase builds on the last. Each line of assembly teaches something that
-no textbook can. And somewhere in the intersection of silicon and software,
-an operating system continues to grow.
+no textbook can. Every bug is a lesson&mdash;and every fix is a celebration.
+Somewhere in the intersection of silicon and software, an operating system
+continues to grow.
 </p>
 
 <!-- ============================================================ -->
@@ -1373,7 +2181,7 @@ an operating system continues to grow.
 <tr><th>Target</th><th>.text</th><th>.data</th><th>.bss</th><th>Total</th></tr>
 <tr><td>STM32F207</td><td>8,240 B</td><td>12 B</td><td>35,840 B</td><td>44,092 B</td></tr>
 <tr><td>STM32F407</td><td>8,360 B</td><td>12 B</td><td>35,840 B</td><td>44,212 B</td></tr>
-<tr><td>PYNQ-Z2</td><td>10,504 B</td><td>8 B</td><td>31,872 B</td><td>42,384 B</td></tr>
+<tr><td>PYNQ-Z2</td><td>10,696 B</td><td>8 B</td><td>48,256 B</td><td>58,960 B</td></tr>
 </table>
 
 <!-- ============================================================ -->
@@ -1417,7 +2225,14 @@ an operating system continues to grow.
     <div class="event-title">Phase 4B &mdash; Cortex-A9 RTOS Port</div>
     Arch.h abstraction, GIC/private timer drivers, IRQ-based context
     switch with SRS/RFE, fault handlers, crash dump for A9.
-    UART register bugs found and fixed. Hardware verification in progress.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 4 Hardware Bringup &mdash; The Debugging Saga</div>
+    Alignment fault (DFSR=0x801) diagnosed as MMU-disabled Strongly Ordered
+    memory. Built flat 1:1 MMU with 16 KB L1 translation table. Fixed UART
+    ID mapping (Usart1 to Uart0). Discovered L2 cache stale code problem
+    on JTAG reload; solved with OpenOCD TCL cache invalidation script.
+    Full RTOS verified running on PYNQ-Z2 via both JTAG and SD card boot.
   </div>
 </div>
 
