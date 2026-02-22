@@ -99,6 +99,8 @@ class TestServerHeader:
         code = emit_server_h(echo_idl)
         assert "notifyValueChanged" in code
         assert "notifyHeartbeat" in code
+        # Notification methods take a dest ThreadId
+        assert "kernel::ThreadId dest" in code
 
 
 # -- Server implementation -------------------------------------------------

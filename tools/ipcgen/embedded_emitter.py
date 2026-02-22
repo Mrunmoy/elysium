@@ -152,9 +152,10 @@ def emit_server_h(idl: IdlFile) -> str:
     w("    void run();")
     w("")
 
-    # Notification senders
+    # Notification senders (take destination ThreadId)
     for n in idl.notifications:
-        parts = [_param_decl(p, idl, is_out=False) for p in n.params]
+        parts = ["kernel::ThreadId dest"]
+        parts.extend([_param_decl(p, idl, is_out=False) for p in n.params])
         w(f"    std::int32_t notify{n.name}({', '.join(parts)});")
 
     if idl.notifications:
@@ -335,7 +336,8 @@ def emit_server_cpp(idl: IdlFile) -> str:
     # Notification senders
     for n in idl.notifications:
         w("")
-        parts = [_param_decl(p, idl, is_out=False) for p in n.params]
+        parts = ["kernel::ThreadId dest"]
+        parts.extend([_param_decl(p, idl, is_out=False) for p in n.params])
         w(f"std::int32_t {name}Server::notify{n.name}({', '.join(parts)})")
         w("{")
 
@@ -372,12 +374,9 @@ def emit_server_cpp(idl: IdlFile) -> str:
                     offset = f"{offset} + {sz}"
 
             w(f"    msg.payloadSize = static_cast<std::uint16_t>({' + '.join(parts_sz)});")
-            w("    // Notification sent as non-blocking -- dropped if mailbox full")
-            w("    (void)msg;  // will be sent via messageTrySend by caller")
-            w("    return kernel::kIpcOk;")
+            w("    return kernel::messageTrySend(dest, msg);")
         else:
-            w("    // Parameterless notification -- use bitmask notify")
-            w("    return kernel::kIpcOk;")
+            w(f"    return kernel::messageNotify(dest, 1u << k{n.name});")
 
         w("}")
 
