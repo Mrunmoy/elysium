@@ -59,6 +59,12 @@ namespace kernel
 
     void sleep(std::uint32_t ticks)
     {
+        // Match real Kernel.cpp: sleep is a no-op from ISR context
+        if (arch::inIsrContext())
+        {
+            return;
+        }
+
         if (ticks == 0)
         {
             yield();

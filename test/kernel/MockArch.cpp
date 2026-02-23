@@ -50,6 +50,12 @@ namespace arch
 
     bool inIsrContext()
     {
+        // Match real Arch.cpp: during SVC dispatch (handler mode), g_inSyscall
+        // is set so kernel functions can block on behalf of the calling thread.
+        if (g_inSyscall)
+        {
+            return false;
+        }
         return test::g_isrContext;
     }
 

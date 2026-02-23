@@ -9,6 +9,7 @@
 // core logic (thread creation, scheduling, context switch triggers) without
 // any hardware dependency.
 
+#include "kernel/Arch.h"
 #include "kernel/Scheduler.h"
 
 #include <cstdint>
@@ -60,6 +61,7 @@ namespace test
         g_sleepOnExit = false;
         g_deepSleep = false;
         g_tickCount = 0;
+        kernel::g_inSyscall = false;
     }
 
 }  // namespace test
