@@ -39,6 +39,9 @@ namespace
 
 namespace kernel
 {
+// Syscall flag: set by svcDispatch to indicate that kernel functions
+// (sleep, messageSend, etc.) should treat this as thread context, not ISR.
+volatile bool g_inSyscall = false;
 namespace arch
 {
     void triggerContextSwitch()
@@ -90,6 +93,13 @@ namespace arch
 
     bool inIsrContext()
     {
+        // During SVC dispatch, we are in handler mode but semantically acting
+        // on behalf of a thread. Return false so kernel functions can block.
+        if (g_inSyscall)
+        {
+            return false;
+        }
+
         // ICSR bits 8:0 (VECTACTIVE) hold the active exception number.
         // Non-zero means we are in an exception handler.
         return (reg(kScbIcsr) & 0x1FFu) != 0;

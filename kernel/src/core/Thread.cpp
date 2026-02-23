@@ -48,6 +48,8 @@ namespace kernel
         tcb.nextWait = kInvalidThreadId;
         tcb.wakeupTick = 0;
 
+        tcb.privileged = config.privileged;
+
         // Pre-compute MPU stack region config for context switch
         if (mpuValidateStack(config.stack, config.stackSize))
         {

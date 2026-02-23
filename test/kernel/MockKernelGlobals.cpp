@@ -23,6 +23,63 @@ namespace kernel
         return test::g_tickCount;
     }
 
+    ThreadId createThread(ThreadFunction function, void *arg, const char *name,
+                          std::uint32_t *stack, std::uint32_t stackSize,
+                          std::uint8_t priority, std::uint32_t timeSlice,
+                          bool privileged)
+    {
+        ThreadConfig config{};
+        config.function = function;
+        config.arg = arg;
+        config.name = name;
+        config.stack = stack;
+        config.stackSize = stackSize;
+        config.priority = priority;
+        config.timeSlice = timeSlice;
+        config.privileged = privileged;
+
+        ThreadId id = threadCreate(config);
+        if (id == kInvalidThreadId)
+        {
+            return kInvalidThreadId;
+        }
+
+        internal::scheduler().addThread(id);
+        return id;
+    }
+
+    void yield()
+    {
+        arch::enterCritical();
+        internal::scheduler().yield();
+        internal::scheduler().switchContext();
+        arch::exitCritical();
+        arch::triggerContextSwitch();
+    }
+
+    void sleep(std::uint32_t ticks)
+    {
+        if (ticks == 0)
+        {
+            yield();
+            return;
+        }
+
+        arch::enterCritical();
+
+        ThreadControlBlock *tcb = threadGetTcb(internal::scheduler().currentThreadId());
+        if (tcb != nullptr)
+        {
+            tcb->wakeupTick = test::g_tickCount + ticks;
+        }
+
+        internal::scheduler().blockCurrentThread();
+        internal::scheduler().switchContext();
+
+        arch::exitCritical();
+        arch::triggerContextSwitch();
+    }
+
     namespace internal
     {
         static Scheduler s_testScheduler;
