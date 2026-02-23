@@ -18,6 +18,14 @@ namespace kernel
     // Called by kernel when a thread function returns
     void kernelThreadExit();
 
+    // Set by svcDispatch to indicate that inIsrContext() should return false
+    // even though we are in SVC handler mode. This allows kernel functions
+    // (sleep, messageSend, etc.) to block the calling thread during a syscall.
+    extern "C"
+    {
+        extern volatile bool g_inSyscall;
+    }
+
 namespace arch
 {
     // Trigger a context switch.

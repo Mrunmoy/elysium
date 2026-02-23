@@ -11,10 +11,13 @@ namespace kernel
 
     // Create a thread and add it to the scheduler.
     // Returns thread ID or kInvalidThreadId on failure.
+    // privileged: true = runs in privileged mode (direct kernel access),
+    //             false = runs unprivileged (must use SVC for kernel calls).
     ThreadId createThread(ThreadFunction function, void *arg, const char *name,
                           std::uint32_t *stack, std::uint32_t stackSize,
                           std::uint8_t priority = kDefaultPriority,
-                          std::uint32_t timeSlice = 0);
+                          std::uint32_t timeSlice = 0,
+                          bool privileged = true);
 
     // Start the scheduler -- does not return
     void startScheduler();

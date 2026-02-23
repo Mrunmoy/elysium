@@ -1,11 +1,12 @@
 // IPC demo: echo server + client threads communicating via kernel message passing.
 //
-// Demonstrates ms-os Phase 5 IPC on STM32F207/F407/PYNQ-Z2.
-// Server thread handles Ping/Add/GetCount requests from the client thread.
-// Client sends requests every ~2s and prints results on UART.
+// Demonstrates ms-os Phase 6 unprivileged threads + SVC syscall interface.
+// Server thread (privileged) handles Ping/Add/GetCount requests and prints results.
+// Client thread (unprivileged) uses kernel::user:: SVC wrappers for all kernel calls.
 
 #include "kernel/Kernel.h"
 #include "kernel/Ipc.h"
+#include "kernel/Syscall.h"
 #include "kernel/Shell.h"
 #include "kernel/Arch.h"
 #include "kernel/BoardConfig.h"
@@ -64,19 +65,6 @@ namespace
         buf[i] = '\0';
     }
 
-    void int32ToStr(std::int32_t val, char *buf, std::size_t bufSize)
-    {
-        if (val < 0 && bufSize > 1)
-        {
-            buf[0] = '-';
-            uintToStr(static_cast<std::uint32_t>(-val), buf + 1, bufSize - 1);
-        }
-        else
-        {
-            uintToStr(static_cast<std::uint32_t>(val), buf, bufSize);
-        }
-    }
-
     void uartPrint(const char *s)
     {
         kernel::arch::enterCritical();
@@ -102,8 +90,9 @@ namespace
     void echoServerThread(void *)
     {
         std::uint32_t requestCount = 0;
+        char buf[16];
 
-        uartPrintLine("echo: server started");
+        uartPrintLine("echo: server started (privileged)");
 
         while (true)
         {
@@ -126,17 +115,20 @@ namespace
             {
             case kMethodPing:
             {
-                // Echo the value back
                 std::uint32_t value = 0;
                 std::memcpy(&value, request.payload, sizeof(value));
                 std::memcpy(reply.payload, &value, sizeof(value));
                 reply.payloadSize = sizeof(value);
                 reply.status = kernel::kIpcOk;
+
+                uartPrint("srv: ping(");
+                uintToStr(value, buf, sizeof(buf));
+                uartPrint(buf);
+                uartPrintLine(")");
                 break;
             }
             case kMethodAdd:
             {
-                // Add two uint32s
                 std::uint32_t a = 0;
                 std::uint32_t b = 0;
                 std::memcpy(&a, request.payload, sizeof(a));
@@ -145,14 +137,27 @@ namespace
                 std::memcpy(reply.payload, &sum, sizeof(sum));
                 reply.payloadSize = sizeof(sum);
                 reply.status = kernel::kIpcOk;
+
+                uartPrint("srv: add(");
+                uintToStr(a, buf, sizeof(buf));
+                uartPrint(buf);
+                uartPrint(",");
+                uintToStr(b, buf, sizeof(buf));
+                uartPrint(buf);
+                uartPrint(")=");
+                uintToStr(sum, buf, sizeof(buf));
+                uartPrintLine(buf);
                 break;
             }
             case kMethodGetCount:
             {
-                // Return request count
                 std::memcpy(reply.payload, &requestCount, sizeof(requestCount));
                 reply.payloadSize = sizeof(requestCount);
                 reply.status = kernel::kIpcOk;
+
+                uartPrint("srv: count=");
+                uintToStr(requestCount, buf, sizeof(buf));
+                uartPrintLine(buf);
                 break;
             }
             default:
@@ -164,18 +169,18 @@ namespace
         }
     }
 
-    // ---- Echo client ----
+    // ---- Echo client (unprivileged -- uses SVC wrappers) ----
+    // Receives server TID via arg (cannot access globals from unprivileged mode).
 
-    void echoClientThread(void *)
+    void echoClientThread(void *arg)
     {
-        uartPrintLine("echo: client started");
+        kernel::ThreadId server = static_cast<kernel::ThreadId>(
+            reinterpret_cast<std::uintptr_t>(arg));
 
-        // Wait for server to be ready
-        kernel::sleep(100);
+        // Wait for server to be ready (SVC)
+        kernel::user::sleep(100);
 
-        kernel::ThreadId server = g_serverTid;
         std::uint32_t iteration = 0;
-        char buf[16];
 
         while (true)
         {
@@ -191,28 +196,7 @@ namespace
                 request.payloadSize = sizeof(value);
 
                 kernel::Message reply;
-                std::int32_t rc = kernel::messageSend(server, request, &reply);
-
-                uartPrint("ping(");
-                uintToStr(value, buf, sizeof(buf));
-                uartPrint(buf);
-                uartPrint(")=");
-                if (rc == kernel::kIpcOk)
-                {
-                    std::uint32_t result = 0;
-                    std::memcpy(&result, reply.payload, sizeof(result));
-                    uintToStr(result, buf, sizeof(buf));
-                    uartPrint(buf);
-                    uartPrint(" rc=");
-                    int32ToStr(reply.status, buf, sizeof(buf));
-                    uartPrintLine(buf);
-                }
-                else
-                {
-                    uartPrint("ERR ");
-                    int32ToStr(rc, buf, sizeof(buf));
-                    uartPrintLine(buf);
-                }
+                kernel::user::messageSend(server, request, &reply);
             }
 
             // -- Add --
@@ -229,28 +213,7 @@ namespace
                 request.payloadSize = sizeof(a) + sizeof(b);
 
                 kernel::Message reply;
-                std::int32_t rc = kernel::messageSend(server, request, &reply);
-
-                uartPrint("add(");
-                uintToStr(a, buf, sizeof(buf));
-                uartPrint(buf);
-                uartPrint(",");
-                uintToStr(b, buf, sizeof(buf));
-                uartPrint(buf);
-                uartPrint(")=");
-                if (rc == kernel::kIpcOk)
-                {
-                    std::uint32_t sum = 0;
-                    std::memcpy(&sum, reply.payload, sizeof(sum));
-                    uintToStr(sum, buf, sizeof(buf));
-                    uartPrintLine(buf);
-                }
-                else
-                {
-                    uartPrint("ERR ");
-                    int32ToStr(rc, buf, sizeof(buf));
-                    uartPrintLine(buf);
-                }
+                kernel::user::messageSend(server, request, &reply);
             }
 
             // -- GetCount --
@@ -263,26 +226,11 @@ namespace
                 request.payloadSize = 0;
 
                 kernel::Message reply;
-                std::int32_t rc = kernel::messageSend(server, request, &reply);
-
-                uartPrint("count=");
-                if (rc == kernel::kIpcOk)
-                {
-                    std::uint32_t count = 0;
-                    std::memcpy(&count, reply.payload, sizeof(count));
-                    uintToStr(count, buf, sizeof(buf));
-                    uartPrintLine(buf);
-                }
-                else
-                {
-                    uartPrint("ERR ");
-                    int32ToStr(rc, buf, sizeof(buf));
-                    uartPrintLine(buf);
-                }
+                kernel::user::messageSend(server, request, &reply);
             }
 
             ++iteration;
-            kernel::sleep(2000);
+            kernel::user::sleep(2000);
         }
     }
 
@@ -394,9 +342,12 @@ int main()
     g_serverTid = kernel::createThread(echoServerThread, nullptr, "echo-srv",
                                        g_serverStack, sizeof(g_serverStack), 8);
 
-    // Create client thread
-    kernel::createThread(echoClientThread, nullptr, "echo-cli",
-                         g_clientStack, sizeof(g_clientStack), 10);
+    // Create client thread (unprivileged -- uses SVC for kernel calls).
+    // Pass server TID as arg since unprivileged threads cannot access globals.
+    kernel::createThread(echoClientThread,
+                         reinterpret_cast<void *>(static_cast<std::uintptr_t>(g_serverTid)),
+                         "echo-cli",
+                         g_clientStack, sizeof(g_clientStack), 10, 0, false);
 
     // Create LED heartbeat thread
     kernel::createThread(ledThread, nullptr, "led",

@@ -51,6 +51,10 @@ namespace kernel
         // MPU stack region (pre-computed for fast context switch)
         std::uint32_t mpuStackRbar;     // RBAR value for this thread's stack region
         std::uint32_t mpuStackRasr;     // RASR value for this thread's stack region
+
+        // Privilege level: true = privileged (Handler + Thread), false = unprivileged
+        // Assembly reads this at offset 44 for CONTROL register setup.
+        bool privileged;
     };
 
     struct ThreadConfig
@@ -62,6 +66,7 @@ namespace kernel
         std::uint32_t stackSize;   // In bytes
         std::uint8_t priority;     // 0=highest, 31=lowest
         std::uint32_t timeSlice;   // In ticks (0 = default)
+        bool privileged;           // true = runs in privileged mode (default)
     };
 
     // Create a new thread. Returns thread ID or kInvalidThreadId on failure.

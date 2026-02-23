@@ -89,6 +89,7 @@ namespace kernel
         idleConfig.stackSize = sizeof(s_idleStack);
         idleConfig.priority = kIdlePriority;
         idleConfig.timeSlice = 1;
+        idleConfig.privileged = true;
 
         ThreadId idleId = threadCreate(idleConfig);
         s_scheduler.setIdleThread(idleId);
@@ -97,7 +98,8 @@ namespace kernel
 
     ThreadId createThread(ThreadFunction function, void *arg, const char *name,
                           std::uint32_t *stack, std::uint32_t stackSize,
-                          std::uint8_t priority, std::uint32_t timeSlice)
+                          std::uint8_t priority, std::uint32_t timeSlice,
+                          bool privileged)
     {
         ThreadConfig config{};
         config.function = function;
@@ -107,6 +109,7 @@ namespace kernel
         config.stackSize = stackSize;
         config.priority = priority;
         config.timeSlice = timeSlice;
+        config.privileged = privileged;
 
         ThreadId id = threadCreate(config);
         if (id == kInvalidThreadId)

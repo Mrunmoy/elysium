@@ -12,6 +12,8 @@ add_executable(kernel_tests
     ShellTest.cpp
     FdtTest.cpp
     BoardConfigTest.cpp
+    SvcDispatchTest.cpp
+    SyscallTest.cpp
     MockArch.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
@@ -28,6 +30,7 @@ add_executable(kernel_tests
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Shell.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Fdt.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/BoardConfig.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/SvcDispatch.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE

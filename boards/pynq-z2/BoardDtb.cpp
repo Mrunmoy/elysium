@@ -1,4 +1,4 @@
-// Auto-generated from board.dtb -- DO NOT EDIT
+// Auto-generated from boards/pynq-z2/board.dtb -- DO NOT EDIT
 
 #include <cstdint>
 

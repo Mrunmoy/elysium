@@ -1,4 +1,4 @@
-// Auto-generated from board.dtb -- DO NOT EDIT
+// Auto-generated from boards/stm32f207zgt6/board.dtb -- DO NOT EDIT
 
 #include <cstdint>
 

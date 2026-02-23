@@ -7,6 +7,8 @@
 
 namespace kernel
 {
+// Syscall flag (host mock -- Arch.cpp defines it for cross-compile)
+volatile bool g_inSyscall = false;
 namespace arch
 {
     void triggerContextSwitch()

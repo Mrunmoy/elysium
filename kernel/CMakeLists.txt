@@ -13,6 +13,7 @@ add_library(kernel STATIC
     src/core/HeapOperators.cpp
     src/core/Ipc.cpp
     src/core/Shell.cpp
+    src/core/SvcDispatch.cpp
     src/core/Fdt.cpp
     src/core/BoardConfig.cpp
     src/arch/${MSOS_ARCH_DIR}/ContextSwitch.s
