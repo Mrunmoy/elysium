@@ -24,8 +24,7 @@ from datetime import datetime
 try:
     import serial
 except ImportError:
-    print("Error: pyserial not installed. Run: pip3 install pyserial")
-    sys.exit(1)
+    serial = None
 
 
 # ANSI color codes
@@ -232,6 +231,10 @@ def monitor(port, baud, elf_path):
 
 
 def main():
+    if serial is None:
+        print("Error: pyserial not installed. Run: pip3 install pyserial")
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="ms-os Crash Monitor -- serial monitor with crash dump decoding"
     )

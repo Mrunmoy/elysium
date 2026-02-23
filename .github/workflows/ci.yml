@@ -64,7 +64,6 @@ jobs:
           tools/dtgen/test/
           tools/ipcgen/test/
           tools/dtb2cpp_test.py
-          test/tools/
           -v
 
   cross-compile:
