@@ -9,7 +9,7 @@ Hardware targets:
 - **STM32F407ZGT6** (Cortex-M4, 168 MHz, 1 MB Flash, 128 KB SRAM)
 - **PYNQ-Z2** (Zynq-7020, dual Cortex-A9 @ 650 MHz, 512 MB DDR3)
 
-For the full development story, see [The Story of ms-os](https://mrunmoy.github.io/elysium/the-story-of-ms-os.html).
+For the full development story, see [The Story of ms-os](https://htmlpreview.github.io/?https://github.com/Mrunmoy/elysium/blob/main/docs/the-story-of-ms-os.html).
 
 ## Features
 
