@@ -8,13 +8,16 @@
 #include "kernel/Ipc.h"
 #include "kernel/Shell.h"
 #include "kernel/Arch.h"
-#include "BoardConfig.h"
+#include "kernel/BoardConfig.h"
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"
 
 #include <cstdint>
 #include <cstring>
+
+extern "C" const std::uint8_t g_boardDtb[];
+extern "C" const std::uint32_t g_boardDtbSize;
 
 // FNV-1a hash of "Echo" (must match generated code)
 static constexpr std::uint32_t kEchoServiceId = 0x3b7d6ba4u;
@@ -77,15 +80,15 @@ namespace
     void uartPrint(const char *s)
     {
         kernel::arch::enterCritical();
-        hal::uartWriteString(board::kConsoleUart, s);
+        hal::uartWriteString(board::consoleUartId(), s);
         kernel::arch::exitCritical();
     }
 
     void uartPrintLine(const char *s)
     {
         kernel::arch::enterCritical();
-        hal::uartWriteString(board::kConsoleUart, s);
-        hal::uartWriteString(board::kConsoleUart, "\r\n");
+        hal::uartWriteString(board::consoleUartId(), s);
+        hal::uartWriteString(board::consoleUartId(), "\r\n");
         kernel::arch::exitCritical();
     }
 
@@ -287,11 +290,12 @@ namespace
 
     void ledThread(void *)
     {
+        const board::BoardConfig &cfg = board::config();
         while (true)
         {
-            if constexpr (board::kHasLed)
+            if (cfg.hasLed)
             {
-                hal::gpioToggle(board::kLedPort, board::kLedPin);
+                hal::gpioToggle(hal::Port(cfg.led.port - 'A'), cfg.led.pin);
             }
             kernel::sleep(500);
         }
@@ -301,7 +305,7 @@ namespace
 
     void shellWrite(const char *str)
     {
-        hal::uartWriteString(board::kConsoleUart, str);
+        hal::uartWriteString(board::consoleUartId(), str);
     }
 
     void shellThread(void *)
@@ -316,7 +320,7 @@ namespace
         while (true)
         {
             char c;
-            if (hal::uartTryGetChar(board::kConsoleUart, &c))
+            if (hal::uartTryGetChar(board::consoleUartId(), &c))
             {
                 kernel::shellProcessChar(c);
             }
@@ -330,53 +334,58 @@ namespace
 
 int main()
 {
+    board::configInit(g_boardDtb, g_boardDtbSize);
+
+    const board::BoardConfig &cfg = board::config();
+
     // Enable peripheral clocks and configure pins from board config
-    if constexpr (board::kHasLed)
+    if (cfg.hasLed)
     {
-        hal::rccEnableGpioClock(board::kLedPort);
+        hal::rccEnableGpioClock(hal::Port(cfg.led.port - 'A'));
 
         hal::GpioConfig ledConfig{};
-        ledConfig.port = board::kLedPort;
-        ledConfig.pin = board::kLedPin;
+        ledConfig.port = hal::Port(cfg.led.port - 'A');
+        ledConfig.pin = cfg.led.pin;
         ledConfig.mode = hal::PinMode::Output;
         ledConfig.speed = hal::OutputSpeed::Low;
         ledConfig.outputType = hal::OutputType::PushPull;
         hal::gpioInit(ledConfig);
     }
 
-    if constexpr (board::kHasConsoleTx)
+    if (cfg.hasConsoleTx)
     {
-        hal::rccEnableGpioClock(board::kConsoleTxPort);
+        hal::rccEnableGpioClock(hal::Port(cfg.consoleTx.port - 'A'));
 
         hal::GpioConfig txConfig{};
-        txConfig.port = board::kConsoleTxPort;
-        txConfig.pin = board::kConsoleTxPin;
+        txConfig.port = hal::Port(cfg.consoleTx.port - 'A');
+        txConfig.pin = cfg.consoleTx.pin;
         txConfig.mode = hal::PinMode::AlternateFunction;
         txConfig.speed = hal::OutputSpeed::VeryHigh;
-        txConfig.alternateFunction = board::kConsoleTxAf;
+        txConfig.alternateFunction = cfg.consoleTx.af;
         hal::gpioInit(txConfig);
     }
 
-    if constexpr (board::kHasConsoleRx)
+    if (cfg.hasConsoleRx)
     {
-        hal::rccEnableGpioClock(board::kConsoleRxPort);
+        hal::rccEnableGpioClock(hal::Port(cfg.consoleRx.port - 'A'));
 
         hal::GpioConfig rxConfig{};
-        rxConfig.port = board::kConsoleRxPort;
-        rxConfig.pin = board::kConsoleRxPin;
+        rxConfig.port = hal::Port(cfg.consoleRx.port - 'A');
+        rxConfig.pin = cfg.consoleRx.pin;
         rxConfig.mode = hal::PinMode::AlternateFunction;
-        rxConfig.alternateFunction = board::kConsoleRxAf;
+        rxConfig.alternateFunction = cfg.consoleRx.af;
         hal::gpioInit(rxConfig);
     }
 
-    hal::rccEnableUartClock(board::kConsoleUart);
+    hal::UartId uartId = board::consoleUartId();
+    hal::rccEnableUartClock(uartId);
 
     hal::UartConfig uartConfig{};
-    uartConfig.id = board::kConsoleUart;
-    uartConfig.baudRate = board::kConsoleBaud;
+    uartConfig.id = uartId;
+    uartConfig.baudRate = cfg.consoleBaud;
     hal::uartInit(uartConfig);
 
-    hal::uartWriteString(board::kConsoleUart, "ms-os ipc-demo starting\r\n");
+    hal::uartWriteString(uartId, "ms-os ipc-demo starting\r\n");
 
     // Initialize kernel
     kernel::init();

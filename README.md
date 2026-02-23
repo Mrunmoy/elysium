@@ -19,11 +19,11 @@ For the full development story, see [docs/the-story-of-ms-os.html](docs/the-stor
 | 3 | Memory management (BlockPool, Heap, MPU) | Complete |
 | 4 | Multi-target (Cortex-A9 port, PYNQ-Z2, GIC, crash dump) | Complete |
 | 5 | IPC / message passing (Minix-style send/receive/reply, IDL codegen) | Complete |
-| 7 | Device tree (YAML board descriptions, dtgen code generator) | Complete |
+| 7 | Device tree (FDT binary, runtime parser, DTS source, dt shell command) | Complete |
 | 8 | Power management (WFI idle, sleep-on-exit, deep sleep, clock gating) | Complete |
-| 9 | Shell (interactive CLI: ps, mem, uptime, version, help) | Complete |
+| 9 | Shell (interactive CLI: ps, mem, uptime, version, dt, help) | Complete |
 
-**Test coverage:** 203 C++ host tests, 114 Python generator tests.
+**Test coverage:** 269 C++ host tests, 135 Python generator tests.
 
 ## Prerequisites
 
@@ -93,12 +93,12 @@ ms-os/
   cmake/
     arm-none-eabi-gcc.cmake ARM cross-compilation toolchain
   boards/
-    stm32f207zgt6.yaml      Board description (clocks, memory, pins)
-    stm32f407zgt6.yaml      Board description
-    pynq-z2.yaml            Board description
-    stm32f207zgt6/          Generated BoardConfig.h
-    stm32f407zgt6/          Generated BoardConfig.h
-    pynq-z2/                Generated BoardConfig.h
+    stm32f207zgt6.dts       Device tree source (clocks, memory, pins)
+    stm32f407zgt6.dts       Device tree source
+    pynq-z2.dts             Device tree source
+    stm32f207zgt6/          board.dtb + BoardDtb.cpp (embedded DTB)
+    stm32f407zgt6/          board.dtb + BoardDtb.cpp (embedded DTB)
+    pynq-z2/                board.dtb + BoardDtb.cpp (embedded DTB)
   startup/
     stm32f207zgt6/          STM32F207 vector table, linker script, clock init
     stm32f407zgt6/          STM32F407 vector table, linker script, clock init
@@ -117,6 +117,8 @@ ms-os/
       BlockPool.h           Fixed-size block allocator
       Ipc.h                 Message passing (send/receive/reply)
       Shell.h               Interactive command-line shell
+      Fdt.h                 FDT (Flattened Device Tree) parser
+      BoardConfig.h         Runtime board configuration from DTB
       Arch.h                Architecture abstraction (context switch, power)
       Mpu.h                 Memory protection unit
       CrashDump.h           Fault handler and crash reporting
@@ -132,7 +134,10 @@ ms-os/
     ipc-demo/               IPC echo server/client + interactive shell
   tools/
     ipcgen/                 IDL code generator (embedded backend)
-    dtgen/                  Board description code generator (YAML to C++)
+    fdtlib.py               Python FDT builder (creates DTB binaries)
+    build_dtbs.py           Builds DTBs for all boards
+    dtb2cpp.py              Converts DTB binary to C++ const byte array
+    dtgen/                  Legacy YAML-to-constexpr generator (reference)
   services/
     echo/                   Example Echo service IDL + generated code
   vendor/                   Git submodules (ST HAL, CMSIS, Google Test)
@@ -155,8 +160,8 @@ and process management. Written in C++17 with assembly where required.
 - **Memory** -- First-fit heap with coalescing, fixed-size block pools, MPU protection
 - **IPC** -- Per-thread mailbox (4 slots x 64B), synchronous send/receive/reply, async notifications
 - **Power** -- WFI in idle thread, sleep-on-exit, deep sleep mode control, peripheral clock gating
-- **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version)
-- **Device tree** -- YAML board descriptions compiled to constexpr C++ headers
+- **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt)
+- **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
 
 ### Shell Commands
 
@@ -170,6 +175,7 @@ commands:
   mem     - heap statistics
   uptime  - ticks since boot
   version - show version
+  dt      - device tree info
 
 ms-os> ps
 TID  NAME         STATE   PRI  STACK

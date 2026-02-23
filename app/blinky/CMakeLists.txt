@@ -3,9 +3,10 @@ add_executable(blinky
 )
 
 target_link_libraries(blinky PRIVATE
+    kernel
     hal
     startup
-    board_config
+    board_dtb
 )
 
 target_compile_options(blinky PRIVATE

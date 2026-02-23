@@ -9,6 +9,7 @@
 #include "kernel/Kernel.h"
 #include "kernel/Heap.h"
 #include "kernel/Ipc.h"
+#include "kernel/BoardConfig.h"
 
 #include <cstdint>
 #include <cstring>
@@ -80,6 +81,7 @@ namespace
         writeLine("  mem     - heap statistics");
         writeLine("  uptime  - ticks since boot");
         writeLine("  version - show version");
+        writeLine("  dt      - device tree info");
     }
 
     const char *threadStateName(ThreadState state)
@@ -192,6 +194,99 @@ namespace
         writeLine(kVersion);
     }
 
+    void hexToStr(std::uint32_t val, char *buf, std::size_t bufSize)
+    {
+        if (bufSize < 3)
+        {
+            buf[0] = '\0';
+            return;
+        }
+        buf[0] = '0';
+        buf[1] = 'x';
+        static constexpr char kHex[] = "0123456789abcdef";
+        // Find first non-zero nibble
+        int start = 28;
+        while (start > 0 && ((val >> start) & 0xF) == 0)
+        {
+            start -= 4;
+        }
+        std::size_t pos = 2;
+        for (int shift = start; shift >= 0 && pos < bufSize - 1; shift -= 4)
+        {
+            buf[pos++] = kHex[(val >> shift) & 0xF];
+        }
+        buf[pos] = '\0';
+    }
+
+    void cmdDt()
+    {
+        const board::BoardConfig &cfg = board::config();
+        char buf[16];
+
+        // Identity
+        write("board: ");
+        writeLine(cfg.boardName != nullptr ? cfg.boardName : "(null)");
+        write("mcu:   ");
+        writeLine(cfg.mcu != nullptr ? cfg.mcu : "(null)");
+        write("arch:  ");
+        writeLine(cfg.arch != nullptr ? cfg.arch : "(null)");
+
+        // Clocks
+        writeLine("clocks:");
+        write("  system: ");
+        uintToStr(cfg.systemClock, buf, sizeof(buf));
+        writeLine(buf);
+        write("  apb1:   ");
+        uintToStr(cfg.apb1Clock, buf, sizeof(buf));
+        writeLine(buf);
+        write("  apb2:   ");
+        uintToStr(cfg.apb2Clock, buf, sizeof(buf));
+        writeLine(buf);
+        if (cfg.hseClock != 0)
+        {
+            write("  hse:    ");
+            uintToStr(cfg.hseClock, buf, sizeof(buf));
+            writeLine(buf);
+        }
+
+        // Memory
+        writeLine("memory:");
+        for (std::uint8_t i = 0; i < cfg.memoryRegionCount; ++i)
+        {
+            write("  ");
+            write(cfg.memoryRegions[i].name != nullptr
+                  ? cfg.memoryRegions[i].name : "???");
+            write(": ");
+            hexToStr(cfg.memoryRegions[i].base, buf, sizeof(buf));
+            write(buf);
+            write(" (");
+            uintToStr(cfg.memoryRegions[i].size, buf, sizeof(buf));
+            write(buf);
+            writeLine(")");
+        }
+
+        // Console
+        write("console: ");
+        write(cfg.consoleUart != nullptr ? cfg.consoleUart : "(null)");
+        write(" @ ");
+        uintToStr(cfg.consoleBaud, buf, sizeof(buf));
+        writeLine(buf);
+
+        // LED
+        if (cfg.hasLed)
+        {
+            write("led: ");
+            char portBuf[2] = {cfg.led.port, '\0'};
+            write(portBuf);
+            uintToStr(cfg.led.pin, buf, sizeof(buf));
+            writeLine(buf);
+        }
+
+        // FPU
+        write("fpu: ");
+        writeLine(cfg.hasFpu ? "yes" : "no");
+    }
+
     // Command dispatch table
     struct Command
     {
@@ -206,6 +301,7 @@ namespace
         {"mem",     cmdMem},
         {"uptime",  cmdUptime},
         {"version", cmdVersion},
+        {"dt",      cmdDt},
     };
 
     static constexpr std::uint8_t kCommandCount =

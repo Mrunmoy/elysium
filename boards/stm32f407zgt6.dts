@@ -1,0 +1,41 @@
+/dts-v1/;
+
+/ {
+    compatible = "ms-os,stm32f407zgt6";
+    model = "STM32F407ZGT6";
+
+    board {
+        name = "STM32F407ZGT6";
+        mcu = "STM32F407ZGT6";
+        arch = "cortex-m4";
+    };
+
+    clocks {
+        system-clock = <168000000>;
+        apb1-clock = <42000000>;
+        apb2-clock = <84000000>;
+        hse-clock = <8000000>;
+    };
+
+    memory {
+        flash { reg = <0x08000000 0x100000>; };
+        sram  { reg = <0x20000000 0x20000>; };
+        ccm   { reg = <0x10000000 0x10000>; };
+    };
+
+    console {
+        uart = "usart1";
+        baud = <115200>;
+        tx { port = "A"; pin = <9>; af = <7>; };
+        rx { port = "A"; pin = <10>; af = <7>; };
+    };
+
+    led {
+        port = "C";
+        pin = <13>;
+    };
+
+    features {
+        fpu;
+    };
+};

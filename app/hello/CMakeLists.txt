@@ -3,9 +3,10 @@ add_executable(hello
 )
 
 target_link_libraries(hello PRIVATE
+    kernel
     hal
     startup
-    board_config
+    board_dtb
 )
 
 target_compile_options(hello PRIVATE

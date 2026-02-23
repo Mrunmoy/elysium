@@ -10,6 +10,8 @@ add_executable(kernel_tests
     IpcTest.cpp
     PowerTest.cpp
     ShellTest.cpp
+    FdtTest.cpp
+    BoardConfigTest.cpp
     MockArch.cpp
     MockCrashDump.cpp
     MockKernelGlobals.cpp
@@ -24,11 +26,14 @@ add_executable(kernel_tests
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Heap.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Ipc.cpp
     ${CMAKE_SOURCE_DIR}/kernel/src/core/Shell.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Fdt.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/BoardConfig.cpp
 )
 
 target_include_directories(kernel_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/inc
     ${CMAKE_SOURCE_DIR}/kernel/src/core
+    ${CMAKE_SOURCE_DIR}/hal/inc
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

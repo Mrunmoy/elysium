@@ -22,6 +22,7 @@
             openocd
             gdb
             (python3.withPackages (ps: [ ps.pyserial ps.pytest ]))
+            dtc
             git
             stlink
             clang-tools

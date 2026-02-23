@@ -1,0 +1,31 @@
+/dts-v1/;
+
+/ {
+    compatible = "ms-os,pynq-z2";
+    model = "PYNQ-Z2";
+
+    board {
+        name = "PYNQ-Z2";
+        mcu = "Zynq-7020";
+        arch = "cortex-a9";
+    };
+
+    clocks {
+        system-clock = <650000000>;
+        apb1-clock = <100000000>;
+        apb2-clock = <100000000>;
+    };
+
+    memory {
+        ddr { reg = <0x00100000 0x1FF00000>; };
+    };
+
+    console {
+        uart = "uart0";
+        baud = <115200>;
+    };
+
+    features {
+        fpu;
+    };
+};

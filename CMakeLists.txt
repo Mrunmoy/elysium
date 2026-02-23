@@ -70,10 +70,9 @@ if(CMAKE_CROSSCOMPILING)
         )
     endif()
 
-    # Board configuration (generated BoardConfig.h per target)
-    add_library(board_config INTERFACE)
-    target_include_directories(board_config INTERFACE
-        ${CMAKE_SOURCE_DIR}/boards/${MSOS_BOARD_DIR}
+    # Board DTB blob (compiled device tree embedded as const byte array)
+    add_library(board_dtb STATIC
+        ${CMAKE_SOURCE_DIR}/boards/${MSOS_BOARD_DIR}/BoardDtb.cpp
     )
 
     add_subdirectory(startup)

@@ -13,6 +13,8 @@ add_library(kernel STATIC
     src/core/HeapOperators.cpp
     src/core/Ipc.cpp
     src/core/Shell.cpp
+    src/core/Fdt.cpp
+    src/core/BoardConfig.cpp
     src/arch/${MSOS_ARCH_DIR}/ContextSwitch.s
     src/arch/${MSOS_ARCH_DIR}/Arch.cpp
     src/arch/${MSOS_ARCH_DIR}/FaultHandlers.s
@@ -27,7 +29,7 @@ target_include_directories(kernel PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
 )
 
-target_link_libraries(kernel PRIVATE startup)
+target_link_libraries(kernel PRIVATE startup hal)
 
 target_compile_options(kernel PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti -fno-unwind-tables>

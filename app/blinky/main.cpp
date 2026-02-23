@@ -3,11 +3,14 @@
 // Toggles the on-board LED and prints "ms-os alive" over UART.
 // Board: LED on PC13, USART1 TX on PA9 (AF7).
 
-#include "BoardConfig.h"
+#include "kernel/BoardConfig.h"
 #include "hal/Gpio.h"
 #include "hal/Rcc.h"
 #include "hal/Uart.h"
 #include "startup/SystemClock.h"
+
+extern "C" const std::uint8_t g_boardDtb[];
+extern "C" const std::uint32_t g_boardDtbSize;
 
 namespace
 {
@@ -39,45 +42,53 @@ namespace
 
 int main()
 {
+    board::configInit(g_boardDtb, g_boardDtbSize);
+
+    const board::BoardConfig &cfg = board::config();
+
     // Enable peripheral clocks and configure pins from board config
-    if constexpr (board::kHasLed)
+    if (cfg.hasLed)
     {
-        hal::rccEnableGpioClock(board::kLedPort);
+        hal::rccEnableGpioClock(hal::Port(cfg.led.port - 'A'));
 
         hal::GpioConfig ledConfig{};
-        ledConfig.port = board::kLedPort;
-        ledConfig.pin = board::kLedPin;
+        ledConfig.port = hal::Port(cfg.led.port - 'A');
+        ledConfig.pin = cfg.led.pin;
         ledConfig.mode = hal::PinMode::Output;
         ledConfig.speed = hal::OutputSpeed::Low;
         ledConfig.outputType = hal::OutputType::PushPull;
         hal::gpioInit(ledConfig);
     }
 
-    if constexpr (board::kHasConsoleTx)
+    if (cfg.hasConsoleTx)
     {
-        hal::rccEnableGpioClock(board::kConsoleTxPort);
+        hal::rccEnableGpioClock(hal::Port(cfg.consoleTx.port - 'A'));
 
         hal::GpioConfig txConfig{};
-        txConfig.port = board::kConsoleTxPort;
-        txConfig.pin = board::kConsoleTxPin;
+        txConfig.port = hal::Port(cfg.consoleTx.port - 'A');
+        txConfig.pin = cfg.consoleTx.pin;
         txConfig.mode = hal::PinMode::AlternateFunction;
         txConfig.speed = hal::OutputSpeed::VeryHigh;
-        txConfig.alternateFunction = board::kConsoleTxAf;
+        txConfig.alternateFunction = cfg.consoleTx.af;
         hal::gpioInit(txConfig);
     }
 
-    hal::rccEnableUartClock(board::kConsoleUart);
+    hal::UartId uartId = board::consoleUartId();
+    hal::rccEnableUartClock(uartId);
 
     hal::UartConfig uartConfig{};
-    uartConfig.id = board::kConsoleUart;
-    uartConfig.baudRate = board::kConsoleBaud;
+    uartConfig.id = uartId;
+    uartConfig.baudRate = cfg.consoleBaud;
     hal::uartInit(uartConfig);
 
-    hal::uartWriteString(board::kConsoleUart, "ms-os alive\r\n");
+    hal::uartWriteString(uartId, "ms-os alive\r\n");
 
     while (true)
     {
-        hal::gpioToggle(board::kLedPort, board::kLedPin);
+        if (cfg.hasLed)
+        {
+            hal::gpioToggle(hal::Port(cfg.led.port - 'A'), cfg.led.pin);
+        }
         delayMs(500);
     }
 }

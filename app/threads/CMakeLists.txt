@@ -6,7 +6,7 @@ target_link_libraries(threads PRIVATE
     -Wl,--whole-archive kernel -Wl,--no-whole-archive
     hal
     startup
-    board_config
+    board_dtb
 )
 
 target_compile_options(threads PRIVATE
