@@ -303,6 +303,27 @@
     JTAG Reload via Cache Invalidation / Clean SD Card Boot /
     The Remaining Battles / The Debugging Lessons
   </div>
+  <strong>Chapter 6</strong> &mdash; Talking Between Threads (Phase 5)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    Minix-Style IPC / The IDL Code Generator / The Echo Service
+  </div>
+  <strong>Chapter 7</strong> &mdash; Drawing the Line (Phase 6)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    Unprivileged Threads / SVC Dispatch / The ISR Early-Return Bug
+  </div>
+  <strong>Chapter 8</strong> &mdash; Describing the Hardware (Phase 7)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    From YAML to FDT / The Parser / DTS Source Files
+  </div>
+  <strong>Chapter 9</strong> &mdash; Conserving Every Milliamp (Phase 8)<br>
+  <strong>Chapter 10</strong> &mdash; A Window Into the Kernel (Phase 9)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    The Shell / Commands / Character-Driven Design
+  </div>
+  <strong>Chapter 11</strong> &mdash; The Safety Net (CI &amp; GitHub Pages)<br>
+  <div style="margin-left: 2em; line-height: 1.8; font-size: 10pt; color: #555;">
+    Why CI Matters / The Matrix / GitHub Pages / The README Refresh
+  </div>
   <strong>Epilogue</strong> &mdash; The Road Ahead<br>
   <strong>Appendix A</strong> &mdash; Hardware Targets<br>
   <strong>Appendix B</strong> &mdash; Project Timeline
@@ -2310,6 +2331,587 @@ resolved. Binary size for the full RTOS with three threads:
 </div>
 
 <!-- ============================================================ -->
+<!--                     CHAPTER 6                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 6</span>
+  Talking Between Threads (Phase 5)
+</h2>
+
+<div class="epigraph">
+  "The art of programming is the art of organizing complexity."
+  <div class="attribution">&mdash; Edsger Dijkstra</div>
+</div>
+
+<p>
+A microkernel without IPC is just a scheduler with pretensions.
+The whole point of moving drivers and services out of the kernel is
+that they can communicate through well-defined channels instead of
+sharing global state. Phase 5 gave ms-os its voice.
+</p>
+
+<h3>Minix-Style IPC</h3>
+
+<p>
+We adopted the classic Minix send/receive/reply pattern: a client sends
+a message to a server thread, blocks until the server processes it and
+replies. The message is a fixed 64-byte struct&mdash;16 bytes of header
+(sender, type, methodId, serviceId, status, payload size) and 48 bytes
+of inline payload. No heap allocation, no variable-length buffers, no
+fragmentation. Each thread owns a 4-slot mailbox implemented as a ring
+buffer, statically allocated inside its TCB.
+</p>
+
+<p>
+The design deliberately chose <strong>blocking synchronous IPC</strong>
+as the primary primitive. When a sender's target mailbox is full, the
+sender blocks and joins a wait queue on the receiver. When a receiver
+has no messages, it blocks and waits. The reply completes the handshake:
+the server writes its response into the client's mailbox and the client
+wakes up. This gives natural RPC semantics&mdash;exactly what user-space
+drivers need to service requests from application threads.
+</p>
+
+<p>
+For interrupt-driven scenarios where blocking is impossible, we added
+<strong>async notifications</strong>: a per-thread 32-bit bitmask that
+can be atomically OR'd from any context, including ISRs.
+<code>messageNotify()</code> sets bits; <code>messageCheckNotify()</code>
+reads and clears them. No locks, no mailbox slots consumed.
+</p>
+
+<h3>The IDL Code Generator</h3>
+
+<p>
+Hand-writing message marshalling code for every service would be
+tedious and error-prone. So we built <code>ipcgen</code>, a Python-based
+IDL compiler. You write a <code>.idl</code> file describing your service:
+</p>
+
+<pre><code>service Echo {
+    method echo(data: bytes) -> (data: bytes);
+    notification overflow;
+}</code></pre>
+
+<p>
+And ipcgen produces four files: <code>EchoClient.h</code>,
+<code>EchoClient.cpp</code>, <code>EchoServer.h</code>, and
+<code>EchoServer.cpp</code>. The generated client class packs arguments
+into the 48-byte payload, calls <code>messageSend()</code>, and unpacks
+the reply. The generated server class provides a virtual method for each
+IDL method that the developer overrides. Service IDs are FNV-1a hashes
+of the service name, giving stable 32-bit identifiers without a central
+registry.
+</p>
+
+<h3>The Echo Service</h3>
+
+<p>
+The proof-of-life was an echo server running as a kernel thread: the
+client sends a message, the server copies it back into the reply. Simple,
+but it exercises the full path&mdash;send, block, wake, dispatch, reply,
+wake. The IPC demo app launches the echo server, a client thread, and
+the LED blinker all running concurrently, with the interactive shell
+providing runtime visibility into thread states.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 5:</strong> ms-os has kernel IPC with synchronous
+send/receive/reply, async notifications, an IDL code generator, and a
+working echo service demo. Message passing adds zero heap allocations.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 7                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 7</span>
+  Drawing the Line (Phase 6)
+</h2>
+
+<div class="epigraph">
+  "The purpose of abstraction is not to be vague, but to create a new
+  semantic level in which one can be absolutely precise."
+  <div class="attribution">&mdash; Edsger Dijkstra</div>
+</div>
+
+<p>
+Until Phase 6, every thread in ms-os ran in privileged mode. Any thread
+could poke any register, disable interrupts, or corrupt kernel data
+structures. For a microkernel that aspires to run untrusted user-space
+services, this was unacceptable. Phase 6 introduced the privilege
+boundary: unprivileged threads that must use supervisor calls (SVC) to
+request kernel services.
+</p>
+
+<h3>Unprivileged Threads</h3>
+
+<p>
+The ARM Cortex-M CONTROL register has two key bits: <strong>SPSEL</strong>
+(stack pointer selection) and <strong>nPRIV</strong> (privilege level).
+We already used SPSEL to run threads on the Process Stack Pointer. Now
+we set nPRIV for threads marked unprivileged, dropping them into User
+mode. The MPU enforces the boundary&mdash;an unprivileged thread cannot
+access kernel memory, peripheral registers, or another thread's stack.
+</p>
+
+<p>
+The TCB gained a <code>privileged</code> boolean (offset 44). During
+context switch, PendSV reads this field and writes the appropriate
+CONTROL value: <code>0x2</code> for privileged (PSP, no nPRIV) or
+<code>0x3</code> for unprivileged (PSP + nPRIV). An ISB instruction
+after the MSR ensures the pipeline respects the new privilege level
+before the thread resumes.
+</p>
+
+<h3>SVC Dispatch</h3>
+
+<p>
+An unprivileged thread cannot call kernel functions directly&mdash;the
+MPU would fault. Instead, it executes an <code>SVC</code> instruction,
+which traps into the SVC_Handler running in Handler mode (always
+privileged). The handler extracts the SVC number from the faulting
+instruction by reading the stacked PC, subtracting 2 to find the SVC
+opcode, and loading the immediate byte.
+</p>
+
+<p>
+We defined 23 syscall numbers covering the full kernel API: yield, sleep,
+tick count, mutex lock/unlock/trylock/create/destroy, semaphore
+wait/signal/create/destroy, IPC send/receive/reply/notify/check, and
+heap alloc/free/available. The C++ dispatch function
+<code>svcDispatch()</code> receives the syscall number and a pointer to
+the exception frame, extracts arguments from the stacked r0&ndash;r3,
+calls the appropriate kernel function, and writes the return value back
+to the stacked r0 so the caller sees it when it resumes.
+</p>
+
+<p>
+For privileged threads, the syscall wrappers in <code>Syscall.h</code>
+compile down to direct function calls&mdash;no SVC overhead. The same
+header provides both paths, selected by the thread's privilege level.
+On the host test build (x86), all syscalls resolve to direct calls since
+there is no SVC instruction.
+</p>
+
+<h3>The ISR Early-Return Bug</h3>
+
+<p>
+The subtlety that bit us was the <code>g_inSyscall</code> flag. Kernel
+functions like <code>messageSend()</code> check
+<code>inIsrContext()</code> to decide whether they can block. But the
+SVC handler runs in Handler mode&mdash;technically an ISR. Without
+correction, every blocking syscall would see "I'm in an ISR" and refuse
+to block, breaking the entire send/receive/reply flow.
+</p>
+
+<p>
+The fix was a global flag: <code>g_inSyscall</code> is set to
+<code>true</code> before calling <code>svcDispatch()</code> and cleared
+after. The <code>inIsrContext()</code> function checks both the
+VECTACTIVE field in the ICSR register <em>and</em> the syscall flag:
+if VECTACTIVE is nonzero but g_inSyscall is true, it returns false,
+allowing the kernel to block normally.
+</p>
+
+<p>
+This was tricky enough that we added dedicated handler-mode tests
+(commit <code>8a59988</code>) that verify the flag is correctly set
+during dispatch and that blocking operations succeed inside SVC context.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 6:</strong> ms-os enforces a hardware privilege
+boundary. Unprivileged threads use SVC for all kernel services. The MPU
+prevents unauthorized memory access. 23 syscall numbers cover the full
+kernel API.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 8                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 8</span>
+  Describing the Hardware (Phase 7)
+</h2>
+
+<div class="epigraph">
+  "Programs must be written for people to read, and only incidentally
+  for machines to execute."
+  <div class="attribution">&mdash; Harold Abelson</div>
+</div>
+
+<p>
+With three hardware targets, board-specific constants were scattered
+across startup code, HAL implementations, and application logic. Clock
+frequencies, memory regions, UART pin assignments, LED ports&mdash;all
+hardcoded. Phase 7 consolidated everything into a single source of
+truth: the device tree.
+</p>
+
+<h3>From YAML to FDT</h3>
+
+<p>
+The first attempt used a custom YAML schema with a Python code generator
+(<code>dtgen</code>) that emitted C++ constexpr headers. It worked, but
+it was proprietary&mdash;no tooling ecosystem, no standards compliance,
+and the generated headers had to be regenerated on every schema change.
+</p>
+
+<p>
+The rework (commit <code>577e8ab</code>) replaced YAML entirely with
+the industry-standard <strong>Flattened Device Tree</strong> format used
+by Linux, Zephyr, and U-Boot. Each board gets a <code>.dts</code>
+(Device Tree Source) file written in the standard DTS v1 syntax:
+</p>
+
+<pre><code>/dts-v1/;
+/ {
+    compatible = "ms-os,stm32f207zgt6";
+    model = "STM32F207ZGT6";
+    board { name = "Custom (F207)"; mcu = "STM32F207ZGT6"; };
+    clocks { system-clock = &lt;120000000&gt;; };
+    memory { flash { reg = &lt;0x08000000 0x100000&gt;; }; };
+    console { uart = &lt;2&gt;; baud = &lt;115200&gt;; };
+};</code></pre>
+
+<p>
+A Python tool chain converts DTS to a binary DTB: <code>fdtlib.py</code>
+builds the FDT binary from Python objects, <code>build_dtbs.py</code>
+orchestrates the pipeline for all boards, and <code>dtb2cpp.py</code>
+embeds the resulting binary as a C++ <code>const uint8_t[]</code> array
+that gets linked into the firmware. At boot, the kernel parses the
+embedded DTB blob and fills a <code>BoardConfig</code> struct.
+</p>
+
+<h3>The Parser</h3>
+
+<p>
+The FDT parser (<code>Fdt.h</code> / <code>Fdt.cpp</code>) is a
+read-only walker over the DTB binary. It validates the magic number
+(<code>0xD00DFEED</code>), navigates the token stream (BEGIN_NODE,
+END_NODE, PROP, NOP, END), and provides accessor functions:
+<code>findNode()</code> walks a path like <code>/clocks/system-clock</code>,
+<code>findProperty()</code> locates a named property within a node,
+<code>readU32()</code> and <code>readString()</code> extract typed values.
+</p>
+
+<p>
+All multi-byte values in DTB are big-endian. The parser converts with
+<code>__builtin_bswap32()</code> on the little-endian ARM targets. All
+pointers returned by the parser point directly into the DTB blob&mdash;no
+copies, no allocations. The parser is inherently thread-safe because it
+never modifies the blob.
+</p>
+
+<h3>DTS Source Files</h3>
+
+<p>
+Three boards, three DTS files, each describing: board identity
+(compatible string, model name), clock tree (SYSCLK, APB1, APB2, HSE),
+memory regions (flash base and size, SRAM, optional CCM), console UART
+(peripheral number, baud rate, TX/RX pin assignments with alternate
+function numbers), LED pin, and feature flags (FPU presence). The shell's
+<code>dt</code> command displays the parsed config at runtime, giving
+developers immediate visibility into the board configuration without
+reading source code.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 7:</strong> Board configuration lives in standard
+FDT device trees. Three DTS source files, a Python build pipeline, and a
+kernel FDT parser replace all hardcoded board constants. The shell
+<code>dt</code> command displays the parsed tree at runtime.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 9                                -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 9</span>
+  Conserving Every Milliamp (Phase 8)
+</h2>
+
+<div class="epigraph">
+  "The greenest energy is the energy you don't use."
+  <div class="attribution">&mdash; engineering proverb</div>
+</div>
+
+<p>
+An embedded system that busy-loops in its idle thread wastes power and
+generates heat. For battery-powered devices, it can mean the difference
+between hours and days of runtime. Phase 8 added power management to
+ms-os: the kernel now sleeps when there is nothing to do.
+</p>
+
+<p>
+The API is deliberately minimal&mdash;three functions in the architecture
+abstraction layer:
+</p>
+
+<p>
+<strong><code>waitForInterrupt()</code></strong> issues the ARM
+<code>WFI</code> instruction. The CPU enters a low-power sleep state,
+clocks stop, and it wakes on the next interrupt (typically SysTick or a
+peripheral IRQ). The idle thread calls this in a loop: when no thread is
+ready to run, the CPU sleeps instead of spinning.
+</p>
+
+<p>
+<strong><code>enableSleepOnExit()</code></strong> sets the SLEEPONEXIT
+bit in the Cortex-M System Control Register. With this enabled, the CPU
+automatically enters WFI when returning from any ISR to Thread mode,
+instead of resuming the idle thread just to call WFI again. This
+eliminates one unnecessary context switch per interrupt.
+</p>
+
+<p>
+<strong><code>enableDeepSleep()</code></strong> sets the SLEEPDEEP bit,
+which changes WFI from light sleep (clocks running, microsecond wake) to
+Stop mode (PLL and oscillators disabled, much lower power, but longer
+wake latency). This is opt-in&mdash;applications that need fast interrupt
+response leave it disabled. On the Cortex-A9 (PYNQ-Z2), deep sleep is a
+no-op since the Zynq power controller handles sleep states differently.
+</p>
+
+<p>
+Testing power states on a host machine is inherently impossible&mdash;you
+cannot measure current draw on x86. The mock architecture layer tracks
+state in global variables (<code>g_wfiCount</code>,
+<code>g_deepSleep</code>, <code>g_sleepOnExit</code>) that tests assert
+against: "after calling enableDeepSleep(), the flag should be true."
+Functional correctness, not electrical measurement.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 8:</strong> The idle thread sleeps via WFI
+instead of busy-looping. Sleep-on-exit and deep sleep modes are available
+for power-sensitive applications. Three-function API, zero heap
+allocations, fully testable on host.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 10                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 10</span>
+  A Window Into the Kernel (Phase 9)
+</h2>
+
+<div class="epigraph">
+  "The most effective debugging tool is still careful thought, coupled
+  with judiciously placed print statements."
+  <div class="attribution">&mdash; Brian Kernighan</div>
+</div>
+
+<p>
+Until Phase 9, the only way to observe a running ms-os system was to
+read crash dumps or add temporary printf calls. There was no runtime
+introspection. The kernel shell changed that: connect a terminal to the
+console UART at 115200 baud and type commands.
+</p>
+
+<h3>The Shell</h3>
+
+<p>
+The shell is a character-driven state machine. The application polls the
+UART for received bytes and feeds each one to
+<code>shellProcessChar()</code>. Printable characters are echoed and
+appended to an 80-byte line buffer. Backspace erases the last character.
+Enter triggers command dispatch: the shell compares the buffered line
+against a static table of known commands and calls the matching handler.
+</p>
+
+<p>
+The design uses a <strong>function pointer for output</strong>
+(<code>ShellWriteFn</code>) instead of calling the UART directly. This
+makes the shell fully testable on the host: tests provide a callback
+that appends to a <code>std::string</code>, then assert on the captured
+output. No hardware, no mocks of serial peripherals&mdash;just strings.
+</p>
+
+<h3>Commands</h3>
+
+<p>
+Six built-in commands provide runtime visibility:
+</p>
+
+<p>
+<strong><code>ps</code></strong> lists every thread: TID, name, state
+(Run, Ready, Block, Sleep), priority, and stack size. This is
+indispensable for debugging scheduling issues&mdash;you can see at a
+glance which thread is blocked and which is hogging the CPU.
+</p>
+
+<p>
+<strong><code>mem</code></strong> shows heap statistics: total size, used
+bytes, free bytes, peak usage (high water mark), allocation count, and
+largest free block. The largest-free-block metric reveals fragmentation
+without needing a heap walk command.
+</p>
+
+<p>
+<strong><code>uptime</code></strong> displays kernel ticks and elapsed
+seconds since boot. <strong><code>version</code></strong> shows the ms-os
+version string. <strong><code>dt</code></strong> displays the parsed
+device tree: board name, MCU, architecture, clock frequencies, memory
+regions with base addresses and sizes, console UART configuration, and
+LED pin. <strong><code>help</code></strong> lists all available commands.
+</p>
+
+<h3>Character-Driven Design</h3>
+
+<p>
+A key decision was making the shell <strong>passive</strong>: it does
+not own a UART driver or run a receive loop. The application thread
+polls the UART and calls <code>shellProcessChar()</code> for each byte.
+This means the shell coexists peacefully with any I/O architecture&mdash;polled,
+interrupt-driven, or DMA-based. It also means the shell thread does not
+need to be high priority; it processes characters whenever the
+application gives it CPU time.
+</p>
+
+<p>
+One challenge in a freestanding kernel environment: no <code>sprintf</code>.
+The shell implements its own <code>uintToStr()</code> and
+<code>hexToStr()</code> converters for formatting numbers. Column
+alignment for the <code>ps</code> table is done with fixed-width string
+padding. It is not pretty code, but it works without pulling in the
+C standard library.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 9:</strong> ms-os has an interactive shell with
+six commands for runtime introspection. Character-driven, hardware-independent,
+fully tested on host. Connect a terminal and type <code>ps</code> to see
+your threads.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 11                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 11</span>
+  The Safety Net (CI &amp; GitHub Pages)
+</h2>
+
+<div class="epigraph">
+  "If it hurts, do it more frequently, and bring the pain forward."
+  <div class="attribution">&mdash; Jez Humble</div>
+</div>
+
+<p>
+By this point ms-os had 297 C++ unit tests, 152 Python tests, three
+cross-compilation targets, and ten completed phases of development. All
+of it built and tested manually. Every merge was a <code>python3
+build.py -t</code> on one developer's machine with one compiler. The
+CLAUDE.md file aspirationally mentioned "GitHub Actions with matrix
+testing (GCC + Clang, Debug + Release)" but no workflow existed. It was
+time to close that gap.
+</p>
+
+<h3>Why CI Matters</h3>
+
+<p>
+A bare-metal RTOS has a unique CI challenge: you cannot run the firmware
+in CI (there is no hardware). But you <em>can</em> verify everything
+that does not require silicon: host-compiled unit tests, Python code
+generator tests, and cross-compilation itself. If the ARM build fails,
+you know immediately&mdash;not after flashing a board and wondering why
+the LED does not blink.
+</p>
+
+<p>
+The second motivation was compiler diversity. GCC and Clang have
+different warning sets, different template instantiation behavior, and
+different optimization strategies. Code that compiles cleanly on GCC
+may trigger warnings&mdash;or outright errors&mdash;on Clang. With
+<code>-Werror</code> enabled, a Clang build failure is a real bug that
+GCC silently accepted.
+</p>
+
+<h3>The Matrix</h3>
+
+<p>
+The CI workflow (<code>.github/workflows/ci.yml</code>) defines three
+jobs that run in parallel:
+</p>
+
+<p>
+<strong>Host tests</strong> run a 2x2 matrix: {GCC, Clang} x {Debug,
+Release} = 4 configurations. Each cell checks out the repository with
+submodules (Google Test lives in <code>test/vendor/googletest</code>),
+configures CMake with the appropriate compiler and build type, builds
+the test executables, and runs <code>ctest --output-on-failure</code>.
+The <code>fail-fast: false</code> setting ensures all four cells run to
+completion even if one fails&mdash;you want to see <em>all</em> the
+breakage, not just the first.
+</p>
+
+<p>
+<strong>Python tests</strong> run pytest across four test directories:
+the dtgen schema tests, the ipcgen embedded emitter tests, the dtb2cpp
+round-trip tests, and the crash monitor tests. These verify the code
+generation toolchain that produces C++ source from IDL files and device
+tree descriptions.
+</p>
+
+<p>
+<strong>Cross-compilation</strong> runs a 3-element matrix over the
+hardware targets: stm32f207zgt6, stm32f407zgt6, and pynq-z2. Each cell
+installs the ARM toolchain from Ubuntu's package repository, configures
+CMake with the cross-compilation toolchain file and the target variable,
+and builds the firmware. No flashing, no testing&mdash;just "does it
+compile?" This catches linker script errors, missing symbols, and
+architecture-specific build failures.
+</p>
+
+<h3>GitHub Pages</h3>
+
+<p>
+The project story&mdash;this very document&mdash;was linked from the
+README as a relative path to <code>docs/the-story-of-ms-os.html</code>.
+GitHub renders raw HTML as source code, not as a web page. The fix was
+a second workflow (<code>.github/workflows/pages.yml</code>) that
+deploys the <code>docs/</code> directory to GitHub Pages whenever it
+changes. Now the story is a proper web page at
+<code>https://mrunmoy.github.io/elysium/the-story-of-ms-os.html</code>.
+</p>
+
+<p>
+The Pages workflow uses the modern <code>actions/deploy-pages</code>
+action with OIDC token authentication&mdash;no personal access tokens,
+no deploy keys. A concurrency group ensures only one deployment runs at
+a time, and <code>cancel-in-progress</code> kills stale deployments when
+a new push arrives.
+</p>
+
+<h3>The README Refresh</h3>
+
+<p>
+While setting up CI, we discovered the README had fallen behind:
+Phase 6 was missing from the features table, the test count still said
+269 (it was 297), and the Python test count said 135 (now 152). The
+story link pointed to a raw HTML file instead of the Pages URL. All
+fixed in the same commit. A CI badge at the top of the README now
+shows build status at a glance.
+</p>
+
+<div class="key-decision">
+<strong>Post-push manual step:</strong> The repository owner must visit
+GitHub Settings &gt; Pages and set Source to "GitHub Actions" (one-time).
+After that, the Pages workflow deploys automatically on every docs change.
+</div>
+
+<div class="highlight">
+<strong>Status after CI setup:</strong> Every push to main triggers 8
+parallel CI jobs: 4 host-test matrix cells, 1 Python test job, and 3
+cross-compilation targets. The project story is served as a rendered web
+page via GitHub Pages. The README reflects current test counts and
+features.
+</div>
+
+<!-- ============================================================ -->
 <!--                      EPILOGUE                                -->
 <!-- ============================================================ -->
 <h2 class="chapter">
@@ -2323,25 +2925,26 @@ resolved. Binary size for the full RTOS with three threads:
 </div>
 
 <p>
-As of February 2026, ms-os runs on three hardware targets spanning two ARM
-architecture families, with 136 passing unit tests. The kernel schedules
-8 threads across 32 priority levels, protects memory with the MPU, allocates
-from both fixed-size pools and a coalescing heap, prints detailed crash dumps
-when things go wrong, context-switches correctly on both Cortex-M and
-Cortex-A9, and outputs thread-safe serial on all platforms.
+As of February 2026, ms-os has completed ten phases of development. It runs
+on three hardware targets spanning two ARM architecture families, with
+297 C++ unit tests and 152 Python tests verified by GitHub Actions CI on
+every push. The kernel schedules 8 threads across 32 priority levels,
+enforces a hardware privilege boundary with SVC syscalls and MPU protection,
+communicates through Minix-style IPC, parses standard FDT device trees at
+runtime, conserves power via WFI and sleep modes, and provides an interactive
+shell for runtime introspection. All of it cross-compiles for Cortex-M3,
+Cortex-M4, and Cortex-A9 from the same source tree.
 </p>
 
 <p>
-The PYNQ-Z2 bringup proved that the architecture was sound&mdash;and the
-debugging proved it was fragile in the right ways. The r4/r5 register
-clobbering bug could only manifest on real hardware under real preemption.
-It taught us that callee-saved registers in an IRQ handler are not free
-scratch space. Code written for a 120 MHz Cortex-M3 with 128 KB of SRAM
-runs on a 650 MHz Cortex-A9 with 512 MB of DDR3. The same scheduler, the
-same mutex, the same heap allocator&mdash;just a different set of assembly
-files and HAL implementations selected at build time. That portability
-didn't happen by accident. It was the result of disciplined abstraction
-from day one.
+The journey from a blinking LED to a microkernel with IPC, device trees, and
+CI has been one of accumulation. Each phase built on the infrastructure of
+the last. The dual build system from Phase 0 made every subsequent phase
+testable on the host. The architecture abstraction from Phase 4 made every
+subsequent feature portable across three targets. The SVC dispatch from
+Phase 6 made the IPC from Phase 5 available to unprivileged threads. None
+of these phases exist in isolation; they form a stack where each layer
+depends on the ones below.
 </p>
 
 <p>
@@ -2349,18 +2952,16 @@ But the journey is far from over. The roadmap includes:
 </p>
 
 <ul>
-  <li><strong>IPC message passing</strong> &mdash; Microkernel inter-process
-      communication using the ms-ipc library as inspiration</li>
-  <li><strong>Unprivileged threads</strong> &mdash; Run user threads in
-      unprivileged mode with MPU/MMU enforcement</li>
   <li><strong>User-space drivers</strong> &mdash; Move device drivers out
-      of the kernel into user-space services</li>
+      of the kernel into user-space services communicating via IPC</li>
   <li><strong>SMP support</strong> &mdash; Utilize the PYNQ-Z2's second
-      Cortex-A9 core</li>
-  <li><strong>Device tree</strong> &mdash; YAML-based hardware description
-      for runtime configuration</li>
+      Cortex-A9 core with per-core scheduling and cross-core IPC</li>
+  <li><strong>Filesystem</strong> &mdash; A minimal filesystem for
+      configuration storage and logging</li>
   <li><strong>Custom bootloader</strong> &mdash; Replace u-boot with our own,
       using <code>ps7_init</code> for standalone Zynq PS initialization</li>
+  <li><strong>Networking</strong> &mdash; A lightweight TCP/IP stack for
+      the STM32 Ethernet peripheral</li>
 </ul>
 
 <p>
@@ -2480,6 +3081,44 @@ continues to grow.
     threads' local variables. Added thread-safe UART at the HAL level
     with interrupt save/restore guards. All three threads verified correct
     on PYNQ-Z2 hardware.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 5 &mdash; IPC Message Passing</div>
+    Minix-style synchronous send/receive/reply with 64-byte fixed messages,
+    per-thread 4-slot mailboxes, async notifications (32-bit bitmask),
+    Python IDL code generator (ipcgen), and Echo service demo app.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 6 &mdash; Syscall Interface</div>
+    Unprivileged threads via ARM CONTROL register nPRIV bit. SVC dispatch
+    with 23 syscall numbers covering the full kernel API. Handler-mode
+    g_inSyscall flag to allow blocking inside SVC context.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 7 &mdash; Device Tree</div>
+    Replaced custom YAML dtgen with standard FDT binary device tree.
+    DTS v1 source files for all three boards, Python fdtlib DTB builder,
+    dtb2cpp embedder, read-only kernel FDT parser. Shell dt command for
+    runtime board config display.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 8 &mdash; Power Management</div>
+    WFI in idle thread, sleep-on-exit (SLEEPONEXIT bit), deep sleep
+    (SLEEPDEEP bit). Three-function arch API. Mock state tracking for
+    host testing.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 9 &mdash; Interactive Shell</div>
+    Character-driven CLI over UART with six commands: help, ps, mem,
+    uptime, version, dt. Function-pointer I/O for host testability.
+    Custom integer and hex formatters for freestanding environment.
+  </div>
+  <div class="event">
+    <div class="event-title">CI &amp; GitHub Pages</div>
+    GitHub Actions CI with 8 parallel jobs: 4 host-test matrix cells
+    (GCC/Clang x Debug/Release), Python tests, and 3 cross-compilation
+    targets. GitHub Pages deployment for project documentation.
+    297 C++ tests, 152 Python tests.
   </div>
 </div>
 

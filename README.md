@@ -1,5 +1,7 @@
 # ms-os
 
+[![CI](https://github.com/Mrunmoy/elysium/actions/workflows/ci.yml/badge.svg)](https://github.com/Mrunmoy/elysium/actions/workflows/ci.yml)
+
 Microkernel Real-Time Operating System targeting ARM Cortex A/R/M processors.
 
 Hardware targets:
@@ -7,7 +9,7 @@ Hardware targets:
 - **STM32F407ZGT6** (Cortex-M4, 168 MHz, 1 MB Flash, 128 KB SRAM)
 - **PYNQ-Z2** (Zynq-7020, dual Cortex-A9 @ 650 MHz, 512 MB DDR3)
 
-For the full development story, see [docs/the-story-of-ms-os.html](docs/the-story-of-ms-os.html).
+For the full development story, see [The Story of ms-os](https://mrunmoy.github.io/elysium/the-story-of-ms-os.html).
 
 ## Features
 
@@ -19,11 +21,12 @@ For the full development story, see [docs/the-story-of-ms-os.html](docs/the-stor
 | 3 | Memory management (BlockPool, Heap, MPU) | Complete |
 | 4 | Multi-target (Cortex-A9 port, PYNQ-Z2, GIC, crash dump) | Complete |
 | 5 | IPC / message passing (Minix-style send/receive/reply, IDL codegen) | Complete |
+| 6 | Syscall interface (SVC dispatch, unprivileged threads) | Complete |
 | 7 | Device tree (FDT binary, runtime parser, DTS source, dt shell command) | Complete |
 | 8 | Power management (WFI idle, sleep-on-exit, deep sleep, clock gating) | Complete |
 | 9 | Shell (interactive CLI: ps, mem, uptime, version, dt, help) | Complete |
 
-**Test coverage:** 269 C++ host tests, 135 Python generator tests.
+**Test coverage:** 297 C++ host tests, 152 Python tests.
 
 ## Prerequisites
 
