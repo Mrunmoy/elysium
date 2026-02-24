@@ -5,6 +5,7 @@
 // is hardware-independent and testable on the host.
 
 #include "kernel/Shell.h"
+#include "kernel/Version.h"
 #include "kernel/Thread.h"
 #include "kernel/Kernel.h"
 #include "kernel/Heap.h"
@@ -23,8 +24,6 @@ namespace
     static constexpr std::uint8_t kMaxLineLength = 80;
     char s_lineBuffer[kMaxLineLength + 1];
     std::uint8_t s_linePos = 0;
-
-    static constexpr const char *kVersion = "ms-os v0.9.0";
 
     // Integer-to-string (no sprintf in freestanding environment)
     void uintToStr(std::uint32_t val, char *buf, std::size_t bufSize)
@@ -191,7 +190,7 @@ namespace
 
     void cmdVersion()
     {
-        writeLine(kVersion);
+        writeLine(version::kString);
     }
 
     void hexToStr(std::uint32_t val, char *buf, std::size_t bufSize)
