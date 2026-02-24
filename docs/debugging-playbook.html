@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ms-os Debugging Playbook</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2.5cm 2cm;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 11.5pt;
+    line-height: 1.65;
+    color: #1a1a1a;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 2cm 1.5cm;
+    background: #fff;
+  }
+
+  /* ---- Title Page ---- */
+  .title-page {
+    text-align: center;
+    page-break-after: always;
+    padding-top: 6cm;
+  }
+  .title-page h1 {
+    font-size: 36pt;
+    font-weight: 700;
+    color: #1a3a5c;
+    letter-spacing: 2px;
+    margin-bottom: 0.2em;
+  }
+  .title-page .subtitle {
+    font-size: 14pt;
+    color: #5a7a9a;
+    font-style: italic;
+    margin-bottom: 3cm;
+  }
+  .title-page .meta {
+    font-size: 11pt;
+    color: #666;
+    line-height: 2;
+  }
+
+  /* ---- Chapter headings ---- */
+  h2.chapter {
+    font-size: 22pt;
+    color: #1a3a5c;
+    border-bottom: 3px solid #c0392b;
+    padding-bottom: 8px;
+    margin-top: 2.5em;
+    page-break-before: always;
+  }
+  h2.chapter .ch-num {
+    display: block;
+    font-size: 11pt;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #c0392b;
+    font-weight: 400;
+    margin-bottom: 4px;
+  }
+
+  h3 {
+    font-size: 14pt;
+    color: #2c3e50;
+    margin-top: 1.8em;
+    margin-bottom: 0.5em;
+  }
+
+  h4 {
+    font-size: 12pt;
+    color: #555;
+    font-style: italic;
+    margin-top: 1.4em;
+    margin-bottom: 0.4em;
+  }
+
+  /* ---- Body text ---- */
+  p { margin: 0.8em 0; text-align: justify; }
+
+  strong { color: #1a3a5c; }
+
+  em { color: #555; }
+
+  .highlight {
+    background: #fef9e7;
+    border-left: 4px solid #f39c12;
+    padding: 10px 14px;
+    margin: 1.2em 0;
+    font-size: 10.5pt;
+  }
+
+  .key-decision {
+    background: #eaf2f8;
+    border-left: 4px solid #2980b9;
+    padding: 10px 14px;
+    margin: 1.2em 0;
+    font-size: 10.5pt;
+  }
+
+  .lesson {
+    background: #fdedec;
+    border-left: 4px solid #c0392b;
+    padding: 10px 14px;
+    margin: 1.2em 0;
+    font-size: 10.5pt;
+  }
+
+  /* ---- Diagrams ---- */
+  .diagram {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin: 1.5em 0;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    line-height: 1.4;
+    white-space: pre;
+    overflow-x: auto;
+    color: #2c3e50;
+  }
+  .diagram .label {
+    color: #c0392b;
+    font-weight: bold;
+  }
+  .diagram .comment {
+    color: #7f8c8d;
+  }
+
+  /* ---- Code ---- */
+  code {
+    font-family: 'Courier New', monospace;
+    font-size: 10pt;
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #c0392b;
+  }
+
+  pre {
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 14px 18px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 1.2em 0;
+  }
+  pre .kw { color: #e74c3c; }
+  pre .str { color: #2ecc71; }
+  pre .cmt { color: #7f8c8d; }
+  pre .fn { color: #f39c12; }
+  pre .num { color: #9b59b6; }
+
+  /* ---- Tables ---- */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.2em 0;
+    font-size: 10pt;
+  }
+  th {
+    background: #1a3a5c;
+    color: white;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #ddd;
+  }
+  tr:nth-child(even) { background: #f8f9fa; }
+
+  /* ---- Epigraph ---- */
+  .epigraph {
+    font-style: italic;
+    color: #666;
+    text-align: right;
+    margin: 2em 0;
+    padding-right: 1em;
+    font-size: 11pt;
+  }
+  .epigraph .attribution {
+    font-size: 9.5pt;
+    margin-top: 4px;
+  }
+
+  /* ---- Terminal / Command Sessions ---- */
+  .cmd-session {
+    background: #1a1a2e;
+    color: #a3be8c;
+    padding: 14px 18px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    overflow-x: auto;
+    margin: 1.2em 0;
+    border-left: 3px solid #a3be8c;
+    white-space: pre;
+  }
+  .cmd-session .prompt {
+    color: #88c0d0;
+    font-weight: bold;
+  }
+  .cmd-session .output {
+    color: #d8dee9;
+  }
+
+  @media print {
+    body { padding: 0; max-width: none; }
+    .no-print { display: none; }
+    h2.chapter { page-break-before: always; }
+    .diagram, pre, table, .highlight, .key-decision, .lesson { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div style="font-size: 9pt; color: #999; margin-bottom: 2em;">
+  <a href="the-story-of-ms-os.html">Back to The Story of ms-os</a> |
+  <a href="architecture.html">Architecture Guide</a>
+</div>
+
+<!-- ============================================================ -->
+<!--                        TITLE PAGE                            -->
+<!-- ============================================================ -->
+<div class="title-page">
+  <h1>ms-os<br>Debugging Playbook</h1>
+  <div class="subtitle">Commands, Workflows, and War Stories for ARM RTOS Debugging</div>
+  <div class="meta">
+    STM32F207 / STM32F407 / PYNQ-Z2 (Zynq-7020)<br>
+    Cortex-M3 / Cortex-M4 / Cortex-A9<br>
+    <br>
+    February 2026
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!--                TABLE OF CONTENTS                              -->
+<!-- ============================================================ -->
+<h2 class="chapter" style="page-break-before: avoid;"><span class="ch-num">Contents</span>Table of Contents</h2>
+
+<ol style="font-size: 10.5pt; line-height: 2.2;">
+  <li><a href="#jtag-setup">JTAG and Debug Setup</a></li>
+  <li><a href="#gdb-cookbook">GDB Session Cookbook</a></li>
+  <li><a href="#crash-dumps">Crash Dump Interpretation</a></li>
+  <li><a href="#bug-hunts">Real Bug Hunts</a></li>
+  <li><a href="#openocd-scripts">OpenOCD TCL Scripts</a></li>
+  <li><a href="#serial">Serial Port Debugging</a></li>
+  <li><a href="#toolchain">Toolchain Quick Reference</a></li>
+</ol>
+
+<div class="epigraph">
+  "Debugging is twice as hard as writing the code in the first place.<br>
+  Therefore, if you write the code as cleverly as possible, you are,<br>
+  by definition, not smart enough to debug it."
+  <div class="attribution">-- Brian Kernighan</div>
+</div>
+
+
+<!-- ============================================================ -->
+<!--               SECTION 1: JTAG AND DEBUG SETUP                -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="jtag-setup"><span class="ch-num">Section 1</span>JTAG and Debug Setup</h2>
+
+<p>
+All debugging starts with a reliable connection between your host machine and
+the target board. ms-os targets three boards across two debug interfaces:
+<strong>J-Link SWD</strong> for the STM32 family and <strong>OpenOCD via FTDI</strong>
+for the PYNQ-Z2 (Zynq-7020).
+</p>
+
+<h3>1.1 J-Link SWD for STM32 (F207/F407)</h3>
+
+<p>
+The SEGGER J-Link connects to STM32 boards via the SWD (Serial Wire Debug)
+interface. Two-wire: SWDIO + SWCLK. Power the target separately; J-Link does
+not supply power by default.
+</p>
+
+<h4>Interactive session with JLinkExe</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>JLinkExe -device STM32F407ZG -if SWD -speed 4000
+<span class="output">SEGGER J-Link Commander V7.92
+Connecting to target via SWD
+Found SW-DP with ID 0x2BA01477
+Cortex-M4 identified.</span>
+
+<span class="prompt">J-Link&gt; </span>connect
+<span class="output">Target connection has been established.</span>
+
+<span class="prompt">J-Link&gt; </span>loadbin build/app/threads/threads.bin 0x08000000
+<span class="output">Downloading 28672 bytes @ address 0x08000000
+Comparing flash   [100%] Done.
+Erasing flash     [100%] Done.
+Programming flash [100%] Done.
+O.K.</span>
+
+<span class="prompt">J-Link&gt; </span>r
+<span class="output">Reset delay: 0 ms
+Reset type NORMAL: Resets core &amp; peripherals via SYSRESETREQ &amp; VECTRESET bit.</span>
+
+<span class="prompt">J-Link&gt; </span>g
+<span class="output">Running...</span></div>
+
+<p>
+For the STM32F207, replace <code>STM32F407ZG</code> with <code>STM32F207ZG</code>.
+Everything else remains the same -- both are Cortex-M, both use SWD, and both
+have FLASH at <code>0x08000000</code>.
+</p>
+
+<h4>Starting the GDB server</h4>
+
+<p>
+The GDB server runs alongside JLinkExe (or instead of it) and exposes a
+TCP port for GDB connections.
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>JLinkGDBServer -device STM32F407ZG -if SWD -speed 4000 -port 2331 -nogui &amp;
+<span class="output">[1] 48291
+SEGGER J-Link GDB Server V7.92
+Listening on TCP/IP port 2331
+Connecting to target...
+Connected to target</span></div>
+
+<div class="highlight">
+<strong>Tip:</strong> Run the GDB server in the background (with <code>&amp;</code>) so you
+can use the same terminal for GDB. Kill it with <code>kill %1</code> when done.
+</div>
+
+
+<h3>1.2 OpenOCD for PYNQ-Z2</h3>
+
+<p>
+The PYNQ-Z2 board exposes JTAG through its on-board FTDI FT2232 USB-to-serial
+converter. The FT2232 provides two channels: channel 0 for JTAG and channel 1
+for UART serial output. The USB VID:PID is <code>0403:6010</code>.
+</p>
+
+<h4>Configuration file</h4>
+
+<pre><span class="cmt"># pynq-z2.cfg</span>
+adapter driver ftdi
+ftdi vid_pid <span class="num">0x0403</span> <span class="num">0x6010</span>
+ftdi channel <span class="num">0</span>
+ftdi layout_init <span class="num">0x0038</span> <span class="num">0x003b</span>
+transport select jtag
+source [find target/zynq_7000.cfg]</pre>
+
+<h4>Starting OpenOCD</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>openocd -f pynq-z2.cfg
+<span class="output">Open On-Chip Debugger 0.12.0
+Info : FTDI SWD/JTAG adapter
+Info : clock speed 1000 kHz
+Info : JTAG tap: zynq.dap tap/device found: 0x4ba00477
+Info : zynq.cpu.0: hardware has 6 breakpoints, 4 watchpoints</span></div>
+
+<p>
+OpenOCD stays in the foreground. Open a second terminal for Telnet or GDB
+connections:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>telnet localhost 4444
+<span class="output">Open On-Chip Debugger</span>
+<span class="prompt">&gt; </span>halt
+<span class="output">target halted in ARM state due to debug-request</span>
+<span class="prompt">&gt; </span>load_image build/app/hello/hello 0x00100000
+<span class="output">28672 bytes written at address 0x00100000</span>
+<span class="prompt">&gt; </span>resume 0x00100000</div>
+
+
+<h3>1.3 USB Device Mapping</h3>
+
+<p>
+USB serial devices shift when OpenOCD claims the JTAG channel. This table
+shows the mapping for a setup with both J-Link and PYNQ-Z2 connected:
+</p>
+
+<table>
+  <tr>
+    <th>Device</th>
+    <th>Without OpenOCD</th>
+    <th>With OpenOCD</th>
+  </tr>
+  <tr>
+    <td>J-Link SWD (STM32)</td>
+    <td><code>/dev/ttyUSB0</code></td>
+    <td><code>/dev/ttyUSB0</code></td>
+  </tr>
+  <tr>
+    <td>PYNQ JTAG (FT2232 Ch.0)</td>
+    <td><code>/dev/ttyUSB1</code></td>
+    <td>(claimed by OpenOCD)</td>
+  </tr>
+  <tr>
+    <td>PYNQ UART (FT2232 Ch.1)</td>
+    <td><code>/dev/ttyUSB2</code></td>
+    <td><code>/dev/ttyUSB1</code></td>
+  </tr>
+</table>
+
+<p>
+When OpenOCD claims the JTAG channel, the UART device shifts from
+<code>/dev/ttyUSB2</code> to <code>/dev/ttyUSB1</code>. Use <code>dmesg</code>
+or <code>ls /dev/serial/by-id/</code> to verify which device is which:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>ls -la /dev/serial/by-id/
+<span class="output">usb-SEGGER_J-Link_000760012345-if00 -&gt; ../../ttyUSB0
+usb-Digilent_PYNQ-Z2_123456-if01-port0 -&gt; ../../ttyUSB1</span></div>
+
+<div class="lesson">
+<strong>Lesson:</strong> If your serial monitor shows garbage or nothing at all, the
+first thing to check is whether the USB device index has shifted. This happens
+every time OpenOCD is started or stopped. Build the habit of running
+<code>ls /dev/serial/by-id/</code> before connecting.
+</div>
+
+
+<!-- ============================================================ -->
+<!--              SECTION 2: GDB SESSION COOKBOOK                   -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="gdb-cookbook"><span class="ch-num">Section 2</span>GDB Session Cookbook</h2>
+
+<p>
+GDB is the primary interactive debugger for ms-os. These recipes cover the most
+common tasks: connecting, inspecting state, reading fault registers, and
+translating addresses to source lines.
+</p>
+
+<h3>2.1 Starting GDB</h3>
+
+<h4>Batch mode (quick register dump after a crash)</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>gdb -batch \
+  -ex "set architecture arm" \
+  -ex "file build/app/threads/threads" \
+  -ex "target remote :2331" \
+  -ex "monitor halt" \
+  -ex "info registers" \
+  -ex "bt"
+<span class="output">The target architecture is assumed to be arm
+Reading symbols from build/app/threads/threads...
+Remote debugging using :2331
+0x08001a3c in kernel::idle (arg=0x0) at kernel/src/core/Kernel.cpp:28
+r0   0x0        0
+r1   0xe000ed00 3758157056
+r2   0x0        0
+...
+#0  0x08001a3c in kernel::idle (arg=0x0)
+#1  0x08000abc in ledThread (arg=0x0)
+#2  0x00000000 in ?? ()</span></div>
+
+<div class="highlight">
+<strong>Important:</strong> Use <code>gdb</code> from the Nix dev shell, NOT
+<code>arm-none-eabi-gdb</code>. The ARM toolchain's GDB has a broken Python 3.9
+dependency that causes segfaults on modern hosts. The multilib <code>gdb</code>
+in Nix works correctly with ARM ELF files when you set the architecture
+explicitly with <code>set architecture arm</code>.
+</div>
+
+<h4>Interactive session</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>gdb
+<span class="output">(gdb)</span> <span class="prompt">set architecture arm</span>
+<span class="output">The target architecture is assumed to be arm</span>
+<span class="output">(gdb)</span> <span class="prompt">file build/app/threads/threads</span>
+<span class="output">Reading symbols from build/app/threads/threads...</span>
+<span class="output">(gdb)</span> <span class="prompt">target remote :2331</span>
+<span class="output">Remote debugging using :2331
+0x08001a3c in kernel::idle (arg=0x0)</span>
+<span class="output">(gdb)</span> <span class="prompt">monitor halt</span>
+<span class="output">Halting target CPU...</span></div>
+
+
+<h3>2.2 Essential Commands</h3>
+
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td><code>monitor halt</code></td><td>Halt the CPU</td></tr>
+  <tr><td><code>monitor reset</code></td><td>Reset the CPU</td></tr>
+  <tr><td><code>info registers</code></td><td>Show all core registers</td></tr>
+  <tr><td><code>bt</code></td><td>Backtrace (stack trace)</td></tr>
+  <tr><td><code>x/16x $sp</code></td><td>Dump 16 words from stack pointer</td></tr>
+  <tr><td><code>x/x 0xE000ED28</code></td><td>Read CFSR register (Cortex-M)</td></tr>
+  <tr><td><code>break *0x08001234</code></td><td>Break at address</td></tr>
+  <tr><td><code>stepi</code></td><td>Single instruction step</td></tr>
+  <tr><td><code>continue</code></td><td>Resume execution</td></tr>
+  <tr><td><code>print/x $control</code></td><td>Show CONTROL register</td></tr>
+  <tr><td><code>print/x $xpsr</code></td><td>Show xPSR (flags + exception number)</td></tr>
+  <tr><td><code>info threads</code></td><td>Show RTOS thread list (if plugin loaded)</td></tr>
+  <tr><td><code>x/32x 0x20000000</code></td><td>Dump first 128 bytes of SRAM</td></tr>
+  <tr><td><code>disassemble</code></td><td>Disassemble around current PC</td></tr>
+</table>
+
+
+<h3>2.3 Reading Fault Registers</h3>
+
+<h4>Cortex-M (F207/F407)</h4>
+
+<p>
+After a fault, the CPU halts (or enters the fault handler). These four SCB
+registers tell you what happened and where:
+</p>
+
+<div class="cmd-session"><span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED28</span>    <span class="output"># CFSR  -- Configurable Fault Status Register</span>
+<span class="output">0xe000ed28: 0x00008200</span>
+
+<span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED2C</span>    <span class="output"># HFSR  -- HardFault Status Register</span>
+<span class="output">0xe000ed2c: 0x40000000</span>
+
+<span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED34</span>    <span class="output"># MMFAR -- MemManage Fault Address Register</span>
+<span class="output">0xe000ed34: 0x00000000</span>
+
+<span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED38</span>    <span class="output"># BFAR  -- BusFault Address Register</span>
+<span class="output">0xe000ed38: 0xCCCCCCCC</span></div>
+
+<h4>Cortex-A9 (PYNQ-Z2, via OpenOCD Telnet)</h4>
+
+<p>
+The Cortex-A9 stores fault information in CP15 coprocessor registers, not
+memory-mapped SCB registers. Read them via OpenOCD's <code>arm mrc</code>
+command:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>monitor arm mrc 15 0 5 0 0    <span class="output"># DFSR  -- Data Fault Status Register</span>
+<span class="output">0x00000005</span>
+<span class="prompt">&gt; </span>monitor arm mrc 15 0 5 0 1    <span class="output"># IFSR  -- Instruction Fault Status Register</span>
+<span class="output">0x00000000</span>
+<span class="prompt">&gt; </span>monitor arm mrc 15 0 6 0 0    <span class="output"># DFAR  -- Data Fault Address Register</span>
+<span class="output">0xDEADBEEF</span>
+<span class="prompt">&gt; </span>monitor arm mrc 15 0 6 0 2    <span class="output"># IFAR  -- Instruction Fault Address Register</span>
+<span class="output">0x00000000</span></div>
+
+
+<h3>2.4 Address-to-Source Mapping</h3>
+
+<p>
+When you have a PC or LR address from a crash dump, these commands translate
+it back to a source file and line number.
+</p>
+
+<h4>addr2line -- Address to file:line</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-addr2line -e build/app/threads/threads -f -C 0x08000ABC
+<span class="output">ledThread(void*)
+/home/user/ms-os/app/threads/main.cpp:42</span></div>
+
+<h4>nm -- Symbol table lookup</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-nm build/app/threads/threads | grep ledThread
+<span class="output">08000abc T ledThread(void*)</span></div>
+
+<h4>objdump -- Full disassembly</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-objdump -d build/app/threads/threads | less
+<span class="output">08000abc &lt;ledThread(void*)&gt;:
+ 8000abc:   b580        push    {r7, lr}
+ 8000abe:   af00        add     r7, sp, #0
+ 8000ac0:   6078        str     r0, [r7, #4]
+ ...</span></div>
+
+<h4>size -- Memory usage at a glance</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-size build/app/threads/threads
+<span class="output">   text    data     bss     dec     hex filename
+  28432     168    4096   32696    7fb8 build/app/threads/threads</span></div>
+
+
+<!-- ============================================================ -->
+<!--            SECTION 3: CRASH DUMP INTERPRETATION               -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="crash-dumps"><span class="ch-num">Section 3</span>Crash Dump Interpretation</h2>
+
+<p>
+ms-os includes a built-in crash dump system. When a fault occurs, the fault
+handler captures the CPU state and prints a structured dump to the serial port.
+The crash dump system is split into three layers: <strong>arch-specific</strong>
+(fault register reading), <strong>board-specific</strong> (serial output), and
+<strong>common</strong> (formatting). This separation means the same crash dump
+format works on both Cortex-M and Cortex-A9.
+</p>
+
+<h3>3.1 Reading a Cortex-M Crash Dump</h3>
+
+<p>
+Here is a complete crash dump as it appears on the serial console, annotated
+with what each field means:
+</p>
+
+<div class="cmd-session"><span class="output">=== CRASH DUMP BEGIN ===
+Fault: HardFault                            </span><span class="prompt">&lt;-- fault type from xPSR IPSR field</span><span class="output">
+Thread: led (id=1)                          </span><span class="prompt">&lt;-- name and ID from TCB</span><span class="output">
+Registers:
+  PC  : 08000ABC                            </span><span class="prompt">&lt;-- instruction that faulted</span><span class="output">
+  LR  : 08000A34                            </span><span class="prompt">&lt;-- caller (return address)</span><span class="output">
+  SP  : 200007B8                            </span><span class="prompt">&lt;-- stack pointer at time of fault</span><span class="output">
+  R0  : 00000000
+  R1  : 00000001
+  R2  : E000ED00
+  R3  : 00000000
+  R12 : 00000000
+  xPSR: 61000003                            </span><span class="prompt">&lt;-- flags + exception number (3=HardFault)</span><span class="output">
+Fault Status:
+  CFSR : 00008200                           </span><span class="prompt">&lt;-- PRECISERR + BFARVALID</span><span class="output">
+  HFSR : 40000000                           </span><span class="prompt">&lt;-- FORCED (escalated from BusFault)</span><span class="output">
+  MMFAR: 00000000
+  BFAR : CCCCCCCC                           </span><span class="prompt">&lt;-- the bad address accessed</span><span class="output">
+Decoded:
+  -&gt; FORCED: Escalated to HardFault
+  -&gt; PRECISERR: Precise data bus error
+  -&gt; BFARVALID: BFAR = CCCCCCCC
+Stack: base=20000400 size=00000400
+EXC_RETURN: FFFFFFFD                        </span><span class="prompt">&lt;-- return to thread mode, PSP</span><span class="output">
+=== CRASH DUMP END ===</span></div>
+
+<p>
+Reading this dump: the <code>led</code> thread (thread 1) attempted to access
+address <code>0xCCCCCCCC</code>. The CFSR shows <code>PRECISERR</code> (precise
+bus error at a known address) with <code>BFARVALID</code> (the BFAR register
+holds the offending address). The HFSR shows <code>FORCED</code>, meaning the
+BusFault escalated to HardFault. The faulting instruction is at PC
+<code>0x08000ABC</code> -- run <code>addr2line</code> on that address to find
+the source line.
+</p>
+
+
+<h3>CFSR Bit Decoding Table</h3>
+
+<p>
+The Configurable Fault Status Register (CFSR) at <code>0xE000ED28</code> is a
+32-bit register composed of three sub-registers: MemManage FSR (bits 7:0),
+BusFault FSR (bits 15:8), and UsageFault FSR (bits 31:16).
+</p>
+
+<table>
+  <tr><th>Bit</th><th>Name</th><th>Description</th></tr>
+  <tr><td>[0]</td><td>IACCVIOL</td><td>Instruction access violation (MPU or Execute Never region)</td></tr>
+  <tr><td>[1]</td><td>DACCVIOL</td><td>Data access violation (MPU permission fault)</td></tr>
+  <tr><td>[3]</td><td>MUNSTKERR</td><td>MemManage fault on unstacking (return from exception)</td></tr>
+  <tr><td>[4]</td><td>MSTKERR</td><td>MemManage fault on stacking (exception entry)</td></tr>
+  <tr><td>[5]</td><td>MLSPERR</td><td>MemManage fault during lazy FP stacking (M4 only)</td></tr>
+  <tr><td>[7]</td><td>MMARVALID</td><td>MMFAR holds the valid faulting address</td></tr>
+  <tr><td>[8]</td><td>IBUSERR</td><td>Instruction bus error (fetch from invalid address)</td></tr>
+  <tr><td>[9]</td><td>PRECISERR</td><td>Precise data bus error (BFAR holds the address)</td></tr>
+  <tr><td>[10]</td><td>IMPRECISERR</td><td>Imprecise data bus error (BFAR may not be valid)</td></tr>
+  <tr><td>[11]</td><td>UNSTKERR</td><td>BusFault on unstacking (return from exception)</td></tr>
+  <tr><td>[12]</td><td>STKERR</td><td>BusFault on stacking (exception entry)</td></tr>
+  <tr><td>[15]</td><td>BFARVALID</td><td>BFAR holds the valid faulting address</td></tr>
+  <tr><td>[16]</td><td>UNDEFINSTR</td><td>Undefined instruction executed</td></tr>
+  <tr><td>[17]</td><td>INVSTATE</td><td>Invalid execution state (Thumb bit cleared on Thumb-only CPU)</td></tr>
+  <tr><td>[18]</td><td>INVPC</td><td>Invalid PC load (bad EXC_RETURN value)</td></tr>
+  <tr><td>[19]</td><td>NOCP</td><td>Coprocessor access (no FPU or FPU disabled)</td></tr>
+  <tr><td>[24]</td><td>UNALIGNED</td><td>Unaligned memory access (when UNALIGN_TRP enabled)</td></tr>
+  <tr><td>[25]</td><td>DIVBYZERO</td><td>Integer division by zero (when DIV_0_TRP enabled)</td></tr>
+</table>
+
+<div class="key-decision">
+<strong>Design note:</strong> ms-os enables both <code>DIV_0_TRP</code> and
+<code>UNALIGN_TRP</code> in the CCR during crash dump initialization
+(<code>archCrashDumpInit()</code>). This means division by zero and unaligned
+access will generate UsageFaults instead of silently returning zero or
+performing multiple aligned accesses.
+</div>
+
+
+<h3>HFSR Quick Reference</h3>
+
+<table>
+  <tr><th>Bit</th><th>Name</th><th>Description</th></tr>
+  <tr><td>[1]</td><td>VECTTBL</td><td>Vector table read error on exception entry</td></tr>
+  <tr><td>[30]</td><td>FORCED</td><td>Fault escalated to HardFault (original fault handler disabled or faulted)</td></tr>
+</table>
+
+<p>
+If HFSR shows <code>FORCED</code>, the real fault type is in the CFSR. HardFault
+is just the escalation mechanism. Check CFSR first.
+</p>
+
+
+<h3>3.2 Cortex-A9 Crash Dump</h3>
+
+<p>
+The Cortex-A9 uses a different fault model. There is no CFSR/HFSR; instead,
+faults are reported through Data Abort, Prefetch Abort, and Undefined Instruction
+exceptions. The ms-os fault handlers pass a type code in register r1 to
+distinguish them:
+</p>
+
+<table>
+  <tr><th>Type Code</th><th>Exception</th><th>Typical Cause</th></tr>
+  <tr><td>1</td><td>Data Abort</td><td>Invalid memory read/write, alignment, permission</td></tr>
+  <tr><td>2</td><td>Prefetch Abort</td><td>Invalid instruction fetch address</td></tr>
+  <tr><td>3</td><td>Undefined Instruction</td><td>Bad opcode, coprocessor access, UDF instruction</td></tr>
+</table>
+
+<p>
+The Cortex-A9 crash dump reads CP15 registers instead of SCB registers:
+</p>
+
+<table>
+  <tr><th>Register</th><th>CP15 Encoding</th><th>Description</th></tr>
+  <tr><td>DFSR</td><td>MRC p15, 0, Rd, c5, c0, 0</td><td>Data Fault Status Register</td></tr>
+  <tr><td>IFSR</td><td>MRC p15, 0, Rd, c5, c0, 1</td><td>Instruction Fault Status Register</td></tr>
+  <tr><td>DFAR</td><td>MRC p15, 0, Rd, c6, c0, 0</td><td>Data Fault Address Register</td></tr>
+  <tr><td>IFAR</td><td>MRC p15, 0, Rd, c6, c0, 2</td><td>Instruction Fault Address Register</td></tr>
+</table>
+
+<div class="highlight">
+<strong>Note:</strong> ARM Cortex-A9 does not trap integer divide-by-zero. The
+<code>UDIV</code> instruction returns zero instead of faulting. To test the crash
+dump system on A9, ms-os uses the <code>UDF #0</code> instruction to generate an
+Undefined Instruction exception.
+</div>
+
+
+<h3>3.3 Common Crash Patterns</h3>
+
+<p>
+After reading enough crash dumps, patterns emerge. Here are the most common ones
+in ms-os, ordered by how often they occur:
+</p>
+
+<h4>DACCVIOL at 0x20000xxx -- Unprivileged thread accessing kernel SRAM</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00000082 (DACCVIOL + MMARVALID), MMFAR = 0x200001xx
+<span class="label">Cause:</span>  Unprivileged thread reading/writing a global variable in .bss or .data
+<span class="label">Why:</span>    MPU Region 1 covers SRAM (0x20000000) as privileged-only (RW, no user)
+<span class="label">Fix:</span>    Pass data via thread argument or stack, not globals</div>
+
+<h4>DACCVIOL at 0x40000xxx -- Unprivileged thread accessing peripherals</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00000082 (DACCVIOL + MMARVALID), MMFAR = 0x400xxxxx
+<span class="label">Cause:</span>  Unprivileged thread directly accessing a peripheral register (GPIO, UART)
+<span class="label">Why:</span>    MPU Region 2 covers peripherals (0x40000000) as privileged-only
+<span class="label">Fix:</span>    Use syscalls (kernel::user:: namespace) to access peripherals via the kernel</div>
+
+<h4>PRECISERR with BFAR=0xCCCCCCCC -- Uninitialized pointer dereference</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00008200 (PRECISERR + BFARVALID), BFAR = 0xCCCCCCCC
+<span class="label">Cause:</span>  Stack memory filled with 0xCC (debug fill), pointer read before initialization
+<span class="label">Why:</span>    0xCCCCCCCC is not a valid memory address on any STM32 target
+<span class="label">Fix:</span>    Initialize all pointers; check for null before dereferencing</div>
+
+<h4>FORCED + IMPRECISERR -- Write to invalid address</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> HFSR = 0x40000000 (FORCED), CFSR = 0x00000400 (IMPRECISERR)
+<span class="label">Cause:</span>  Write to an unmapped address; imprecise because write buffer delays the fault
+<span class="label">Why:</span>    BFAR may NOT be valid (no BFARVALID bit) -- the write buffer decouples fault from PC
+<span class="label">Fix:</span>    Insert DSB before the suspect write to make it precise, then read BFAR</div>
+
+<h4>UNDEFINSTR -- Corrupted code or UDF test</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00010000 (UNDEFINSTR)
+<span class="label">Cause:</span>  PC points to invalid instruction encoding, or deliberate UDF #0 / .short 0xDEFE
+<span class="label">Why:</span>    Stack overflow corrupted return address, or test fault triggered intentionally
+<span class="label">Fix:</span>    Check if PC is in valid FLASH range; check stack pointer against stack base</div>
+
+<h4>Stack overflow -- SP below thread stack base</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> SP in crash dump is below the thread's stack base address
+<span class="label">Cause:</span>  Deep call chain, large local variables, or recursive function
+<span class="label">Why:</span>    Thread stacks in ms-os are statically allocated (typically 512B-4KB)
+<span class="label">Fix:</span>    Increase stack size in createThread() call, or reduce stack usage</div>
+
+<div class="lesson">
+<strong>Lesson:</strong> When you see a HardFault with FORCED set, always look at CFSR
+first. The HardFault is just the messenger -- the CFSR tells you the real story.
+</div>
+
+
+<!-- ============================================================ -->
+<!--                 SECTION 4: REAL BUG HUNTS                     -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="bug-hunts"><span class="ch-num">Section 4</span>Real Bug Hunts</h2>
+
+<p>
+These are actual bugs encountered during ms-os development. Each is presented as
+a detective story: what we saw, what we tried, what we found, and what we learned.
+Every command shown was actually executed; every output is real.
+</p>
+
+
+<h3 id="register-ghost">4.1 The Register Ghost (Phase 4B)</h3>
+
+<p><strong>Symptom:</strong> The PYNQ-Z2 threads application appeared to work --
+LEDs toggled, UART printed. But the counter thread printed a counter value stuck
+at 4,176,478,465. The counter should have been incrementing from zero.</p>
+
+<h4>Investigation</h4>
+
+<p>
+A counter stuck at a specific large value is unusual. Counters overflow, get
+stuck at zero, or increment correctly. They do not normally jump to a precise
+large number. The first instinct was to check the hex representation:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3
+<span class="output">&gt;&gt;&gt;</span> <span class="prompt">hex(4176478465)</span>
+<span class="output">'0xf8f00101'</span></div>
+
+<div class="highlight">
+<strong>Key insight:</strong> <code>0xF8F00100</code> is the GIC CPU Interface base
+address on the Zynq-7020. The <code>01</code> at the end is the IAR (Interrupt
+Acknowledge Register) offset. The counter variable lived in register r4. Something
+was writing the GIC base address into r4 -- a register that belonged to the
+interrupted thread.
+</div>
+
+<p>
+The IRQ handler on Cortex-A9 needs to read the GIC CPU Interface to acknowledge
+the interrupt. The original code loaded the GIC base address into r4 and the
+interrupt ID into r5 -- both callee-saved registers -- <em>before</em> the
+context switch code saved {r4-r11} to the stack.
+</p>
+
+<div class="diagram"><span class="label">IRQ Handler (buggy version):</span>
+
+  sub   lr, lr, #4            <span class="comment">; adjust return address</span>
+  srsdb sp!, #0x12            <span class="comment">; save LR_irq + SPSR_irq to IRQ stack</span>
+  <span class="label">ldr   r4, =0xF8F00100</span>       <span class="comment">; &lt;-- OVERWRITES thread's r4!</span>
+  <span class="label">ldr   r5, [r4, #0xC]</span>        <span class="comment">; &lt;-- OVERWRITES thread's r5!</span>
+  ...                          <span class="comment">; context switch pushes {r4-r11} -- too late</span></div>
+
+<h4>Root Cause</h4>
+
+<p>
+On ARM, registers r4-r11 are callee-saved. The IRQ handler interrupts the current
+thread at an arbitrary point. Until the context switch saves {r4-r11} to the
+thread's stack, those registers belong to the interrupted thread. Writing to r4
+before the save destroys the thread's r4 value.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Use only r0-r3 (caller-saved / scratch registers) and the stack for GIC access
+in the IRQ handler, before the context switch saves r4-r11:
+</p>
+
+<pre><span class="cmt">; Read GIC IAR using only scratch registers</span>
+<span class="kw">ldr</span>   r0, =<span class="num">0xF8F00100</span>       <span class="cmt">; GIC CPU Interface base</span>
+<span class="kw">ldr</span>   r1, [r0, #<span class="num">0xC</span>]        <span class="cmt">; read IAR (interrupt ID)</span>
+<span class="kw">push</span>  {r0, r1}               <span class="cmt">; save to IRQ stack</span>
+<span class="cmt">; ... context switch saves {r4-r11} here ...</span>
+<span class="kw">pop</span>   {r0, r1}               <span class="cmt">; restore GIC base + interrupt ID</span></pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> In an interrupt handler, you do not own any callee-saved
+registers until you have saved them. On ARM, that means r4-r11 are off-limits
+until {r4-r11} has been pushed. Use r0-r3 and the stack. This applies to both
+Cortex-M (in PendSV/SysTick handlers) and Cortex-A (in IRQ/FIQ handlers).
+</div>
+
+
+<h3 id="uart-silence">4.2 The UART Silence (Phase 4A)</h3>
+
+<p><strong>Symptom:</strong> First PYNQ-Z2 bringup. Firmware loaded via JTAG.
+No serial output whatsoever. The terminal connected to <code>/dev/ttyUSB2</code>
+showed nothing.</p>
+
+<h4>Investigation</h4>
+
+<p>
+Step 1: Verify the hardware works. OpenOCD can write directly to UART registers.
+The Zynq PS UART0 TX FIFO is at <code>0xE0000030</code>:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>mww 0xE0000030 0x54
+<span class="output">(no output from OpenOCD -- but 'T' appeared on the serial terminal)</span></div>
+
+<p>
+The character appeared. Hardware works. The problem is in the driver.
+</p>
+
+<p>
+Step 2: Read back the UART control register. The Cadence UART Control Register
+is at <code>0xE0000000</code>:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>mdw 0xE0000000
+<span class="output">0xe0000000: 00000128</span></div>
+
+<p>
+Bit 8 (STARTBRK) was set. The STARTBRK bit forces a continuous break condition
+on the TX line -- the UART transmitter sends a steady low signal instead of
+data. No amount of writing to the TX FIFO will produce output while STARTBRK
+is active.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The UART driver's register bit definitions had STARTBRK at the wrong bit
+position. The initialization code thought it was setting a different bit but
+was actually asserting STARTBRK. The Cadence UART IP has a non-obvious
+register layout where bit positions differ from typical 16550-style UARTs.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Correct the register bit definitions. Clear STARTBRK and set STPBRK
+(Stop Break) during UART initialization. Verify each bit against the
+Zynq-7000 TRM (UG585), not by analogy with other UART IPs.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> When serial output is completely dead, test the hardware
+directly using the debugger. A single register write to the TX FIFO tells you
+instantly whether the problem is in hardware or software. This technique works
+on any UART: find the TX data register address and write an ASCII character.
+</div>
+
+
+<h3 id="l2-cache">4.3 The L2 Cache Catch-22 (Phase 4A)</h3>
+
+<p><strong>Symptom:</strong> After modifying the firmware and reloading via JTAG,
+the old code runs instead of the new code. Even <code>monitor reset halt</code>
+followed by a fresh <code>load_image</code> does not help. The board executes
+the previous binary.</p>
+
+<h4>Investigation</h4>
+
+<p>
+Step 1: Verify the load. Read back memory at the load address:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>halt
+<span class="prompt">&gt; </span>load_image build/app/hello/hello 0x00100000
+<span class="output">28672 bytes written at address 0x00100000</span>
+<span class="prompt">&gt; </span>mdw 0x00100000 4
+<span class="output">0x00100000: e3a00000 e3a01000 e3a02000 e3a03000</span></div>
+
+<p>
+The new binary is in DDR at the correct address. But when we resume, the
+CPU executes different instructions. The data in DDR is correct, but the CPU
+is not reading from DDR.
+</p>
+
+<p>
+Step 2: The Zynq-7020 has a PL310 L2 cache controller. After JTAG writes to DDR,
+the L2 cache still contains the old binary. The CPU reads from L2, not from DDR.
+</p>
+
+<div class="diagram"><span class="label">The problem:</span>
+
+  +-------+     +----------+     +-------+
+  | CPU   | --&gt; | L2 Cache | --&gt; |  DDR  |
+  +-------+     +----------+     +-------+
+                  old code         new code
+                  (cached)         (JTAG wrote)
+
+  CPU reads L2 = old code. JTAG writes DDR = new code.
+  They never see each other.</div>
+
+<h4>Root Cause</h4>
+
+<p>
+JTAG writes go directly to DDR, bypassing the cache hierarchy. The L2 cache
+(PL310 at <code>0xF8F02000</code>) retains stale data from the previous load.
+The CPU's instruction and data caches are also stale. A simple CPU reset does
+not invalidate the L2 cache.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Invalidate both L2 and L1 caches before loading new firmware. This requires
+a TCL script for OpenOCD (see <a href="#openocd-scripts">Section 5</a> for the
+full annotated script).
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> On cached systems (Cortex-A, Cortex-R), JTAG writes bypass
+the cache. You must invalidate caches before loading new code. This problem does
+not exist on Cortex-M because the STM32 FLASH interface does not have an L2 cache
+between it and the CPU (the ART Accelerator is invalidated on FLASH erase).
+</div>
+
+
+<h3 id="isr-early-return">4.4 The ISR Early-Return Bug (Phase 6)</h3>
+
+<p><strong>Symptom:</strong> The unprivileged echo-client thread sends IPC messages
+to the server thread via the SVC syscall interface. The <code>messageSend()</code>
+call returns <code>kIpcErrInIsr</code>. There is no crash, no fault, no crash dump.
+The echo-client simply receives an error code and falls silent.</p>
+
+<h4>Investigation, Step 1: What is the error?</h4>
+
+<p>
+The IPC error code <code>kIpcErrInIsr</code> means "cannot perform blocking IPC
+in ISR context." But the echo-client is a thread, not an ISR. Threads should be
+able to call blocking IPC. Something is confused about the execution context.
+</p>
+
+<h4>Investigation, Step 2: Trace the call chain</h4>
+
+<p>
+The echo-client is unprivileged, so it cannot call kernel functions directly.
+It uses an SVC instruction to trap into the kernel. Let us trace the full
+call chain:
+</p>
+
+<div class="diagram"><span class="label">echo-cli thread</span> (unprivileged, Thread mode, PSP)
+  |
+  <span class="label">svc #14</span>                        <span class="comment">// kMessageSend syscall</span>
+  |
+  v
+<span class="label">SVC_Handler</span> (Handler mode, MSP, VECTACTIVE = 11)
+  |
+  svcDispatch(14, frame)
+    |
+    kernel::messageSend(dest, msg, reply)
+      |
+      <span class="label">arch::inIsrContext()</span>
+        |
+        SCB-&gt;ICSR &amp; 0x1FF  =  <span class="label">11</span>  (SVCall exception number)
+        return <span class="label">true</span>              <span class="comment">// &lt;-- BUG</span>
+      |
+      "Cannot block in ISR context"
+      return kIpcErrInIsr</div>
+
+<p>
+There it is. <code>inIsrContext()</code> reads the ICSR register's VECTACTIVE
+field. When the SVC handler is running, VECTACTIVE is 11 (the SVCall exception
+number). The function sees a nonzero value and correctly concludes "we are in
+an exception handler." It returns <code>true</code>.
+</p>
+
+<p>
+But this is wrong. The SVC handler is technically an exception handler, but
+<em>semantically</em> it is the kernel acting on behalf of a thread. When a
+thread asks the kernel to send a message via SVC, the kernel should block the
+thread and switch to the receiver -- exactly as if the kernel function had been
+called directly. The "no blocking in ISR" rule exists to prevent deadlocks when
+a real hardware ISR (SysTick, UART, GPIO) tries to block. The SVC handler is
+not a real ISR in that sense.
+</p>
+
+<h4>Investigation, Step 3: Verify the theory</h4>
+
+<p>
+Add a debug print inside <code>inIsrContext()</code> (temporarily, for diagnosis):
+</p>
+
+<pre><span class="kw">bool</span> <span class="fn">inIsrContext</span>()
+{
+    <span class="kw">auto</span> vectactive = reg(kScbIcsr) &amp; <span class="num">0x1FF</span>u;
+    <span class="cmt">// Debug: print VECTACTIVE to serial</span>
+    <span class="kw">if</span> (vectactive != <span class="num">0</span>)
+    {
+        <span class="cmt">// Output: "VECTACTIVE=11" -- confirmed SVCall</span>
+    }
+    <span class="kw">return</span> vectactive != <span class="num">0</span>;
+}</pre>
+
+<p>
+Confirmed: every call to <code>kernel::messageSend()</code>,
+<code>kernel::sleep()</code>, <code>kernel::mutexLock()</code>, and
+<code>kernel::semaphoreWait()</code> from within <code>svcDispatch()</code>
+sees VECTACTIVE=11 and refuses to block.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The SVC handler runs in ARM handler mode. The ICSR VECTACTIVE field is nonzero
+(value 11) whenever any exception handler is active. All kernel blocking
+functions check <code>arch::inIsrContext()</code> as a safety guard against
+blocking inside a real ISR (which would deadlock the system). But the SVC
+handler is acting on behalf of a thread, not responding to a hardware event.
+The safety guard was too broad.
+</p>
+
+<h4>Fix (3 lines in Arch.cpp + 2 lines in SvcDispatch.cpp)</h4>
+
+<p>In <code>kernel/src/arch/cortex-m4/Arch.cpp</code>:</p>
+
+<pre><span class="cmt">// Syscall flag: set by svcDispatch to indicate that kernel functions</span>
+<span class="cmt">// (sleep, messageSend, etc.) should treat this as thread context, not ISR.</span>
+<span class="kw">volatile bool</span> g_inSyscall = <span class="kw">false</span>;
+
+<span class="kw">bool</span> <span class="fn">inIsrContext</span>()
+{
+    <span class="cmt">// During SVC dispatch, we are in handler mode but semantically acting</span>
+    <span class="cmt">// on behalf of a thread. Return false so kernel functions can block.</span>
+    <span class="kw">if</span> (g_inSyscall)
+    {
+        <span class="kw">return false</span>;
+    }
+
+    <span class="cmt">// ICSR bits 8:0 (VECTACTIVE) hold the active exception number.</span>
+    <span class="cmt">// Non-zero means we are in an exception handler.</span>
+    <span class="kw">return</span> (reg(kScbIcsr) &amp; <span class="num">0x1FF</span>u) != <span class="num">0</span>;
+}</pre>
+
+<p>In <code>kernel/src/core/SvcDispatch.cpp</code>:</p>
+
+<pre><span class="kw">extern</span> <span class="str">"C"</span> std::uint32_t <span class="fn">svcDispatch</span>(std::uint8_t svcNum, std::uint32_t *frame)
+{
+    kernel::g_inSyscall = <span class="kw">true</span>;     <span class="cmt">// &lt;-- allow blocking</span>
+
+    <span class="cmt">// ... dispatch switch statement ...</span>
+
+    kernel::g_inSyscall = <span class="kw">false</span>;    <span class="cmt">// &lt;-- restore</span>
+    <span class="kw">return</span> result;
+}</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> The SVC handler is technically an ISR. But semantically it
+is the kernel acting on behalf of a thread. The distinction matters because
+blocking operations are forbidden in ISR context (they would deadlock the
+system, since ISRs preempt everything and cannot be preempted themselves). But
+SVC dispatch is different: the thread that issued the SVC is already suspended
+on the exception stack frame. The kernel can safely block it, switch to another
+thread, and resume the caller later via PendSV. A single boolean flag bridges
+the gap between the hardware reality (handler mode) and the software semantics
+(thread context).
+</div>
+
+
+<h3 id="daccviol">4.5 The DACCVIOL Wall (Phase 6)</h3>
+
+<p><strong>Symptom:</strong> Crash dump on the serial console. The unprivileged
+echo-client thread triggers a MemManage fault.</p>
+
+<div class="cmd-session"><span class="output">=== CRASH DUMP BEGIN ===
+Fault: MemManage
+Thread: echo-cli (id=3)
+Registers:
+  PC  : 08002F10
+  LR  : 08002EE4
+  SP  : 20003FB0
+  R0  : 00000000
+  ...
+Fault Status:
+  CFSR : 00000082
+  HFSR : 00000000
+  MMFAR: 20000104
+  BFAR : 00000000
+Decoded:
+  -&gt; DACCVIOL: Data access violation
+  -&gt; MMARVALID: MMFAR = 20000104
+=== CRASH DUMP END ===</span></div>
+
+<h4>Investigation</h4>
+
+<p>
+CFSR = <code>0x00000082</code>: that is <code>DACCVIOL</code> (bit 1) +
+<code>MMARVALID</code> (bit 7). The faulting address is in MMFAR:
+<code>0x20000104</code>.
+</p>
+
+<p>
+Where is <code>0x20000104</code>? It is in SRAM, in the <code>.bss</code> section.
+Run <code>nm</code> to find what lives there:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-nm build/app/ipc-demo/ipc-demo | sort | grep -A1 "20000100"
+<span class="output">20000100 B g_tickCount
+20000104 B g_serverTid</span></div>
+
+<p>
+Address <code>0x20000104</code> is the global variable <code>g_serverTid</code> --
+a <code>kernel::ThreadId</code> stored in <code>.bss</code>. The echo-client
+thread was trying to read the server's thread ID from this global.
+</p>
+
+<p>
+Why did it fault? The MPU configuration in ms-os sets Region 1 (SRAM,
+<code>0x20000000</code>) as <strong>privileged read-write only</strong>. No
+unprivileged access. The echo-client thread was created with
+<code>privileged=false</code>, so the MPU blocked its access to SRAM globals.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The echo-client function accessed a global variable:
+</p>
+
+<pre><span class="cmt">// Before (crashes):</span>
+<span class="kw">static</span> kernel::ThreadId g_serverTid;   <span class="cmt">// in .bss (SRAM, priv-only)</span>
+
+<span class="kw">void</span> <span class="fn">echoClientFunc</span>(<span class="kw">void</span> *)
+{
+    kernel::user::messageSend(<span class="kw">g_serverTid</span>, msg, &amp;reply);  <span class="cmt">// DACCVIOL!</span>
+}</pre>
+
+<p>
+Unprivileged threads in ms-os can only access: their own stack (MPU Region 4,
+per-thread), and the heap (MPU Region 5). Everything else in SRAM --
+<code>.bss</code>, <code>.data</code>, kernel state -- is behind the MPU wall.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Pass the server thread ID via the thread argument, which lives on the caller's
+stack (privileged) and is copied into the thread's r0 on first context switch:
+</p>
+
+<pre><span class="cmt">// After (works):</span>
+<span class="kw">void</span> <span class="fn">echoClientFunc</span>(<span class="kw">void</span> *arg)
+{
+    <span class="kw">auto</span> serverTid = <span class="kw">static_cast</span>&lt;kernel::ThreadId&gt;(
+        <span class="kw">reinterpret_cast</span>&lt;std::uintptr_t&gt;(arg));
+    kernel::user::messageSend(serverTid, msg, &amp;reply);  <span class="cmt">// works</span>
+}</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> Unprivileged threads live in a small world: their stack and
+the heap. Everything else -- global variables, kernel state, peripheral registers
+-- is behind the MPU wall. When moving a thread from privileged to unprivileged,
+audit every global access. The MMFAR register in the crash dump tells you exactly
+which address was denied, and <code>nm</code> tells you what symbol lives there.
+</div>
+
+
+<!-- ============================================================ -->
+<!--             SECTION 5: OPENOCD TCL SCRIPTS                    -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="openocd-scripts"><span class="ch-num">Section 5</span>OpenOCD TCL Scripts</h2>
+
+<p>
+The PYNQ-Z2 requires cache invalidation before loading new firmware via JTAG
+(see <a href="#l2-cache">Bug Hunt 4.3</a>). This TCL script automates the full
+load sequence.
+</p>
+
+<h3>JTAG Load Script with Cache Invalidation</h3>
+
+<pre><span class="cmt"># pynq_jtag_load.tcl</span>
+<span class="cmt"># Full JTAG load sequence for PYNQ-Z2 (Zynq-7020).</span>
+<span class="cmt"># Invalidates L2 + L1 caches before loading to prevent stale execution.</span>
+<span class="cmt">#</span>
+<span class="cmt"># Usage: openocd -f pynq-z2.cfg -c "source pynq_jtag_load.tcl"</span>
+
+<span class="cmt"># Step 1: Halt the CPU</span>
+<span class="fn">halt</span>
+
+<span class="cmt"># Step 2: Invalidate L2 cache (PL310 controller)</span>
+<span class="cmt">#</span>
+<span class="cmt"># The PL310 L2 cache controller is at 0xF8F02000.</span>
+<span class="cmt"># Register 0x77C = Invalidate by Way.</span>
+<span class="cmt"># Writing 0xFFFF invalidates all 16 ways.</span>
+<span class="cmt"># Bits clear to 0 when invalidation is complete.</span>
+<span class="fn">mww</span> <span class="num">0xF8F0277C</span> <span class="num">0xFFFF</span>
+
+<span class="cmt"># Step 3: Wait for L2 invalidation to complete</span>
+<span class="cmt"># Poll the Invalidate by Way register until all bits are zero.</span>
+<span class="kw">while</span> {[expr [<span class="fn">mrw</span> <span class="num">0xF8F0277C</span>] &amp; <span class="num">0xFFFF</span>]} { }
+
+<span class="cmt"># Step 4: Invalidate L1 instruction cache (CP15 ICIALLU)</span>
+<span class="cmt">#</span>
+<span class="cmt"># MCR p15, 0, Rd, c7, c5, 0  -- Invalidate all instruction caches</span>
+<span class="cmt"># The value of Rd is ignored (SBZ = Should Be Zero).</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 5 0</span>
+
+<span class="cmt"># Step 5: Clean and invalidate L1 data cache (CP15 DCCISW)</span>
+<span class="cmt">#</span>
+<span class="cmt"># MCR p15, 0, Rd, c7, c14, 0  -- Clean and Invalidate by Set/Way</span>
+<span class="cmt"># This is a simplified single-set invalidation. For a full D-cache</span>
+<span class="cmt"># clean, iterate over all sets and ways. For JTAG reload this is</span>
+<span class="cmt"># sufficient because we are about to overwrite the entire image.</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 14 0</span>
+
+<span class="cmt"># Step 6: Data Synchronization Barrier</span>
+<span class="cmt"># Ensure all cache maintenance operations complete before proceeding.</span>
+<span class="cmt"># DSB via CP15: MCR p15, 0, Rd, c7, c10, 4</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 10 4</span>
+
+<span class="cmt"># Step 7: Instruction Synchronization Barrier</span>
+<span class="cmt"># Flush the pipeline so the CPU fetches new instructions.</span>
+<span class="cmt"># ISB via CP15: MCR p15, 0, Rd, c7, c5, 4</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 5 4</span>
+
+<span class="cmt"># Step 8: Load the new image at DDR offset (skip first 1MB)</span>
+<span class="fn">load_image</span> build/app/hello/hello <span class="num">0x00100000</span>
+
+<span class="cmt"># Step 9: Resume execution at the load address</span>
+<span class="fn">resume</span> <span class="num">0x00100000</span></pre>
+
+<h4>Using the script</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>openocd -f pynq-z2.cfg -c "source pynq_jtag_load.tcl"
+<span class="output">Open On-Chip Debugger 0.12.0
+...
+target halted in ARM state due to debug-request
+28672 bytes written at address 0x00100000
+Resuming at 0x00100000</span></div>
+
+<div class="highlight">
+<strong>Tip:</strong> The <code>build.py -f --target pynq-z2</code> command
+automates this entire sequence. Use the manual TCL script when you need to
+debug the load process itself or when developing new firmware that fails
+immediately on startup.
+</div>
+
+
+<!-- ============================================================ -->
+<!--            SECTION 6: SERIAL PORT DEBUGGING                   -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="serial"><span class="ch-num">Section 6</span>Serial Port Debugging</h2>
+
+<p>
+Serial output is the primary debugging channel for ms-os. All <code>printf</code>
+and <code>stdout</code> output is routed to a configurable UART. Crash dumps,
+shell commands, and application output all go through the same serial port.
+</p>
+
+<h3>6.1 pyserial Setup</h3>
+
+<p>
+Always use pyserial for serial communication. Never use <code>cat /dev/ttyUSB0</code>
+-- it does not configure baud rate, parity, stop bits, or flow control, and will
+produce garbage or hang.
+</p>
+
+<h4>Minimal serial monitor</h4>
+
+<pre><span class="kw">import</span> serial
+
+ser = serial.<span class="fn">Serial</span>(<span class="str">'/dev/ttyUSB0'</span>, <span class="num">115200</span>, timeout=<span class="num">1</span>)
+<span class="kw">while</span> <span class="kw">True</span>:
+    line = ser.<span class="fn">readline</span>().<span class="fn">decode</span>(<span class="str">'utf-8'</span>, errors=<span class="str">'replace'</span>).<span class="fn">strip</span>()
+    <span class="kw">if</span> line:
+        <span class="fn">print</span>(line)</pre>
+
+<h4>With timestamp and color</h4>
+
+<pre><span class="kw">import</span> serial
+<span class="kw">from</span> datetime <span class="kw">import</span> datetime
+
+ser = serial.<span class="fn">Serial</span>(<span class="str">'/dev/ttyUSB0'</span>, <span class="num">115200</span>, timeout=<span class="num">1</span>)
+<span class="kw">while</span> <span class="kw">True</span>:
+    line = ser.<span class="fn">readline</span>().<span class="fn">decode</span>(<span class="str">'utf-8'</span>, errors=<span class="str">'replace'</span>).<span class="fn">strip</span>()
+    <span class="kw">if</span> line:
+        ts = datetime.<span class="fn">now</span>().<span class="fn">strftime</span>(<span class="str">'%H:%M:%S.%f'</span>)[:<span class="num">-3</span>]
+        <span class="kw">if</span> <span class="str">'CRASH'</span> <span class="kw">in</span> line:
+            <span class="fn">print</span>(<span class="str">f'\033[91m[{ts}] {line}\033[0m'</span>)
+        <span class="kw">else</span>:
+            <span class="fn">print</span>(<span class="str">f'[{ts}] {line}'</span>)</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> Never use <code>cat /dev/ttyUSBx</code> for serial
+debugging. It does not set the baud rate and will either show garbage or block
+indefinitely. Always use pyserial or a proper serial terminal (minicom, picocom).
+</div>
+
+
+<h3>6.2 crash_monitor.py Usage</h3>
+
+<p>
+ms-os includes a crash monitor tool that watches the serial port for crash dump
+output and automatically translates addresses to source file and line number
+using <code>arm-none-eabi-addr2line</code>:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3 tools/crash_monitor.py --port /dev/ttyUSB0 --elf build/app/threads/threads
+<span class="output">[14:23:01.445] Monitoring /dev/ttyUSB0 at 115200 baud...
+[14:23:01.446] ELF: build/app/threads/threads
+[14:23:05.112] led: count=100
+[14:23:06.113] led: count=200
+[14:23:07.114] === CRASH DUMP BEGIN ===
+[14:23:07.115] Fault: HardFault
+[14:23:07.116] Thread: led (id=1)
+[14:23:07.117] Registers:
+[14:23:07.118]   PC  : 08000ABC
+[14:23:07.119]   LR  : 08000A34
+...
+[14:23:07.130] === CRASH DUMP END ===
+</span><span class="prompt">[14:23:07.131] -- addr2line --</span>
+<span class="output">[14:23:07.142]   PC  08000ABC -> ledThread(void*) at app/threads/main.cpp:42
+[14:23:07.143]   LR  08000A34 -> kernel::sleep(unsigned int) at kernel/src/core/Kernel.cpp:163</span></div>
+
+<p>
+The crash monitor detects the <code>=== CRASH DUMP BEGIN ===</code> /
+<code>=== CRASH DUMP END ===</code> delimiters, extracts PC and LR values
+using regex, and runs <code>arm-none-eabi-addr2line</code> to resolve them.
+</p>
+
+<h4>Options</h4>
+
+<table>
+  <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
+  <tr><td><code>--port</code></td><td>Serial port device</td><td>(required)</td></tr>
+  <tr><td><code>--elf</code></td><td>Path to ELF binary with debug symbols</td><td>(required)</td></tr>
+  <tr><td><code>--baud</code></td><td>Baud rate</td><td>115200</td></tr>
+</table>
+
+
+<h3>6.3 Webcam LED Verification</h3>
+
+<p>
+When debugging remotely or verifying blink patterns without physical access to
+the board, a USB webcam pointed at the board can capture LED state changes:
+</p>
+
+<h4>Capture a sequence of frames</h4>
+
+<pre><span class="kw">for</span> i <span class="kw">in</span> <span class="num">1 2 3 4 5 6 7 8</span>; <span class="kw">do</span>
+    ffmpeg -f v4l2 -framerate <span class="num">30</span> -video_size <span class="num">640x480</span> \
+        -i /dev/video1 -frames:v <span class="num">1</span> -y /tmp/snap_${i}.jpg <span class="num">2</span>&gt;/dev/null
+    sleep <span class="num">0.3</span>
+<span class="kw">done</span></pre>
+
+<h4>Analyze LED brightness with PIL</h4>
+
+<pre><span class="kw">from</span> PIL <span class="kw">import</span> Image
+
+<span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1</span>, <span class="num">9</span>):
+    img = Image.<span class="fn">open</span>(<span class="str">f'/tmp/snap_{i}.jpg'</span>)
+    led = img.<span class="fn">crop</span>((<span class="num">290</span>, <span class="num">155</span>, <span class="num">340</span>, <span class="num">200</span>))   <span class="cmt"># F407 LED region</span>
+    avg = <span class="fn">sum</span>(p[<span class="num">1</span>] <span class="kw">for</span> p <span class="kw">in</span> led.<span class="fn">getdata</span>()) / <span class="fn">len</span>(<span class="fn">list</span>(led.<span class="fn">getdata</span>()))
+    <span class="fn">print</span>(<span class="str">f'Frame {i}: green={avg:.0f} [{"ON" if avg > 75 else "OFF"}]'</span>)</pre>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3 analyze_leds.py
+<span class="output">Frame 1: green=142 [ON]
+Frame 2: green=31  [OFF]
+Frame 3: green=138 [ON]
+Frame 4: green=29  [OFF]
+Frame 5: green=141 [ON]
+Frame 6: green=30  [OFF]
+Frame 7: green=139 [ON]
+Frame 8: green=28  [OFF]</span></div>
+
+<p>
+A clean alternating pattern confirms the blink firmware is working. Adjust the
+crop coordinates for your camera position and LED location. The green channel
+(index 1 in RGB) works well for the green LED on the STM32F407 board (PC13).
+</p>
+
+
+<!-- ============================================================ -->
+<!--            SECTION 7: TOOLCHAIN QUICK REFERENCE               -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="toolchain"><span class="ch-num">Section 7</span>Toolchain Quick Reference</h2>
+
+<h3>build.py Commands</h3>
+
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td><code>python3 build.py</code></td><td>Cross-compile for default target (STM32F207ZGT6)</td></tr>
+  <tr><td><code>python3 build.py --target stm32f407zgt6</code></td><td>Cross-compile for STM32F407</td></tr>
+  <tr><td><code>python3 build.py --target pynq-z2</code></td><td>Cross-compile for PYNQ-Z2 (Zynq-7020)</td></tr>
+  <tr><td><code>python3 build.py -t</code></td><td>Build and run host unit tests (x86)</td></tr>
+  <tr><td><code>python3 build.py -c</code></td><td>Clean both build directories</td></tr>
+  <tr><td><code>python3 build.py -f</code></td><td>Flash firmware via J-Link (STM32)</td></tr>
+  <tr><td><code>python3 build.py -f --target pynq-z2</code></td><td>Flash firmware via OpenOCD (PYNQ-Z2)</td></tr>
+  <tr><td><code>python3 build.py -f --app blinky</code></td><td>Flash the blinky application</td></tr>
+  <tr><td><code>python3 build.py -e</code></td><td>Build example applications</td></tr>
+</table>
+
+
+<h3>Common ARM GCC Flags</h3>
+
+<table>
+  <tr><th>Flag</th><th>Purpose</th></tr>
+  <tr><td><code>-mcpu=cortex-m3</code></td><td>Target Cortex-M3 (F207)</td></tr>
+  <tr><td><code>-mcpu=cortex-m4</code></td><td>Target Cortex-M4 (F407)</td></tr>
+  <tr><td><code>-mcpu=cortex-a9</code></td><td>Target Cortex-A9 (PYNQ-Z2)</td></tr>
+  <tr><td><code>-mthumb</code></td><td>Thumb-2 instruction set (Cortex-M only)</td></tr>
+  <tr><td><code>-marm</code></td><td>ARM instruction set (Cortex-A9)</td></tr>
+  <tr><td><code>-mfloat-abi=soft</code></td><td>Software floating point (no FPU)</td></tr>
+  <tr><td><code>-mfloat-abi=softfp</code></td><td>Software FP ABI, hardware FPU (A9 with VFPv3)</td></tr>
+  <tr><td><code>-mfpu=vfpv3-d16</code></td><td>VFPv3 with 16 double-precision registers (A9)</td></tr>
+  <tr><td><code>-fno-exceptions</code></td><td>No C++ exceptions (kernel code)</td></tr>
+  <tr><td><code>-fno-rtti</code></td><td>No runtime type information (kernel code)</td></tr>
+  <tr><td><code>-fno-unwind-tables</code></td><td>No unwind tables (kernel code)</td></tr>
+  <tr><td><code>-nostartfiles</code></td><td>Do not link default startup files</td></tr>
+  <tr><td><code>-T Linker.ld</code></td><td>Use custom linker script</td></tr>
+  <tr><td><code>-Wl,--gc-sections</code></td><td>Remove unused sections (smaller binary)</td></tr>
+  <tr><td><code>-ffunction-sections</code></td><td>Place each function in its own section</td></tr>
+  <tr><td><code>-fdata-sections</code></td><td>Place each data item in its own section</td></tr>
+</table>
+
+
+<h3>Running Host Tests</h3>
+
+<p>
+Host tests run on x86 with mock HAL implementations substituted at link time.
+The test binary uses Google Test v1.14.0.
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3 build.py -t
+<span class="output">-- Configuring host test build
+-- Found GTest: /usr/lib/libgtest.a
+-- Build files written to: build-test
+[1/47] Building CXX object test/hal/CMakeFiles/hal_tests.dir/GpioTest.cpp.o
+...
+[47/47] Linking CXX executable test/kernel/kernel_tests
+100% tests passed, 0 tests failed out of 297</span></div>
+
+<h4>Running a specific test</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>./build-test/test/hal/hal_tests --gtest_filter='*Toggle*'
+<span class="output">[==========] Running 1 test from 1 test suite.
+[----------] 1 test from GpioToggleTest
+[ RUN      ] GpioToggleTest.ToggleSetsODR
+[       OK ] GpioToggleTest.ToggleSetsODR (0 ms)
+[----------] 1 test from GpioToggleTest (0 ms total)
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.</span></div>
+
+<h4>Running via CTest</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>ctest --test-dir build-test --output-on-failure
+<span class="output">Test project /home/user/ms-os/build-test
+      Start  1: GpioTest.EnableClock
+      ...
+100% tests passed, 0 tests failed out of 297
+Total Test time (real) =   0.42 sec</span></div>
+
+<div class="key-decision">
+<strong>Host test caveat:</strong> Host tests must run outside the Nix dev shell
+if you encounter glibc version mismatches. The Nix shell provides the ARM
+cross-compiler but may conflict with the host GCC's runtime libraries. If tests
+segfault on startup, exit Nix and rebuild:
+<code>cd build-test &amp;&amp; cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug .. &amp;&amp; ninja &amp;&amp; ctest</code>
+</div>
+
+
+<h3>Memory Map Reference</h3>
+
+<h4>STM32F207/F407</h4>
+
+<div class="diagram"><span class="label">FLASH</span>  0x08000000 - 0x080FFFFF  (1024 KB)
+  .isr_vector    Vector table (Reset, NMI, HardFault, ...)
+  .text          Code
+  .rodata        Read-only data, string literals
+  .ARM.exidx     Exception unwind index
+
+<span class="label">SRAM</span>   0x20000000 - 0x2001FFFF  (128 KB)
+  .data          Initialized globals (copied from FLASH by startup)
+  .bss           Zero-initialized globals (zeroed by startup)
+  .heap          Dynamic allocation region (16 KB, aligned for MPU)
+  ._stack        Main stack (4 KB at top of SRAM)
+
+<span class="label">Periph</span> 0x40000000 - 0x5FFFFFFF
+  GPIO, UART, SPI, I2C, timers, DMA, ...
+
+<span class="label">SCB</span>    0xE000ED00 - 0xE000ED3F  System Control Block
+  +0x00  CPUID    +0x04  ICSR     +0x08  VTOR
+  +0x10  SCR      +0x14  CCR      +0x1C  SHPR2
+  +0x20  SHPR3    +0x24  SHCSR    +0x28  CFSR
+  +0x2C  HFSR     +0x34  MMFAR    +0x38  BFAR</div>
+
+<h4>PYNQ-Z2 (Zynq-7020)</h4>
+
+<div class="diagram"><span class="label">DDR</span>    0x00000000 - 0x1FFFFFFF  (512 MB)
+  0x00000000 - 0x000FFFFF  Reserved (BootROM)
+  0x00100000 - ...         Firmware load address
+
+<span class="label">UART0</span>  0xE0000000  PS UART0 (Cadence IP)
+  +0x00  CR       +0x04  MR       +0x08  IER
+  +0x18  BAUDGEN  +0x20  RXTOUT   +0x24  RXWM
+  +0x2C  SR       +0x30  TX_FIFO  +0x34  BAUDIV
+
+<span class="label">GIC</span>    CPU Interface: 0xF8F00100
+         Distributor:  0xF8F01000
+
+<span class="label">Timer</span>  SCU Private Timer: 0xF8F00600
+
+<span class="label">L2C</span>    PL310: 0xF8F02000
+  +0x77C  INV_WAY  (write 0xFFFF to invalidate all ways)</div>
+
+<h3>EXC_RETURN Values (Cortex-M)</h3>
+
+<table>
+  <tr><th>Value</th><th>Return To</th><th>Stack</th><th>Frame</th></tr>
+  <tr><td><code>0xFFFFFFF1</code></td><td>Handler mode</td><td>MSP</td><td>Basic</td></tr>
+  <tr><td><code>0xFFFFFFF9</code></td><td>Thread mode</td><td>MSP</td><td>Basic</td></tr>
+  <tr><td><code>0xFFFFFFFD</code></td><td>Thread mode</td><td>PSP</td><td>Basic</td></tr>
+  <tr><td><code>0xFFFFFFE1</code></td><td>Handler mode</td><td>MSP</td><td>Extended (FPU)</td></tr>
+  <tr><td><code>0xFFFFFFE9</code></td><td>Thread mode</td><td>MSP</td><td>Extended (FPU)</td></tr>
+  <tr><td><code>0xFFFFFFED</code></td><td>Thread mode</td><td>PSP</td><td>Extended (FPU)</td></tr>
+</table>
+
+<p>
+ms-os threads use PSP (Process Stack Pointer) and return with
+<code>0xFFFFFFFD</code>. The EXC_RETURN value in the crash dump confirms
+which stack and mode the faulting code was using.
+</p>
+
+
+<div class="epigraph" style="margin-top: 4em;">
+  "The most effective debugging tool is still careful thought,<br>
+  coupled with judiciously placed print statements."
+  <div class="attribution">-- Brian Kernighan (again)</div>
+</div>
+
+
+</body>
+</html>

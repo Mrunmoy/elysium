@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ms-os Architecture Reference</title>
+<style>
+@page { size: A4; margin: 2.5cm 2cm; }
+* { box-sizing: border-box; }
+body { font-family: 'Georgia', 'Times New Roman', serif; font-size: 11.5pt; line-height: 1.65; color: #1a1a1a; max-width: 700px; margin: 0 auto; padding: 2cm 1.5cm; background: #fff; }
+.title-page { text-align: center; page-break-after: always; padding-top: 6cm; }
+.title-page h1 { font-size: 36pt; font-weight: 700; color: #1a3a5c; letter-spacing: 2px; margin-bottom: 0.2em; }
+.title-page .subtitle { font-size: 14pt; color: #5a7a9a; font-style: italic; margin-bottom: 3cm; }
+.title-page .meta { font-size: 11pt; color: #666; line-height: 2; }
+h2.chapter { font-size: 22pt; color: #1a3a5c; border-bottom: 3px solid #c0392b; padding-bottom: 8px; margin-top: 2.5em; page-break-before: always; }
+h2.chapter .ch-num { display: block; font-size: 11pt; text-transform: uppercase; letter-spacing: 3px; color: #c0392b; font-weight: 400; margin-bottom: 4px; }
+h3 { font-size: 14pt; color: #2c3e50; margin-top: 1.8em; margin-bottom: 0.5em; }
+h4 { font-size: 12pt; color: #555; font-style: italic; margin-top: 1.4em; margin-bottom: 0.4em; }
+p { margin: 0.8em 0; text-align: justify; }
+strong { color: #1a3a5c; }
+em { color: #555; }
+.highlight { background: #fef9e7; border-left: 4px solid #f39c12; padding: 10px 14px; margin: 1.2em 0; font-size: 10.5pt; }
+.key-decision { background: #eaf2f8; border-left: 4px solid #2980b9; padding: 10px 14px; margin: 1.2em 0; font-size: 10.5pt; }
+.lesson { background: #fdedec; border-left: 4px solid #c0392b; padding: 10px 14px; margin: 1.2em 0; font-size: 10.5pt; }
+.diagram { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 16px 20px; margin: 1.5em 0; font-family: 'Courier New', monospace; font-size: 9.5pt; line-height: 1.4; white-space: pre; overflow-x: auto; color: #2c3e50; }
+.diagram .label { color: #c0392b; font-weight: bold; }
+.diagram .comment { color: #7f8c8d; }
+code { font-family: 'Courier New', monospace; font-size: 10pt; background: #f0f0f0; padding: 1px 5px; border-radius: 3px; color: #c0392b; }
+pre { background: #2c3e50; color: #ecf0f1; padding: 14px 18px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 9.5pt; line-height: 1.5; overflow-x: auto; margin: 1.2em 0; }
+pre .kw { color: #e74c3c; } pre .str { color: #2ecc71; } pre .cmt { color: #7f8c8d; } pre .fn { color: #f39c12; } pre .num { color: #9b59b6; }
+table { border-collapse: collapse; width: 100%; margin: 1.2em 0; font-size: 10pt; }
+th { background: #1a3a5c; color: white; padding: 8px 12px; text-align: left; font-weight: 600; }
+td { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+tr:nth-child(even) { background: #f8f9fa; }
+.epigraph { font-style: italic; color: #666; text-align: right; margin: 2em 0; padding-right: 1em; font-size: 11pt; }
+.epigraph .attribution { font-size: 9.5pt; margin-top: 4px; }
+@media print { body { padding: 0; max-width: none; } .no-print { display: none; } h2.chapter { page-break-before: always; } .diagram, pre, table, .highlight, .key-decision, .lesson { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<div style="font-size: 9pt; color: #999; margin-bottom: 2em;"><a href="the-story-of-ms-os.html">Back to The Story of ms-os</a> | <a href="debugging-playbook.html">Debugging Playbook</a></div>
+
+<!-- ============================================================ -->
+<!--  TITLE PAGE                                                   -->
+<!-- ============================================================ -->
+<div class="title-page">
+  <h1>ms-os<br>Architecture Reference</h1>
+  <div class="subtitle">Technical Reference for ARM Cortex-M/A9 RTOS Internals</div>
+  <div class="meta">
+    Microkernel Real-Time Operating System<br>
+    STM32F207 / STM32F407 / Zynq-7020 (PYNQ-Z2)<br>
+    C++17 &mdash; Register-Level HAL &mdash; Zero External Dependencies
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 1: MEMORY MAPS                                       -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="memory-maps">
+  <span class="ch-num">Section 1</span>
+  Memory Maps
+</h2>
+
+<div class="epigraph">
+  "The memory map is the contract between software and silicon."
+  <div class="attribution">&mdash; ARM Architecture Reference Manual</div>
+</div>
+
+<p>ms-os targets three hardware platforms, each with a distinct address space layout. Every address, region size, and section placement documented here is drawn directly from the linker scripts, startup code, and MPU configuration in the codebase.</p>
+
+<h3>STM32F207ZGT6 (Cortex-M3, 120 MHz)</h3>
+
+<p>The primary development target. 1 MB FLASH, 128 KB SRAM, no CCM. The linker script (<code>startup/stm32f207zgt6/Linker.ld</code>) places sections as follows:</p>
+
+<div class="diagram">
+<span class="label">FLASH (1024K)</span>                            <span class="label">SRAM (128K)</span>
+0x08000000 +------------------+         0x20000000 +------------------+
+           | .isr_vector      |                    | .data            |
+           | (vector table)   |                    | (copied from     |
+           +------------------+                    |  FLASH at boot)  |
+           | .text            |                    +------------------+
+           | (program code)   |                    | .bss             |
+           |                  |                    | (zeroed at boot) |
+           +------------------+                    +------------------+
+           | .rodata          |                    |                  |
+           | (const data)     |                    |  (gap -- unused) |
+           +------------------+                    |                  |
+           | .ARM.extab       |                    +------------------+
+           | .ARM.exidx       |                    | .heap  (16K)     | <span class="comment">&lt;-- aligned 16K</span>
+           | (exception idx)  |                    | (grows upward)   |
+           +------------------+                    +------------------+
+           | .preinit_array   |                    | ._stack (4K)     |
+           | .init_array      |                    | (grows downward) |
+           | .fini_array      |                    | _estack at top   |
+           +------------------+         0x20020000 +------------------+
+           | .data (LMA)      |
+           | (init values     |
+           |  for SRAM copy)  |
+0x08100000 +------------------+
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The heap section is aligned to 16K in the linker script. This satisfies the MPU power-of-two alignment requirement, allowing the heap to occupy a single MPU region without wasting protection granularity.
+</div>
+
+<h3>STM32F407ZGT6 (Cortex-M4, 168 MHz)</h3>
+
+<p>Second Cortex-M target with identical FLASH/SRAM sizes but an additional 64K CCM (Core Coupled Memory) region. The Cortex-M4 also includes an FPU and DSP instructions.</p>
+
+<div class="diagram">
+<span class="label">CCM (64K)</span>                                 <span class="label">FLASH (1024K)</span>
+0x10000000 +------------------+         0x08000000 +------------------+
+           | (available but   |                    | .isr_vector      |
+           |  not currently   |                    | .text            |
+           |  used by ms-os)  |                    | .rodata          |
+0x10010000 +------------------+                    | .ARM.exidx       |
+                                                   | .init_array      |
+<span class="label">SRAM (128K)</span>                                  | .data (LMA)      |
+0x20000000 +------------------+         0x08100000 +------------------+
+           | .data / .bss     |
+           | .heap (16K)      |
+           | ._stack (4K)     |
+0x20020000 +------------------+
+
+<span class="comment">Clock: HSE 8 MHz, SYSCLK 168 MHz, APB1 42 MHz, APB2 84 MHz</span>
+<span class="comment">PWR VOS Scale 1 required before PLL at 168 MHz</span>
+<span class="comment">Note: F207 is Cortex-M3 (no FPU, no CCM, no PWR VOS)</span>
+</div>
+
+<h3>PYNQ-Z2 / Zynq-7020 (Dual Cortex-A9, 650 MHz)</h3>
+
+<p>The Zynq SoC combines dual Cortex-A9 cores with FPGA programmable logic. ms-os runs on CPU0 only; CPU1 is parked in a WFE loop (checked via MPIDR register). During development, we load firmware via JTAG (OpenOCD) directly into DDR. The Zynq BootROM and FSBL handle initial PLL and DDR controller setup; ms-os assumes clocks are already configured and simply sets the global clock variables.</p>
+
+<div class="diagram">
+<span class="label">DDR3 (512 MB)</span>
+0x00000000 +------------------+
+           | BootROM reserved |  <span class="comment">&lt;-- first 1 MB skipped</span>
+0x00100000 +------------------+
+           | .text            |  <span class="comment">&lt;-- ms-os load address</span>
+           | .rodata          |
+           | .data / .bss     |
+           | .heap            |
+           | mode stacks:     |
+           |   IRQ  (1K)      |
+           |   ABT  (1K)      |
+           |   FIQ  (1K)      |
+           |   UND  (1K)      |
+           |   SVC  (2K)      |
+           |   SYS  (4K)      |
+           +------------------+
+           |                  |
+           | (free DDR)       |
+           |                  |
+0x20000000 +------------------+
+
+<span class="label">PS Peripherals</span>
+0xE0000000  PS UART0           <span class="comment">(Cadence UART IP, FTDI on PYNQ)</span>
+0xE0001000  PS UART1
+0xF8000000  SLCR               <span class="comment">(unlock key: 0xDF0D at offset 0x008)</span>
+0xF8F00100  GIC CPU Interface  <span class="comment">(ICCIAR, ICCEOIR)</span>
+0xF8F00600  SCU Private Timer  <span class="comment">(replaces SysTick, PERIPHCLK = CPU/2)</span>
+0xF8F01000  GIC Distributor    <span class="comment">(ICDDCR, ICDISER)</span>
+</div>
+
+<div class="highlight">
+  <strong>PYNQ-Z2 LEDs</strong> are on the PL (FPGA fabric), not PS GPIO. The GPIO HAL is a no-op stub on this target. UART serial is on <code>/dev/ttyUSB2</code> at 115200 baud; JTAG uses <code>/dev/ttyUSB1</code>.
+</div>
+
+<h3>MPU Region Configuration (Cortex-M)</h3>
+
+<p>Six of eight available MPU regions are configured. Regions 4 and 5 are updated during each context switch to match the incoming thread's stack and the shared heap.</p>
+
+<table>
+  <tr><th>Region</th><th>Name</th><th>Base Address</th><th>Size</th><th>Access</th><th>XN</th></tr>
+  <tr><td>0</td><td>Flash</td><td><code>0x08000000</code></td><td>1 MB</td><td>RO Priv+Unpriv</td><td>No</td></tr>
+  <tr><td>1</td><td>Kernel SRAM</td><td><code>0x20000000</code></td><td>128 KB</td><td>RW Priv only</td><td>Yes</td></tr>
+  <tr><td>2</td><td>Peripherals</td><td><code>0x40000000</code></td><td>512 MB</td><td>RW Priv only</td><td>Yes</td></tr>
+  <tr><td>3</td><td>System</td><td><code>0xE0000000</code></td><td>512 MB</td><td>RW Priv only</td><td>Yes</td></tr>
+  <tr><td>4</td><td>Thread Stack</td><td>per-thread</td><td>varies</td><td>RW Full access</td><td>Yes</td></tr>
+  <tr><td>5</td><td>Heap</td><td>from linker</td><td>16 KB</td><td>RW Full access</td><td>Yes</td></tr>
+</table>
+
+<div class="key-decision">
+  <strong>PRIVDEFENA=1</strong> &mdash; Privileged code has a default memory map even for regions not explicitly covered by the MPU. <strong>HFNMIENA=0</strong> &mdash; The MPU is disabled during HardFault and NMI handlers, ensuring fault handlers can always access memory for crash dump output.
+</div>
+
+<div class="lesson">
+  <strong>Gotcha:</strong> Unprivileged threads cannot access globals in <code>.bss</code> or <code>.data</code> because Region 1 (Kernel SRAM) is privileged-only. Data must be passed to unprivileged threads via the thread argument pointer or the thread's own stack.
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 2: BOOT SEQUENCE                                     -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="boot-sequence">
+  <span class="ch-num">Section 2</span>
+  Boot Sequence
+</h2>
+
+<div class="epigraph">
+  "When the power goes on, the processor knows nothing. The startup code teaches it who it is."
+  <div class="attribution">&mdash; Embedded systems folklore</div>
+</div>
+
+<h3>Cortex-M Startup Flow</h3>
+
+<p>On reset, the Cortex-M core reads the initial stack pointer from address <code>0x08000000</code> and the reset vector from <code>0x08000004</code>. Execution begins in <code>Reset_Handler</code>, written in assembly (<code>startup/stm32f207zgt6/Startup.s</code>).</p>
+
+<div class="diagram">
+<span class="label">Reset_Handler</span> (Startup.s)
+  |
+  |  1. Copy .data from FLASH to SRAM
+  |     <span class="comment">ldr r0, =_sidata    @ source (FLASH LMA)</span>
+  |     <span class="comment">ldr r1, =_sdata     @ dest   (SRAM VMA)</span>
+  |     <span class="comment">ldr r2, =_edata     @ end</span>
+  |
+  |  2. Zero .bss
+  |     <span class="comment">ldr r0, =_sbss</span>
+  |     <span class="comment">ldr r1, =_ebss</span>
+  |     <span class="comment">movs r2, #0</span>
+  |
+  |  3. __libc_init_array
+  |     <span class="comment">Calls C++ static constructors (.init_array)</span>
+  |
+  v
+<span class="label">SystemInit</span>() (SystemInit.cpp, extern "C")
+  |
+  |  4. Configure PLL (HSE -> PLLCLK)
+  |  5. Set Flash wait states + prefetch + I/D caches
+  |  6. Configure bus prescalers (APB1, APB2)
+  |  7. Set SystemCoreClock global
+  |
+  v
+<span class="label">main</span>()
+  |
+  |  8. Initialize HAL (GPIO, UART, etc.)
+  |  9. Initialize kernel (threads, scheduler, IPC)
+  | 10. Create application threads
+  | 11. Start scheduler (SVC #0 -- does not return)
+  |
+  v
+<span class="label">Scheduler running</span> (idle thread + application threads)
+</div>
+
+<h3>PLL Configuration</h3>
+
+<p>Both STM32 targets derive SYSCLK from the HSE oscillator through the PLL. The PLL formula is: <code>SYSCLK = (HSE / PLL_M) * PLL_N / PLL_P</code>.</p>
+
+<table>
+  <tr><th>Parameter</th><th>STM32F207</th><th>STM32F407</th></tr>
+  <tr><td>HSE</td><td>25 MHz</td><td>8 MHz</td></tr>
+  <tr><td>PLL_M</td><td>25</td><td>8</td></tr>
+  <tr><td>PLL_N</td><td>240</td><td>168</td></tr>
+  <tr><td>PLL_P</td><td>2</td><td>2</td></tr>
+  <tr><td>PLL_Q</td><td>5</td><td>7</td></tr>
+  <tr><td>SYSCLK</td><td>120 MHz</td><td>168 MHz</td></tr>
+  <tr><td>APB1 prescaler</td><td>/4 = 30 MHz</td><td>/4 = 42 MHz</td></tr>
+  <tr><td>APB2 prescaler</td><td>/2 = 60 MHz</td><td>/2 = 84 MHz</td></tr>
+  <tr><td>Flash wait states</td><td>3</td><td>5</td></tr>
+</table>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The F407 requires PWR VOS Scale 1 to be set before configuring the PLL at 168 MHz. The F207 (Cortex-M3) has no PWR voltage scaling register. This is handled by platform-specific <code>SystemInit()</code> implementations, not <code>#ifdef</code> guards.
+</div>
+
+<h3>Cortex-A9 Boot (PYNQ-Z2)</h3>
+
+<p>The Zynq boot path differs fundamentally from Cortex-M. During development, ms-os is loaded directly into DDR via JTAG (OpenOCD). The Zynq BootROM and FSBL initialize PLLs and DDR before we connect. ms-os assumes clocks are already configured and jumps straight into its startup sequence at <code>0x00100000</code>.</p>
+
+<div class="diagram">
+<span class="label">BootROM</span> -> <span class="label">FSBL</span> -> <span class="comment">(JTAG load via OpenOCD)</span> -> <span class="label">ms-os Startup.s</span>
+                                    |
+                                    |  PLLs already configured:
+                                    |    CPU_CLK  = 650 MHz
+                                    |    DDR_CLK  = 525 MHz
+                                    |    UART_REF = 100 MHz
+                                    |    PERIPHCLK = CPU_CLK/2 = 325 MHz
+                                    |
+                                    v
+                              Set mode stacks (SVC, IRQ, ABT, FIQ, UND, SYS)
+                                    |
+                                    v
+                              Zero .bss, copy .data
+                                    |
+                                    v
+                              Set SystemCoreClock globals
+                                    |
+                                    v
+                              Branch to main()
+</div>
+
+<div class="highlight">
+  <strong>CPU1 parking:</strong> On Zynq, CPU1 starts executing from the BootROM and enters a WFE loop. ms-os checks the MPIDR register (CP15 c0, c0, 5) to confirm it is running on CPU0 and leaves CPU1 parked.
+</div>
+
+<h3>UART Baud Rate Calculation (Zynq)</h3>
+
+<p>The Cadence UART on Zynq uses the formula: <code>Baud = uart_ref_clk / (CD * (BDIV + 1))</code>. With UART reference clock at 100 MHz and target baud of 115200:</p>
+
+<div class="diagram">
+BDIV = 4     (BDIV register value, divisor = BDIV + 1 = 5)
+CD   = 173   (clock divisor: 100000000 / (115200 * 5) = 173.6 ~ 173)
+
+Actual baud = 100000000 / (173 * 5) = 115607  <span class="comment">(0.35% error, within tolerance)</span>
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 3: THREAD MANAGEMENT                                 -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="threads">
+  <span class="ch-num">Section 3</span>
+  Thread Management
+</h2>
+
+<div class="epigraph">
+  "A thread is nothing more than a saved register set and a stack."
+  <div class="attribution">&mdash; Operating Systems: Three Easy Pieces</div>
+</div>
+
+<p>ms-os supports up to <strong>8 threads</strong> (including the idle thread at ID 0). Thread 0 is always the idle thread, running at priority 31 (lowest). Threads are statically allocated -- there is no dynamic thread creation or destruction.</p>
+
+<h3>Thread Control Block (TCB) Layout</h3>
+
+<p>The TCB structure is defined in <code>kernel/inc/kernel/Thread.h</code>. Assembly code in the context switch routines accesses fields at fixed offsets, making the layout ABI-critical.</p>
+
+<div class="diagram">
+<span class="label">ThreadControlBlock</span>    (sizeof = 48 bytes on ARM 32-bit)
+
+Offset  Field                Type          Description
+------  -------------------  ----------    --------------------------------
+  0     stackPointer         uint32_t*     Current SP (PSP on M, SYS on A9)
+  4     state                ThreadState   Ready / Running / Blocked
+  5     id                   uint8_t       Thread ID (0-7)
+  6     basePriority         uint8_t       Assigned priority (0=highest)
+  7     currentPriority      uint8_t       Effective (may be boosted)
+  8     name                 const char*   Pointer to name string
+ 12     stackBase            uint32_t*     Bottom of stack allocation
+ 16     stackSize            uint32_t      Stack size in bytes
+ 20     timeSliceRemaining   uint32_t      Ticks remaining in time slice
+ 24     timeSlice            uint32_t      Full time slice (ticks)
+ 28     nextReady            ThreadId      Next in per-priority ready list
+ 29     nextWait             ThreadId      Next in mutex/semaphore wait queue
+ 30     (padding)            2 bytes
+ 32     wakeupTick           uint32_t      Tick count for sleep wakeup
+ 36     mpuStackRbar         uint32_t      MPU RBAR for thread stack region
+ 40     mpuStackRasr         uint32_t      MPU RASR for thread stack region
+ 44     privileged           bool          true=privileged, false=unprivileged
+</div>
+
+<div class="lesson">
+  <strong>ABI constraint:</strong> The <code>stackPointer</code> field must remain at offset 0 because the context switch assembly loads and stores it with <code>ldr r0, [tcb_ptr]</code> / <code>str r0, [tcb_ptr]</code>. Similarly, the assembly reads <code>privileged</code> at offset 44 and <code>mpuStackRbar</code>/<code>mpuStackRasr</code> at offsets 36/40. Moving any of these fields requires updating the assembly.
+</div>
+
+<h3>Thread States</h3>
+
+<div class="diagram">
+                  threadCreate()
+                       |
+                       v
+              +--------+--------+
+              |     <span class="label">Ready</span>       |<-----------------------+
+              +---------+-------+                        |
+                        |                                |
+              scheduler selects                  wakeup / unblock
+              (highest priority)                  (tick, unlock,
+                        |                          IPC reply)
+                        v                                |
+              +---------+-------+                +-------+--------+
+              |    <span class="label">Running</span>      |                |    <span class="label">Blocked</span>      |
+              |  (exactly one)  +--------------->|  (sleep, mutex, |
+              +--------+-------+   sleep() /     |   semaphore,   |
+                       |           mutex lock /   |   IPC send/    |
+                       |           IPC receive    |   receive)     |
+                       v                          +----------------+
+              yield() or preempt
+              (returns to Ready)
+</div>
+
+<p><strong>ThreadState::Inactive</strong> (value 0) marks unused TCB slots. Only threads in the <strong>Ready</strong> state appear in the scheduler's ready queues. The <strong>Running</strong> state is always held by exactly one thread -- the one currently executing on the CPU.</p>
+
+<h3>Initial Stack Frame</h3>
+
+<p>When a thread is created, its stack is pre-populated with a 16-word (64-byte) frame that mimics what the hardware would push on an exception entry, plus the software-saved registers. When the scheduler first context-switches to this thread, the <code>ldmia</code> + <code>bx lr</code> (EXC_RETURN) sequence pops this frame, landing execution at the thread's entry function.</p>
+
+<div class="diagram">
+<span class="label">Initial Stack Frame</span> (16 words = 64 bytes, descending from stack top)
+
+SP+60  [15]  xPSR / CPSR       <span class="comment">0x01000000 (Cortex-M: Thumb bit)</span>
+SP+56  [14]  PC                 <span class="comment">Thread entry function address</span>
+SP+52  [13]  LR                 <span class="comment">kernelThreadExit (cleanup on return)</span>
+SP+48  [12]  r12                <span class="comment">0</span>
+SP+44  [11]  r3                 <span class="comment">0</span>
+SP+40  [10]  r2                 <span class="comment">0</span>
+SP+36  [ 9]  r1                 <span class="comment">0</span>
+SP+32  [ 8]  r0                 <span class="comment">Thread argument (void* arg)</span>
+-------- <span class="label">hardware / software boundary</span> --------
+SP+28  [ 7]  r11                <span class="comment">0  (software-saved)</span>
+SP+24  [ 6]  r10                <span class="comment">0</span>
+SP+20  [ 5]  r9                 <span class="comment">0</span>
+SP+16  [ 4]  r8                 <span class="comment">0</span>
+SP+12  [ 3]  r7                 <span class="comment">0</span>
+SP+ 8  [ 2]  r6                 <span class="comment">0</span>
+SP+ 4  [ 1]  r5                 <span class="comment">0</span>
+SP+ 0  [ 0]  r4                 <span class="comment">0  &lt;-- stackPointer in TCB points here</span>
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> Both Cortex-M and Cortex-A9 use the same 16-word stack frame layout. On Cortex-M, the hardware pushes r0-r3, r12, LR, PC, xPSR automatically on exception entry. On Cortex-A9, the IRQ handler performs this push in software using SRS/STMFD. The identical layout means the same <code>threadCreate()</code> code works for both architectures.
+</div>
+
+<h3>Thread Configuration</h3>
+
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+  <tr><td>priority</td><td>16</td><td>0 = highest, 31 = lowest</td></tr>
+  <tr><td>timeSlice</td><td>10 ticks</td><td>Round-robin quantum at same priority</td></tr>
+  <tr><td>stackSize</td><td>512 bytes</td><td>Must be power-of-two for MPU alignment</td></tr>
+  <tr><td>privileged</td><td>true</td><td>false = runs with CONTROL.nPRIV=1</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 4: CONTEXT SWITCH                                    -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="context-switch">
+  <span class="ch-num">Section 4</span>
+  Context Switch
+</h2>
+
+<div class="epigraph">
+  "The context switch is the beating heart of any preemptive kernel."
+  <div class="attribution">&mdash; Jean Labrosse, uC/OS-III</div>
+</div>
+
+<h3>Cortex-M: PendSV Handler</h3>
+
+<p>On Cortex-M, context switches are triggered by setting the PendSV pending bit. PendSV runs at the lowest exception priority (<code>0xFF</code>), ensuring it only fires after all other interrupts have been serviced. This prevents context switches from interrupting critical ISR processing.</p>
+
+<div class="diagram">
+<span class="label">Thread A running</span> (PSP -> Thread A's stack)
+  |
+  v
+<span class="label">PendSV fires</span> (priority 0xFF -- lowest exception)
+  |
+  |  1. <span class="label">cpsid i</span>                    disable interrupts
+  |  2. mrs r0, psp               get Thread A's stack pointer
+  |  3. stmdb r0!, {r4-r11}       push software regs to A's stack
+  |  4. str r0, [g_currentTcb]    save updated SP in A's TCB [offset 0]
+  |
+  |  5. g_currentTcb = g_nextTcb  switch the "current" pointer
+  |
+  |  6. ldr r1, [tcb, #36]        load Thread B's mpuStackRbar
+  |     ldr r2, [tcb, #40]        load Thread B's mpuStackRasr
+  |     str r1, [MPU->RBAR]       update MPU region 4 (thread stack)
+  |     str r2, [MPU->RASR]
+  |
+  |  7. ldr r0, [g_nextTcb]       load Thread B's stack pointer
+  |  8. ldmia r0!, {r4-r11}       pop software regs from B's stack
+  |  9. msr psp, r0               set PSP for Thread B
+  |
+  | 10. ldrb r1, [tcb, #44]       load Thread B's "privileged" flag
+  |     CONTROL = privileged ?     0b10 (nPRIV=0) : 0b11 (nPRIV=1)
+  |     msr control, r1
+  |     isb
+  |
+  | 11. <span class="label">cpsie i</span>                    enable interrupts
+  | 12. bx 0xFFFFFFFD             EXC_RETURN -> thread mode, PSP
+  |
+  v
+<span class="label">Thread B running</span> (PSP -> Thread B's stack)
+</div>
+
+<div class="highlight">
+  <strong>Performance:</strong> The MPU region update (step 6) adds approximately 4 instructions to the context switch path -- roughly 50 nanoseconds at 120 MHz. The CONTROL register update (step 10) adds another 3 instructions including the mandatory ISB barrier.
+</div>
+
+<h3>Cortex-A9: IRQ-Based Context Switch</h3>
+
+<p>The Cortex-A profile has no PendSV exception. Instead, ms-os uses <strong>SGI #0</strong> (Software Generated Interrupt) as the context switch trigger. The context switch occurs in the IRQ handler epilogue when <code>g_currentTcb != g_nextTcb</code>.</p>
+
+<div class="diagram">
+<span class="label">IRQ Entry</span> (hardware switches to IRQ mode)
+  |
+  |  1. sub lr, lr, #4             adjust return address
+  |  2. srsdb sp!, #0x1F           save {LR_irq, SPSR_irq} to SYS stack
+  |  3. cps #0x1F                  switch to SYS mode
+  |  4. stmfd sp!, {r0-r3, r12}   save caller-saved regs
+  |
+  |  --- handle interrupt (read ICCIAR, dispatch, write ICCEOIR) ---
+  |
+  |  5. Compare g_currentTcb vs g_nextTcb
+  |     If equal: restore regs, RFEIA sp! (return to interrupted thread)
+  |
+  |  <span class="label">Context switch needed:</span>
+  |  6. stmfd sp!, {r4-r11}        save callee-saved regs (Thread A)
+  |  7. str sp, [g_currentTcb]     save SP in A's TCB
+  |  8. g_currentTcb = g_nextTcb
+  |  9. ldr sp, [g_nextTcb]        load Thread B's SP
+  | 10. ldmfd sp!, {r4-r11}        restore callee-saved regs (Thread B)
+  | 11. ldmfd sp!, {r0-r3, r12}    restore caller-saved regs
+  | 12. rfeia sp!                   atomic restore {PC, CPSR} from SYS stack
+  |
+  v
+<span class="label">Thread B running</span> (SYS mode)
+</div>
+
+<div class="lesson">
+  <strong>Critical Bug (Phase 4B):</strong> The original IRQ handler used r4/r5 to hold GIC register addresses <em>before</em> saving the callee-saved registers. This clobbered the interrupted thread's r4/r5 values. The fix: use only r0-r3 (caller-saved) for GIC access, and push to the stack if more temporaries are needed.
+</div>
+
+<div class="key-decision">
+  <strong>SRS/RFE:</strong> These A-profile instructions atomically save/restore {PC, CPSR} to/from a mode's stack. <code>srsdb sp!, #0x1F</code> saves to the SYS mode stack (mode 0x1F). <code>rfeia sp!</code> pops PC and CPSR atomically, returning to the interrupted context. This replaces the Cortex-M <code>EXC_RETURN</code> mechanism.
+</div>
+
+<h3>Triggering a Context Switch</h3>
+
+<table>
+  <tr><th>Mechanism</th><th>Cortex-M</th><th>Cortex-A9</th></tr>
+  <tr><td>Explicit yield</td><td>Set PendSV pending bit</td><td>Write SGI #0 to ICDSGIR</td></tr>
+  <tr><td>Timer preemption</td><td>SysTick_Handler sets PendSV</td><td>SCU timer IRQ triggers SGI #0</td></tr>
+  <tr><td>Unblock (mutex/IPC)</td><td>Set PendSV pending bit</td><td>Write SGI #0 to ICDSGIR</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 5: SCHEDULER                                         -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="scheduler">
+  <span class="ch-num">Section 5</span>
+  Scheduler
+</h2>
+
+<div class="epigraph">
+  "The best scheduler is the one you never notice."
+  <div class="attribution">&mdash; Anonymous kernel developer</div>
+</div>
+
+<h3>32-Level Priority Bitmap</h3>
+
+<p>The scheduler uses a bitmap-based priority scheme with 32 priority levels (0 = highest, 31 = lowest). This matches the Cortex-M NVIC convention where lower numeric values mean higher priority.</p>
+
+<div class="diagram">
+<span class="label">readyBitmap</span> (uint32_t)
+  Bit N set = at least one thread is ready at priority N
+
+  31 30 29 28 27 ... 5  4  3  2  1  0
+  [  1  0  0  0  ... 0  0  0  1  0  1 ]
+                                |     |
+                          prio 2 has  prio 0 has
+                          ready       ready
+                          threads     threads
+
+<span class="label">readyQueues[32]</span> -- singly-linked list per priority level
+  readyQueues[0]:  Thread2 -> Thread5 -> kInvalidThreadId
+  readyQueues[2]:  Thread3 -> kInvalidThreadId
+  readyQueues[31]: Thread0 (idle) -> kInvalidThreadId
+
+<span class="label">findHighestPriority()</span>:
+  idx = __builtin_ctz(readyBitmap)      <span class="comment">// count trailing zeros</span>
+  <span class="comment">// On ARM: compiles to RBIT + CLZ -> single cycle, O(1)</span>
+  return readyQueues[idx].head
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> <code>__builtin_ctz</code> maps to <code>RBIT + CLZ</code> on ARM, giving O(1) highest-priority lookup regardless of the number of threads or priority levels. Round-robin scheduling within the same priority level is achieved by moving the running thread to the tail of its priority queue when its time slice expires.
+</div>
+
+<h3>Time Slicing</h3>
+
+<p>Each thread has a configurable time slice (default: 10 ticks). The SysTick handler (or SCU timer on A9) decrements <code>timeSliceRemaining</code> each tick. When it reaches zero, the scheduler moves the current thread to the back of its priority queue and selects the next thread.</p>
+
+<h3>Priority Inheritance</h3>
+
+<p>When a high-priority thread blocks on a mutex held by a lower-priority thread, <strong>priority inheritance</strong> temporarily boosts the owner's <code>currentPriority</code> to prevent unbounded priority inversion. The owner's <code>basePriority</code> is unchanged; on unlock, <code>currentPriority</code> is restored to <code>basePriority</code>.</p>
+
+<div class="diagram">
+<span class="label">Priority Inversion Scenario</span>
+
+Time -->
+                                                        <span class="comment">Without inheritance:</span>
+Thread H (prio 0):  [RUN]----[BLOCKED on M]----------  <span class="comment">H starves waiting for L</span>
+Thread M (prio 15): .........[RUN]~~~~~~~~~~~~~~~~~~~~  <span class="comment">M preempts L indefinitely</span>
+Thread L (prio 20): ...[RUN, holds M]...[blocked].....  <span class="comment">L never unlocks M</span>
+
+                                                        <span class="comment">With inheritance:</span>
+Thread H (prio 0):  [RUN]----[BLOCKED on M]--[RUN]     <span class="comment">H runs after L unlocks</span>
+Thread M (prio 15): .........                 .[RUN]    <span class="comment">M runs at its own time</span>
+Thread L (prio 20): ...[RUN, holds M]--[boosted to 0]   <span class="comment">L boosted, runs, unlocks M</span>
+                                       ^                <span class="comment">L.currentPriority = 0</span>
+</div>
+
+<h3>Mutex Semantics</h3>
+
+<table>
+  <tr><th>Property</th><th>Value</th></tr>
+  <tr><td>Recursive locking</td><td>Yes (same thread can lock multiple times)</td></tr>
+  <tr><td>Priority inheritance</td><td>Mandatory (always active)</td></tr>
+  <tr><td>Wait queue ordering</td><td>Priority-sorted (highest priority first)</td></tr>
+  <tr><td>Try-lock</td><td>Non-blocking variant available</td></tr>
+</table>
+
+<h3>Semaphore Semantics</h3>
+
+<table>
+  <tr><th>Property</th><th>Value</th></tr>
+  <tr><td>Type</td><td>Counting semaphore</td></tr>
+  <tr><td>Wait queue ordering</td><td>Priority-sorted</td></tr>
+  <tr><td>Try-wait</td><td>Non-blocking variant available</td></tr>
+  <tr><td>ISR-safe signal</td><td>Yes (semaphoreSignal does not block)</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 6: IPC MESSAGE PASSING                               -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="ipc">
+  <span class="ch-num">Section 6</span>
+  IPC Message Passing
+</h2>
+
+<div class="epigraph">
+  "In a microkernel, everything that is not the scheduler is a message."
+  <div class="attribution">&mdash; Andrew S. Tanenbaum, on Minix</div>
+</div>
+
+<p>ms-os implements a <strong>per-thread mailbox model</strong> inspired by Minix. Each thread has a statically allocated mailbox with a 4-slot ring buffer of 64-byte messages. No heap allocation is required for IPC.</p>
+
+<h3>Message Structure (64 bytes)</h3>
+
+<div class="diagram">
+<span class="label">kernel::Message</span>    sizeof = 64 bytes (static_assert enforced)
+
+Offset  Field          Size   Description
+------  -----------    -----  -----------------------------------
+  0     sender          1B    Source thread ID (filled by kernel)
+  1     type            1B    Request / Reply / Notify / OneWay
+  2     methodId        2B    Service method identifier
+  4     serviceId       4B    FNV-1a hash of service name
+  8     status          4B    Return code (for replies)
+ 12     payloadSize     2B    Bytes of payload used (0-48)
+ 14     reserved        2B    Padding for alignment
+ 16     payload[48]    48B    Inline data (no heap allocation)
+------
+ 64     (total)
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> 64 bytes per message was chosen to balance between fitting common RPC payloads inline (48 bytes of payload covers most small structs and arrays) and keeping the per-thread mailbox overhead manageable. With 4 slots per thread and 8 threads: 8 * 4 * 64 = 2048 bytes total mailbox memory.
+</div>
+
+<h3>Synchronous RPC Flow</h3>
+
+<p>The primary IPC pattern is synchronous send/receive/reply, identical to the Minix model. The client blocks until the server processes the request and sends a reply.</p>
+
+<div class="diagram">
+<span class="label">Client Thread</span>                            <span class="label">Server Thread</span>
+     |                                       |
+     |  messageSend(server, &amp;msg, &amp;reply)    |
+     |---- msg enqueued in server mailbox -->|
+     |  [client state = <span class="label">Blocked</span>]            |
+     |  [blockReason = Reply]                |
+     |                                  messageReceive(&amp;msg)
+     |                                       |-- dequeues msg
+     |                                       |-- processes request
+     |                                       |
+     |                                  messageReply(client, &amp;reply)
+     |<---- reply written to replySlot ------|
+     |  [client state = <span class="label">Ready</span>]              |
+     |  [client wakes, reads reply]          |
+     v                                       v
+</div>
+
+<h3>Non-Blocking Variants</h3>
+
+<table>
+  <tr><th>Function</th><th>Blocks?</th><th>Returns on failure</th></tr>
+  <tr><td><code>messageSend()</code></td><td>Yes (until reply)</td><td>N/A</td></tr>
+  <tr><td><code>messageReceive()</code></td><td>Yes (until message)</td><td>N/A</td></tr>
+  <tr><td><code>messageReply()</code></td><td>No</td><td><code>kIpcErrInvalid</code></td></tr>
+  <tr><td><code>messageTrySend()</code></td><td>No</td><td><code>kIpcErrFull</code></td></tr>
+  <tr><td><code>messageTryReceive()</code></td><td>No</td><td><code>kIpcErrEmpty</code></td></tr>
+</table>
+
+<h3>Async Notifications</h3>
+
+<p>Each thread has a 32-bit notification bitmask. <code>messageNotify()</code> performs an atomic OR on the destination's bitmask -- this is <strong>ISR-safe</strong> (no blocking, no memory allocation). <code>messageCheckNotify()</code> reads and clears the bitmask atomically.</p>
+
+<div class="diagram">
+<span class="label">Notification Bitmask</span> (32 bits per thread)
+
+ISR or Thread:   messageNotify(dest, 0x05)     <span class="comment">// set bits 0 and 2</span>
+                      |
+                      v
+  notifyBits:    ... 0 0 0 0 0 1 0 1           <span class="comment">// atomic OR</span>
+
+Dest Thread:     bits = messageCheckNotify()    <span class="comment">// returns 0x05</span>
+                      |
+                      v
+  notifyBits:    ... 0 0 0 0 0 0 0 0           <span class="comment">// cleared to zero</span>
+</div>
+
+<h3>Mailbox Structure</h3>
+
+<div class="diagram">
+<span class="label">ThreadMailbox</span> (per thread, statically allocated)
+
+  +---+---+---+---+
+  | 0 | 1 | 2 | 3 |   slots[4] -- ring buffer of Message (64B each)
+  +---+---+---+---+
+    ^           ^
+    head        tail       head = read index, tail = write index
+                           count = number of pending messages
+
+  notifyBits:       uint32_t    async notification bitmask
+  senderWaitHead:   ThreadId    list of threads blocked trying to send
+  receiverWaitHead: ThreadId    thread blocked on receive
+  blockReason:      IpcBlockReason   why owning thread is blocked
+  replySlot:        Message*    where to write reply for send
+
+<span class="comment">Memory budget: 8 mailboxes * (4 * 64B + overhead) = ~2.2 KB</span>
+<span class="comment">              + ~1.2 KB IPC code = ~3.4 KB total IPC overhead</span>
+</div>
+
+<h3>IDL Code Generator</h3>
+
+<p>The <code>ipcgen</code> tool generates typed client stubs and server dispatch loops from IDL interface definitions. Generated servers use a <code>messageReceive -> switch(methodId) -> handleXxx -> messageReply</code> pattern. Each method includes a <code>static_assert</code> to catch payload overflow at compile time.</p>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 7: SYSCALL INTERFACE                                 -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="syscall">
+  <span class="ch-num">Section 7</span>
+  Syscall Interface
+</h2>
+
+<div class="epigraph">
+  "The SVC instruction is the door between user space and the kernel."
+  <div class="attribution">&mdash; ARM Cortex-M Programming Guide</div>
+</div>
+
+<p>Unprivileged threads cannot call kernel APIs directly -- the MPU prevents access to kernel memory, and executing privileged instructions would trigger a UsageFault. Instead, they execute <code>SVC #N</code>, which traps to handler mode where the kernel has full access.</p>
+
+<h3>SVC Dispatch Flow (Cortex-M)</h3>
+
+<div class="diagram">
+<span class="label">Unprivileged Thread</span>
+  |
+  |  svc #N                       trap to handler mode
+  |
+  v
+<span class="label">SVC_Handler</span> (assembly, handler mode)
+  |
+  |  1. tst lr, #4                <span class="comment">which stack pointer? (MSP or PSP)</span>
+  |     ite eq
+  |     mrseq r0, msp
+  |     mrsne r0, psp             <span class="comment">r0 = exception frame pointer</span>
+  |
+  |  2. ldr r1, [r0, #24]         <span class="comment">stacked PC (return address)</span>
+  |     ldrb r1, [r1, #-2]        <span class="comment">extract SVC number from instruction</span>
+  |
+  |  3. cmp r1, #0                <span class="comment">SVC 0 = startFirstThread (special)</span>
+  |     beq startFirstThread
+  |
+  |  4. push {r0, lr}             <span class="comment">save frame pointer and EXC_RETURN</span>
+  |     bl svcDispatch             <span class="comment">C++ dispatch: svcDispatch(svcNum, r0-r3)</span>
+  |     pop {r1, lr}
+  |
+  |  5. str r0, [r1, #0]          <span class="comment">write return value to stacked r0</span>
+  |
+  |  6. bx lr                     <span class="comment">return to thread (EXC_RETURN)</span>
+  |
+  v
+<span class="label">Thread resumes</span> (return value in r0)
+</div>
+
+<h3>Syscall Number Table</h3>
+
+<table>
+  <tr><th>SVC#</th><th>Name</th><th>Args (r0-r3)</th><th>Returns</th></tr>
+  <tr><td>0</td><td>startFirstThread</td><td>--</td><td>(does not return)</td></tr>
+  <tr><td>1</td><td>yield</td><td>--</td><td>void</td></tr>
+  <tr><td>2</td><td>sleep</td><td>ticks</td><td>void</td></tr>
+  <tr><td>3</td><td>tickCount</td><td>--</td><td>uint32_t</td></tr>
+  <tr><td>4</td><td>mutexCreate</td><td>name_ptr</td><td>MutexId</td></tr>
+  <tr><td>5</td><td>mutexDestroy</td><td>id</td><td>void</td></tr>
+  <tr><td>6</td><td>mutexLock</td><td>id</td><td>bool</td></tr>
+  <tr><td>7</td><td>mutexTryLock</td><td>id</td><td>bool</td></tr>
+  <tr><td>8</td><td>mutexUnlock</td><td>id</td><td>bool</td></tr>
+  <tr><td>9</td><td>semaphoreCreate</td><td>init, max, name</td><td>SemaphoreId</td></tr>
+  <tr><td>10</td><td>semaphoreDestroy</td><td>id</td><td>void</td></tr>
+  <tr><td>11</td><td>semaphoreWait</td><td>id</td><td>bool</td></tr>
+  <tr><td>12</td><td>semaphoreTryWait</td><td>id</td><td>bool</td></tr>
+  <tr><td>13</td><td>semaphoreSignal</td><td>id</td><td>bool</td></tr>
+  <tr><td>14</td><td>messageSend</td><td>dest, msg_ptr, reply_ptr</td><td>int32_t</td></tr>
+  <tr><td>15</td><td>messageReceive</td><td>msg_ptr</td><td>int32_t</td></tr>
+  <tr><td>16</td><td>messageReply</td><td>dest, reply_ptr</td><td>int32_t</td></tr>
+  <tr><td>17</td><td>messageTrySend</td><td>dest, msg_ptr</td><td>int32_t</td></tr>
+  <tr><td>18</td><td>messageTryReceive</td><td>msg_ptr</td><td>int32_t</td></tr>
+  <tr><td>19</td><td>messageNotify</td><td>dest, bits</td><td>int32_t</td></tr>
+  <tr><td>20</td><td>messageCheckNotify</td><td>--</td><td>uint32_t</td></tr>
+  <tr><td>21</td><td>heapAlloc</td><td>size</td><td>void*</td></tr>
+  <tr><td>22</td><td>heapFree</td><td>ptr</td><td>void</td></tr>
+  <tr><td>23</td><td>heapGetStats</td><td>stats_ptr</td><td>void</td></tr>
+</table>
+
+<h3>CONTROL Register</h3>
+
+<p>The Cortex-M CONTROL register determines thread privilege level and stack pointer selection. PendSV updates CONTROL on every context switch based on the incoming thread's <code>privileged</code> flag.</p>
+
+<div class="diagram">
+<span class="label">CONTROL Register</span> (2 bits used)
+
+  Bit 1 (SPSEL):  0 = MSP,  1 = PSP
+  Bit 0 (nPRIV):  0 = Privileged,  1 = Unprivileged
+
+  <span class="label">Privileged thread:</span>    CONTROL = 0b10  (SPSEL=1, nPRIV=0)
+  <span class="label">Unprivileged thread:</span>  CONTROL = 0b11  (SPSEL=1, nPRIV=1)
+  <span class="label">Handler mode:</span>         Always privileged, always MSP
+</div>
+
+<h3>The g_inSyscall Flag</h3>
+
+<p>A subtle problem arises because kernel functions like <code>sleep()</code> and <code>messageSend()</code> check <code>inIsrContext()</code> and early-return if true -- they are designed to never block from an ISR. But the SVC handler <em>runs in handler mode</em>, so <code>VECTACTIVE != 0</code>, making <code>inIsrContext()</code> return true even though the caller is a thread that should be allowed to block.</p>
+
+<div class="key-decision">
+  <strong>Solution:</strong> <code>svcDispatch()</code> sets a global <code>g_inSyscall</code> flag to <code>true</code> before calling any kernel function, and clears it after. <code>inIsrContext()</code> checks this flag first: if <code>g_inSyscall</code> is true, it returns false (meaning "not in ISR, safe to block"), even though the hardware says otherwise.
+</div>
+
+<h3>User-Space Wrappers</h3>
+
+<p>The <code>kernel::user</code> namespace (<code>kernel/inc/kernel/Syscall.h</code>) provides inline wrappers that issue the SVC instruction with the correct syscall number and register constraints on ARM targets. On the host (x86, for testing), these same wrappers are <code>#else</code> implementations that call the kernel APIs directly.</p>
+
+<pre>
+<span class="cmt">// ARM target: inline SVC</span>
+<span class="kw">inline</span> <span class="kw">void</span> <span class="fn">sleep</span>(std::uint32_t ticks)
+{
+    <span class="kw">register</span> std::uint32_t r0 <span class="kw">__asm</span>(<span class="str">"r0"</span>) = ticks;
+    <span class="kw">__asm volatile</span>(<span class="str">"svc %1"</span> : <span class="str">"+r"</span>(r0) : <span class="str">"I"</span>(syscall::kSleep) : <span class="str">"memory"</span>);
+}
+
+<span class="cmt">// Host target: direct call</span>
+<span class="kw">inline</span> <span class="kw">void</span> <span class="fn">sleep</span>(std::uint32_t ticks) { kernel::<span class="fn">sleep</span>(ticks); }
+</pre>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 8: DEVICE TREE                                       -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="device-tree">
+  <span class="ch-num">Section 8</span>
+  Device Tree
+</h2>
+
+<div class="epigraph">
+  "Describe the hardware, don't hard-code it."
+  <div class="attribution">&mdash; Device Tree specification, Linaro</div>
+</div>
+
+<p>ms-os uses a two-stage device tree pipeline. Board descriptions are written in YAML (human-readable, easy to maintain), then compiled through an FDT (Flattened Device Tree) binary for runtime parsing.</p>
+
+<h3>Pipeline Overview</h3>
+
+<div class="diagram">
+<span class="label">Build-Time Pipeline</span>
+
+  boards/stm32f207.yaml          <span class="comment">Human-readable board description</span>
+         |
+         v
+  <span class="label">dtgen</span> (Python)                  <span class="comment">YAML -> constexpr BoardConfig.h</span>
+         |                         <span class="comment">(compile-time board constants)</span>
+         v
+  board_config/BoardConfig.h     <span class="comment">Generated header, per-target</span>
+
+
+<span class="label">Runtime Pipeline</span>
+
+  board.dts                      <span class="comment">Device Tree Source (standard format)</span>
+         |
+         v
+  <span class="label">dtc</span> (Device Tree Compiler)       <span class="comment">Standard toolchain utility</span>
+         |
+         v
+  board.dtb                      <span class="comment">FDT binary blob (magic: 0xD00DFEED)</span>
+         |
+         v
+  <span class="label">dtb2cpp</span> (Python)                 <span class="comment">DTB -> C++ byte array</span>
+         |
+         v
+  board_dtb.cpp                  <span class="comment">Linked into firmware image</span>
+         |
+         v
+  <span class="label">fdt::parse()</span> at runtime          <span class="comment">Zero-allocation FDT parser</span>
+</div>
+
+<h3>FDT Binary Format</h3>
+
+<div class="diagram">
+<span class="label">FDT Header</span>
+  +0x00  magic          0xD00DFEED
+  +0x04  totalsize      Total size of DTB
+  +0x08  off_dt_struct   Offset to structure block
+  +0x0C  off_dt_strings  Offset to strings block
+  +0x10  off_mem_rsvmap  Offset to memory reservation map
+  +0x14  version        17 (standard)
+  +0x18  last_comp_version  16
+
+<span class="label">Structure Block Tokens</span>
+  0x00000001  FDT_BEGIN_NODE   (followed by node name)
+  0x00000002  FDT_END_NODE
+  0x00000003  FDT_PROP         (followed by len, nameoff, data)
+  0x00000009  FDT_END
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The runtime FDT parser is zero-allocation -- it walks the binary blob in-place, returning pointers into the DTB data. This makes it safe to use from kernel code where dynamic allocation is forbidden.
+</div>
+
+<h3>Compile-Time Board Configuration</h3>
+
+<p>The <code>dtgen</code> tool reads YAML board descriptions and generates a <code>BoardConfig.h</code> header with <code>constexpr</code> values. Application code uses <code>if constexpr (board::kHasLed)</code> for compile-time optional feature selection, ensuring zero runtime overhead for absent peripherals.</p>
+
+<table>
+  <tr><th>Artifact</th><th>Tool</th><th>Tests</th></tr>
+  <tr><td>BoardConfig.h</td><td>dtgen (Python)</td><td>74 pytest tests</td></tr>
+  <tr><td>IPC client/server stubs</td><td>ipcgen (Python)</td><td>40 pytest tests</td></tr>
+  <tr><td>board_dtb.cpp</td><td>dtb2cpp (Python)</td><td>21 pytest tests</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 9: MEMORY ALLOCATORS                                 -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="allocators">
+  <span class="ch-num">Section 9</span>
+  Memory Allocators
+</h2>
+
+<div class="epigraph">
+  "In real-time systems, the allocator must be as predictable as the scheduler."
+  <div class="attribution">&mdash; Jack Ganssle</div>
+</div>
+
+<p>ms-os provides two allocators: a fixed-size <strong>Block Pool</strong> for deterministic O(1) allocation, and a variable-size <strong>Heap</strong> for general-purpose allocation in user application code.</p>
+
+<h3>Block Pool</h3>
+
+<p>The block pool uses an embedded free-list: each free block stores a pointer to the next free block in its first <code>sizeof(void*)</code> bytes. Allocation and deallocation are both O(1) -- pop from or push to the free-list head.</p>
+
+<div class="diagram">
+<span class="label">Block Pool Layout</span>
+
+  +-------+-------+-------+-------+-------+
+  | blk 0 | blk 1 | blk 2 | blk 3 | blk 4 |  (blockSize bytes each)
+  +-------+-------+-------+-------+-------+
+
+<span class="label">Free List</span> (embedded in block data)
+
+  freeHead --> [blk 2] --> [blk 0] --> [blk 4] --> nullptr
+               (next*)     (next*)     (next*)
+
+  alloc():  ptr = freeHead; freeHead = ptr->next;   <span class="comment">O(1)</span>
+  free(p):  p->next = freeHead; freeHead = p;       <span class="comment">O(1)</span>
+
+<span class="comment">Minimum blockSize = sizeof(void*) = 4 bytes (to hold the next pointer)</span>
+</div>
+
+<h3>Heap Allocator</h3>
+
+<p>The heap uses a first-fit free-list with immediate coalescing, based on the design from OSTEP Chapter 17. The free list is sorted by address to enable O(1) coalescing with adjacent free blocks during <code>heapFree()</code>.</p>
+
+<div class="diagram">
+<span class="label">Block Header</span>
+  +-----------------------------+
+  | size (31 bits) | alloc (1b) |   <span class="comment">Bit 0 of size word = allocated flag</span>
+  +-----------------------------+
+  | next (32 bits)              |   <span class="comment">Pointer to next free block (free only)</span>
+  +-----------------------------+
+  | user data...                |   <span class="comment">&lt;-- returned pointer (8-byte aligned)</span>
+  |                             |
+  +-----------------------------+
+
+<span class="label">Free List</span> (address-sorted, immediate coalescing)
+
+  freeHead --> [hdr|        free       ] --> [hdr|     free     ] --> sentinel
+               addr: 0x20004000               addr: 0x20004800
+               size: 0x400                    size: 0x200
+
+<span class="label">Allocation</span> (first-fit):
+  Walk free list, find first block where size >= requested + header
+  Split if remainder > min block size
+  Mark allocated (set bit 0 of size)
+
+<span class="label">Deallocation</span> (immediate coalescing):
+  Clear allocated bit
+  If prev block is free: merge (prev.size += this.size)
+  If next block is free: merge (this.size += next.size)
+  Sentinel end-block prevents boundary checks
+</div>
+
+<div class="highlight">
+  <strong>Thread safety:</strong> Both <code>heapAlloc()</code> and <code>heapFree()</code> are wrapped in <code>enterCritical()</code> / <code>exitCritical()</code> (interrupt disable/enable). This is sufficient for a single-core system but would need to be replaced with a spinlock for SMP.
+</div>
+
+<h3>Heap Statistics</h3>
+
+<table>
+  <tr><th>Field</th><th>Description</th></tr>
+  <tr><td><code>totalSize</code></td><td>Total heap region size (from linker)</td></tr>
+  <tr><td><code>usedSize</code></td><td>Currently allocated bytes (including headers)</td></tr>
+  <tr><td><code>freeSize</code></td><td>Currently free bytes</td></tr>
+  <tr><td><code>highWatermark</code></td><td>Maximum <code>usedSize</code> ever observed</td></tr>
+  <tr><td><code>allocCount</code></td><td>Number of active allocations</td></tr>
+  <tr><td><code>largestFreeBlock</code></td><td>Largest contiguous free block</td></tr>
+</table>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> <code>operator new</code> and <code>operator delete</code> in <code>HeapOperators.cpp</code> (cross-compile only) route through the kernel heap. A <code>_sbrk</code> stub is also provided to satisfy newlib requirements but always returns failure -- all allocation goes through the kernel heap.
+</div>
+
+
+<!-- ============================================================ -->
+<!--  APPENDIX: REGISTER QUICK REFERENCE                           -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="registers">
+  <span class="ch-num">Appendix</span>
+  Register Quick Reference
+</h2>
+
+<h3>Cortex-M Fault Registers</h3>
+
+<table>
+  <tr><th>Register</th><th>Address</th><th>Description</th></tr>
+  <tr><td>CFSR</td><td><code>0xE000ED28</code></td><td>Configurable Fault Status (MemManage + BusFault + UsageFault)</td></tr>
+  <tr><td>HFSR</td><td><code>0xE000ED2C</code></td><td>HardFault Status Register</td></tr>
+  <tr><td>MMFAR</td><td><code>0xE000ED34</code></td><td>MemManage Fault Address Register</td></tr>
+  <tr><td>BFAR</td><td><code>0xE000ED38</code></td><td>BusFault Address Register</td></tr>
+  <tr><td>ICSR</td><td><code>0xE000ED04</code></td><td>Interrupt Control and State Register</td></tr>
+  <tr><td>SCB->SCR</td><td><code>0xE000ED10</code></td><td>System Control Register (SLEEPONEXIT, SLEEPDEEP)</td></tr>
+</table>
+
+<h3>Cortex-A9 CP15 Fault Registers</h3>
+
+<table>
+  <tr><th>Register</th><th>Access</th><th>Description</th></tr>
+  <tr><td>DFSR</td><td><code>MRC p15, 0, Rd, c5, c0, 0</code></td><td>Data Fault Status Register</td></tr>
+  <tr><td>IFSR</td><td><code>MRC p15, 0, Rd, c5, c0, 1</code></td><td>Instruction Fault Status Register</td></tr>
+  <tr><td>DFAR</td><td><code>MRC p15, 0, Rd, c6, c0, 0</code></td><td>Data Fault Address Register</td></tr>
+  <tr><td>IFAR</td><td><code>MRC p15, 0, Rd, c6, c0, 2</code></td><td>Instruction Fault Address Register</td></tr>
+</table>
+
+<h3>GIC Registers (Zynq-7020)</h3>
+
+<table>
+  <tr><th>Register</th><th>Address</th><th>Description</th></tr>
+  <tr><td>ICCIAR</td><td><code>0xF8F0010C</code></td><td>Interrupt Acknowledge (read: returns interrupt ID)</td></tr>
+  <tr><td>ICCEOIR</td><td><code>0xF8F00110</code></td><td>End of Interrupt (write: signals completion)</td></tr>
+  <tr><td>ICDDCR</td><td><code>0xF8F01000</code></td><td>Distributor Control Register</td></tr>
+  <tr><td>ICDISER</td><td><code>0xF8F01100</code></td><td>Interrupt Set-Enable Registers</td></tr>
+</table>
+
+<div class="highlight">
+  <strong>GIC IRQ IDs:</strong> Timer IRQ = 29 (SCU private timer), SGI context switch = 0 (Software Generated Interrupt for triggering PendSV-equivalent context switches).
+</div>
+
+<h3>Key Peripheral Addresses</h3>
+
+<table>
+  <tr><th>Peripheral</th><th>STM32F207/F407</th><th>Zynq-7020</th></tr>
+  <tr><td>GPIO</td><td><code>0x40020000</code>+ (GPIOA-GPIOI)</td><td>N/A (LEDs on PL fabric)</td></tr>
+  <tr><td>UART</td><td><code>0x40011000</code> (USART1)</td><td><code>0xE0000000</code> (PS UART0)</td></tr>
+  <tr><td>RCC / SLCR</td><td><code>0x40023800</code> (RCC)</td><td><code>0xF8000000</code> (SLCR)</td></tr>
+  <tr><td>SysTick / Timer</td><td><code>0xE000E010</code> (SysTick)</td><td><code>0xF8F00600</code> (SCU private timer)</td></tr>
+  <tr><td>NVIC / GIC</td><td><code>0xE000E100</code> (NVIC)</td><td><code>0xF8F01000</code> (GIC distributor)</td></tr>
+  <tr><td>SCB</td><td><code>0xE000ED00</code></td><td>N/A (CP15 coprocessor)</td></tr>
+  <tr><td>MPU</td><td><code>0xE000ED90</code></td><td>N/A (MMU via CP15)</td></tr>
+  <tr><td>PWR</td><td><code>0x40007000</code></td><td>N/A</td></tr>
+</table>
+
+<h3>Crash Dump Output</h3>
+
+<p>On an unrecoverable fault, ms-os prints a crash dump to the serial console containing:</p>
+
+<table>
+  <tr><th>Field</th><th>Cortex-M Source</th><th>Cortex-A9 Source</th></tr>
+  <tr><td>Fault type</td><td>CFSR / HFSR decode</td><td>r1 passed by handler (1=DataAbort, 2=PrefetchAbort, 3=Undefined)</td></tr>
+  <tr><td>Faulting address</td><td>MMFAR or BFAR</td><td>DFAR or IFAR (CP15)</td></tr>
+  <tr><td>Register state</td><td>Exception frame on PSP</td><td>Stacked registers on SYS stack</td></tr>
+  <tr><td>Stack trace</td><td>Frame pointer walk</td><td>Frame pointer walk</td></tr>
+  <tr><td>Thread ID/name</td><td>g_currentTcb</td><td>g_currentTcb</td></tr>
+</table>
+
+<div class="lesson">
+  <strong>Gotcha:</strong> ARM Cortex-A does not trap integer divide-by-zero (the result is simply 0). To test fault handling on A9, use the <code>UDF #0</code> (permanently undefined) instruction instead.
+</div>
+
+</body>
+</html>
