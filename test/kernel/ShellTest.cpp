@@ -526,3 +526,25 @@ TEST_F(ShellDtTest, Help_IncludesDt)
     EXPECT_NE(g_output.find("dt"), std::string::npos);
     EXPECT_NE(g_output.find("device tree"), std::string::npos);
 }
+
+// ---- wdt command ----
+
+TEST_F(ShellTest, Wdt_InactiveByDefault)
+{
+    sendLine("wdt");
+    EXPECT_NE(g_output.find("watchdog: inactive"), std::string::npos);
+}
+
+TEST_F(ShellTest, Wdt_ActiveAfterStart)
+{
+    test::g_watchdogRunning = true;
+    sendLine("wdt");
+    EXPECT_NE(g_output.find("watchdog: active"), std::string::npos);
+}
+
+TEST_F(ShellTest, Help_IncludesWdt)
+{
+    sendLine("help");
+    EXPECT_NE(g_output.find("wdt"), std::string::npos);
+    EXPECT_NE(g_output.find("watchdog"), std::string::npos);
+}

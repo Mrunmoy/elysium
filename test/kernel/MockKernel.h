@@ -48,6 +48,7 @@ namespace test
     inline bool g_sleepOnExit = false;
     inline bool g_deepSleep = false;
     inline std::uint32_t g_tickCount = 0;
+    inline bool g_watchdogRunning = false;
 
     inline void resetKernelMockState()
     {
@@ -61,6 +62,7 @@ namespace test
         g_sleepOnExit = false;
         g_deepSleep = false;
         g_tickCount = 0;
+        g_watchdogRunning = false;
         kernel::g_inSyscall = false;
     }
 

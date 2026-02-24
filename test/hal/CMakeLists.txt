@@ -1,6 +1,8 @@
 add_executable(hal_tests
     GpioTest.cpp
+    WatchdogTest.cpp
     MockGpio.cpp
+    MockWatchdog.cpp
 )
 
 target_include_directories(hal_tests PRIVATE

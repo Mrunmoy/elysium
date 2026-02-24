@@ -8,6 +8,7 @@ add_library(hal STATIC
     ${HAL_SRC_DIR}/Gpio.cpp
     ${HAL_SRC_DIR}/Uart.cpp
     ${HAL_SRC_DIR}/Rcc.cpp
+    ${HAL_SRC_DIR}/Watchdog.cpp
 )
 
 target_include_directories(hal PUBLIC
