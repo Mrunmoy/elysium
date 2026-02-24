@@ -4,6 +4,7 @@
 // commands using mock I/O (no UART hardware required).
 
 #include "kernel/Shell.h"
+#include "kernel/Version.h"
 #include "kernel/Thread.h"
 #include "kernel/Scheduler.h"
 #include "kernel/Heap.h"
@@ -158,7 +159,7 @@ TEST_F(ShellTest, Help_ListsCommands)
 TEST_F(ShellTest, Version_PrintsVersionString)
 {
     sendLine("version");
-    EXPECT_NE(g_output.find("ms-os v0.9.0"), std::string::npos);
+    EXPECT_NE(g_output.find(kernel::version::kString), std::string::npos);
 }
 
 // ---- uptime command ----
@@ -293,7 +294,7 @@ TEST_F(ShellTest, Mem_ReflectsAllocation)
 TEST_F(ShellTest, LeadingWhitespace_Trimmed)
 {
     sendLine("  version");
-    EXPECT_NE(g_output.find("ms-os v0.9.0"), std::string::npos);
+    EXPECT_NE(g_output.find(kernel::version::kString), std::string::npos);
 }
 
 // ---- Line buffer overflow ----
@@ -316,7 +317,7 @@ TEST_F(ShellTest, LineBuffer_TruncatesAtMax)
 TEST_F(ShellTest, MultipleCommands_EachExecutes)
 {
     sendLine("version");
-    EXPECT_NE(g_output.find("ms-os v0.9.0"), std::string::npos);
+    EXPECT_NE(g_output.find(kernel::version::kString), std::string::npos);
 
     g_output.clear();
     sendLine("help");

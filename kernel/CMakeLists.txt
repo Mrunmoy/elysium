@@ -30,6 +30,12 @@ target_include_directories(kernel PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
 )
 
+target_compile_definitions(kernel PUBLIC
+    MSOS_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    MSOS_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    MSOS_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+)
+
 target_link_libraries(kernel PRIVATE startup hal)
 
 target_compile_options(kernel PRIVATE

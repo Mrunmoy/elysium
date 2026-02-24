@@ -40,6 +40,12 @@ target_include_directories(kernel_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+target_compile_definitions(kernel_tests PRIVATE
+    MSOS_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    MSOS_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    MSOS_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+)
+
 target_link_libraries(kernel_tests PRIVATE
     GTest::gtest_main
 )

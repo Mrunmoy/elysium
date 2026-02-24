@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(ms-os
     LANGUAGES C CXX ASM
-    VERSION 0.1.0
+    VERSION 0.10.0
 )
 
 set(CMAKE_CXX_STANDARD 17)
