@@ -45,6 +45,20 @@ namespace kernel
         }
     }
 
+    void ipcResetMailbox(ThreadId id)
+    {
+        if (id >= kMaxThreads)
+        {
+            return;
+        }
+        ThreadMailbox &box = s_mailboxes[id];
+        std::memset(&box, 0, sizeof(box));
+        box.senderWaitHead = kInvalidThreadId;
+        box.receiverWaitHead = kInvalidThreadId;
+        box.blockReason = IpcBlockReason::None;
+        box.replySlot = nullptr;
+    }
+
     ThreadMailbox *ipcGetMailbox(ThreadId id)
     {
         if (id >= kMaxThreads)

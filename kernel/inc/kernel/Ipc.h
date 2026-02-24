@@ -119,6 +119,10 @@ namespace kernel
 
     void ipcInit();
     void ipcReset();
+
+    // Reset a single thread's mailbox (called during thread destruction)
+    void ipcResetMailbox(ThreadId id);
+
     ThreadMailbox *ipcGetMailbox(ThreadId id);
 
 }  // namespace kernel

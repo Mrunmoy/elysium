@@ -4,6 +4,7 @@
 
 #include "kernel/Arch.h"
 #include "kernel/Kernel.h"
+#include "kernel/Ipc.h"
 #include "kernel/Scheduler.h"
 #include "kernel/Thread.h"
 #include "MockKernel.h"
@@ -15,7 +16,13 @@ namespace kernel
 
     void kernelThreadExit()
     {
-        // No-op for host tests -- on hardware this terminates the thread
+        ThreadId currentId = internal::scheduler().currentThreadId();
+        arch::enterCritical();
+        internal::scheduler().removeThread(currentId);
+        ipcResetMailbox(currentId);
+        threadDestroy(currentId);
+        arch::exitCritical();
+        arch::triggerContextSwitch();
     }
 
     std::uint32_t tickCount()
@@ -84,6 +91,27 @@ namespace kernel
 
         arch::exitCritical();
         arch::triggerContextSwitch();
+    }
+
+    bool destroyThread(ThreadId id)
+    {
+        if (id == internal::scheduler().idleThreadId() || id >= kMaxThreads)
+        {
+            return false;
+        }
+
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr || tcb->state == ThreadState::Inactive)
+        {
+            return false;
+        }
+
+        arch::enterCritical();
+        internal::scheduler().removeThread(id);
+        ipcResetMailbox(id);
+        threadDestroy(id);
+        arch::exitCritical();
+        return true;
     }
 
     void watchdogStart(std::uint16_t /* reloadValue */, std::uint8_t /* prescaler */)

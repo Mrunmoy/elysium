@@ -19,6 +19,13 @@ namespace kernel
                           std::uint32_t timeSlice = 0,
                           bool privileged = true);
 
+    // Destroy a thread: remove from scheduler, clean up IPC, free TCB slot.
+    // The thread must not be the currently running thread (use threadExit
+    // or let the thread function return for self-termination).
+    // Returns true on success, false if the ID is invalid or is the
+    // idle thread.
+    bool destroyThread(ThreadId id);
+
     // Start the scheduler -- does not return
     void startScheduler();
 
