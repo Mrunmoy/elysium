@@ -270,7 +270,7 @@
       Language: C++17 + Assembly<br>
       Architecture: Microkernel<br>
       <br>
-      February 2025 &mdash; Present
+      July 2025 &mdash; Present
     </div>
   </div>
 </div>
@@ -4195,10 +4195,10 @@ closed. And in the terminal, a cursor kept blinking.
 </p>
 
 <p>
-What followed was a night of autonomous work&mdash;two features designed,
-implemented, tested, cross-compiled, flashed, and merged while the
-developer slept. No review cycles. No "LGTM" comments. No waiting. Just
-a machine and a codebase and a list of things that needed doing.
+What followed was a night of autonomous work&mdash;three features designed,
+implemented, tested, cross-compiled, flashed, and merged. No review
+cycles. No "LGTM" comments. No waiting. Just a machine and a codebase
+and a list of things that needed doing.
 </p>
 
 <h3>The Quick Win: A Version String</h3>
@@ -4489,22 +4489,22 @@ were scheduling. The IPC was passing messages. The shell was responding.
 Everything the night's work had touched was functioning on real silicon.
 </p>
 
-<h3>The Morning After</h3>
+<h3>All Quiet on the Wire</h3>
 
 <p>
-When the developer woke up and opened the terminal, the git log told the
-story. A sequence of commits on feature branches, each one merged to
+The git log told the story. Three feature branches, each one merged to
 main, each one pushed. The version string. The watchdog driver with its
-tests. The dynamic thread system with its tests. The cross-compilation
-verification. The hardware flash. All done. All merged. All green.
+eleven tests. The dynamic thread system with its thirteen tests. The
+cross-compilation across all three targets. The hardware flash. All done.
+All merged. All green.
 </p>
 
 <p>
 321 tests passing. A watchdog guarding the idle thread. Dynamic thread
 creation and destruction with full cleanup and slot reuse. A version
-string that updates from a single source of truth. And a git history
-that reads like a developer's worklog, except the developer was asleep
-for all of it.
+string that updates from a single source of truth. Three more pieces of
+the RTOS locked into place, each one following the same discipline:
+design, test, implement, verify on silicon, merge.
 </p>
 
 <div class="highlight">
@@ -4531,9 +4531,9 @@ autonomously overnight.
 </div>
 
 <p>
-As of February 2026, ms-os has completed ten phases of development. It runs
+As of February 2026, ms-os has completed eleven phases of development. It runs
 on three hardware targets spanning two ARM architecture families, with
-297 C++ unit tests and 152 Python tests verified by GitHub Actions CI on
+321 C++ unit tests and 152 Python tests verified by GitHub Actions CI on
 every push. The kernel schedules 8 threads across 32 priority levels,
 enforces a hardware privilege boundary with SVC syscalls and MPU protection,
 communicates through Minix-style IPC, parses standard FDT device trees at
