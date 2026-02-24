@@ -7,6 +7,7 @@
 #include "kernel/Kernel.h"
 #include "kernel/Ipc.h"
 #include "kernel/Syscall.h"
+#include "kernel/Semaphore.h"
 #include "kernel/Shell.h"
 #include "kernel/Arch.h"
 #include "kernel/BoardConfig.h"
@@ -256,25 +257,41 @@ namespace
         hal::uartWriteString(board::consoleUartId(), str);
     }
 
+    // ISR callback: signal binary semaphore to wake the shell thread.
+    // arg is the SemaphoreId cast to void*.
+    void shellRxNotify(void *arg)
+    {
+        auto semId = static_cast<kernel::SemaphoreId>(
+            reinterpret_cast<std::uintptr_t>(arg));
+        kernel::semaphoreSignal(semId);
+    }
+
     void shellThread(void *)
     {
         kernel::ShellConfig shellConfig{};
         shellConfig.writeFn = shellWrite;
         kernel::shellInit(shellConfig);
 
+        // Create binary semaphore (initial=0, max=1)
+        kernel::SemaphoreId rxSem = kernel::semaphoreCreate(0, 1, "shell-rx");
+
+        // Enable UART RX interrupt with semaphore-based notification
+        hal::uartRxInterruptEnable(
+            board::consoleUartId(), shellRxNotify,
+            reinterpret_cast<void *>(static_cast<std::uintptr_t>(rxSem)));
+
         uartPrintLine("shell: ready");
         kernel::shellPrompt();
 
         while (true)
         {
+            kernel::semaphoreWait(rxSem);
+
+            // Drain all buffered characters
             char c;
-            if (hal::uartTryGetChar(board::consoleUartId(), &c))
+            while (hal::uartTryGetChar(board::consoleUartId(), &c))
             {
                 kernel::shellProcessChar(c);
-            }
-            else
-            {
-                kernel::sleep(10);
             }
         }
     }

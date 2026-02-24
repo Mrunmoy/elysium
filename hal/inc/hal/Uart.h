@@ -37,4 +37,18 @@ namespace hal
     // Returns true if a character was available.
     bool uartTryGetChar(UartId id, char *c);
 
+    // RX interrupt callback type.
+    // Called from ISR context when one or more bytes are available.
+    using UartRxNotifyFn = void (*)(void *arg);
+
+    // Enable UART RX interrupt. Incoming bytes are buffered in a 64-byte ring buffer.
+    // notifyFn is called from ISR context each time a byte arrives.
+    void uartRxInterruptEnable(UartId id, UartRxNotifyFn notifyFn, void *arg);
+
+    // Disable UART RX interrupt. Buffer contents are preserved.
+    void uartRxInterruptDisable(UartId id);
+
+    // Return number of bytes currently in the RX ring buffer.
+    std::uint8_t uartRxBufferCount(UartId id);
+
 }  // namespace hal

@@ -23,14 +23,47 @@ namespace
     constexpr std::uint32_t kCr3 = 0x14;
 
     // CR1 bits
-    constexpr std::uint32_t kCr1Ue = 1U << 13;   // USART enable
-    constexpr std::uint32_t kCr1Te = 1U << 3;     // Transmitter enable
-    constexpr std::uint32_t kCr1Re = 1U << 2;     // Receiver enable
+    constexpr std::uint32_t kCr1Ue = 1U << 13;       // USART enable
+    constexpr std::uint32_t kCr1Te = 1U << 3;         // Transmitter enable
+    constexpr std::uint32_t kCr1Re = 1U << 2;         // Receiver enable
+    constexpr std::uint32_t kCr1Rxneie = 1U << 5;     // RXNE interrupt enable
 
     // SR bits
-    constexpr std::uint32_t kSrRxne = 1U << 5;    // Read data register not empty
-    constexpr std::uint32_t kSrTxe = 1U << 7;     // Transmit data register empty
-    constexpr std::uint32_t kSrTc = 1U << 6;      // Transmission complete
+    constexpr std::uint32_t kSrRxne = 1U << 5;        // Read data register not empty
+    constexpr std::uint32_t kSrTxe = 1U << 7;         // Transmit data register empty
+    constexpr std::uint32_t kSrTc = 1U << 6;          // Transmission complete
+    constexpr std::uint32_t kSrOre = 1U << 3;         // Overrun error
+
+    // NVIC register bases
+    constexpr std::uint32_t kNvicIser = 0xE000E100;   // Interrupt Set-Enable Registers
+    constexpr std::uint32_t kNvicIcer = 0xE000E180;   // Interrupt Clear-Enable Registers
+    constexpr std::uint32_t kNvicIpr = 0xE000E400;    // Interrupt Priority Registers
+
+    // UART IRQ numbers in NVIC
+    constexpr std::uint8_t kIrqUsart1 = 37;
+    constexpr std::uint8_t kIrqUsart2 = 38;
+    constexpr std::uint8_t kIrqUsart3 = 39;
+    constexpr std::uint8_t kIrqUart4 = 52;
+    constexpr std::uint8_t kIrqUart5 = 53;
+    constexpr std::uint8_t kIrqUsart6 = 71;
+
+    // RX ring buffer size (must be power of 2)
+    constexpr std::uint8_t kRxBufSize = 64;
+    constexpr std::uint8_t kRxBufMask = kRxBufSize - 1;
+
+    // Per-UART RX interrupt state
+    struct UartRxState
+    {
+        volatile char buf[kRxBufSize];
+        volatile std::uint8_t head;       // ISR writes
+        volatile std::uint8_t tail;       // Thread reads
+        hal::UartRxNotifyFn notifyFn;
+        void *notifyArg;
+        bool enabled;
+    };
+
+    // One entry per UartId value (0..6)
+    UartRxState s_rxState[7];
 
     std::uint32_t uartBase(hal::UartId id)
     {
@@ -85,6 +118,66 @@ namespace
     void restoreIrq(std::uint32_t primask)
     {
         __asm volatile("msr primask, %0" ::"r"(primask) : "memory");
+    }
+
+    std::uint8_t uartIrqNumber(hal::UartId id)
+    {
+        switch (id)
+        {
+            case hal::UartId::Usart1: return kIrqUsart1;
+            case hal::UartId::Usart2: return kIrqUsart2;
+            case hal::UartId::Usart3: return kIrqUsart3;
+            case hal::UartId::Uart4:  return kIrqUart4;
+            case hal::UartId::Uart5:  return kIrqUart5;
+            case hal::UartId::Usart6: return kIrqUsart6;
+            default: break;
+        }
+        return kIrqUsart1;
+    }
+
+    void nvicEnableIrq(std::uint8_t irqn)
+    {
+        reg(kNvicIser + (irqn / 32) * 4) = 1U << (irqn % 32);
+    }
+
+    void nvicDisableIrq(std::uint8_t irqn)
+    {
+        reg(kNvicIcer + (irqn / 32) * 4) = 1U << (irqn % 32);
+    }
+
+    void nvicSetPriority(std::uint8_t irqn, std::uint8_t priority)
+    {
+        // IPR registers are byte-addressable
+        volatile auto *ipr = reinterpret_cast<volatile std::uint8_t *>(kNvicIpr);
+        ipr[irqn] = priority;
+    }
+
+    void handleUartRxIrq(hal::UartId id)
+    {
+        std::uint32_t base = uartBase(id);
+        std::uint32_t sr = reg(base + kSr);
+
+        // Read DR to clear RXNE (and ORE if set). Only buffer if RXNE was set.
+        std::uint8_t dr = static_cast<std::uint8_t>(reg(base + kDr) & 0xFFU);
+
+        if ((sr & kSrRxne) == 0)
+        {
+            return;
+        }
+
+        auto &state = s_rxState[static_cast<std::uint8_t>(id)];
+        std::uint8_t nextHead = (state.head + 1) & kRxBufMask;
+        if (nextHead != state.tail)
+        {
+            state.buf[state.head] = static_cast<char>(dr);
+            state.head = nextHead;
+        }
+        // else: buffer full, drop the byte
+
+        if (state.notifyFn != nullptr)
+        {
+            state.notifyFn(state.notifyArg);
+        }
     }
 }  // namespace
 
@@ -146,6 +239,19 @@ namespace hal
 
     char uartGetChar(UartId id)
     {
+        auto &state = s_rxState[static_cast<std::uint8_t>(id)];
+        if (state.enabled)
+        {
+            // Spin on ring buffer
+            while (state.head == state.tail)
+            {
+            }
+            char c = static_cast<char>(state.buf[state.tail]);
+            state.tail = (state.tail + 1) & kRxBufMask;
+            return c;
+        }
+
+        // Fallback: direct register poll
         std::uint32_t base = uartBase(id);
         while ((reg(base + kSr) & kSrRxne) == 0)
         {
@@ -155,6 +261,19 @@ namespace hal
 
     bool uartTryGetChar(UartId id, char *c)
     {
+        auto &state = s_rxState[static_cast<std::uint8_t>(id)];
+        if (state.enabled)
+        {
+            if (state.head == state.tail)
+            {
+                return false;
+            }
+            *c = static_cast<char>(state.buf[state.tail]);
+            state.tail = (state.tail + 1) & kRxBufMask;
+            return true;
+        }
+
+        // Fallback: direct register poll
         std::uint32_t base = uartBase(id);
         if ((reg(base + kSr) & kSrRxne) == 0)
         {
@@ -163,4 +282,83 @@ namespace hal
         *c = static_cast<char>(reg(base + kDr) & 0xFFU);
         return true;
     }
+
+    void uartRxInterruptEnable(UartId id, UartRxNotifyFn notifyFn, void *arg)
+    {
+        std::uint32_t saved = disableIrq();
+
+        auto &state = s_rxState[static_cast<std::uint8_t>(id)];
+        state.head = 0;
+        state.tail = 0;
+        state.notifyFn = notifyFn;
+        state.notifyArg = arg;
+        state.enabled = true;
+
+        // Set UART interrupt priority to 0x80 (mid-range)
+        std::uint8_t irqn = uartIrqNumber(id);
+        nvicSetPriority(irqn, 0x80);
+
+        // Enable RXNE interrupt in USART CR1
+        std::uint32_t base = uartBase(id);
+        reg(base + kCr1) |= kCr1Rxneie;
+
+        // Enable IRQ in NVIC
+        nvicEnableIrq(irqn);
+
+        restoreIrq(saved);
+    }
+
+    void uartRxInterruptDisable(UartId id)
+    {
+        std::uint32_t saved = disableIrq();
+
+        // Disable RXNE interrupt in USART CR1
+        std::uint32_t base = uartBase(id);
+        reg(base + kCr1) &= ~kCr1Rxneie;
+
+        // Disable IRQ in NVIC
+        nvicDisableIrq(uartIrqNumber(id));
+
+        s_rxState[static_cast<std::uint8_t>(id)].enabled = false;
+
+        restoreIrq(saved);
+    }
+
+    std::uint8_t uartRxBufferCount(UartId id)
+    {
+        auto &state = s_rxState[static_cast<std::uint8_t>(id)];
+        return (state.head - state.tail) & kRxBufMask;
+    }
 }  // namespace hal
+
+// ISR handlers -- override weak symbols in Startup.s
+
+extern "C" void USART1_IRQHandler()
+{
+    handleUartRxIrq(hal::UartId::Usart1);
+}
+
+extern "C" void USART2_IRQHandler()
+{
+    handleUartRxIrq(hal::UartId::Usart2);
+}
+
+extern "C" void USART3_IRQHandler()
+{
+    handleUartRxIrq(hal::UartId::Usart3);
+}
+
+extern "C" void UART4_IRQHandler()
+{
+    handleUartRxIrq(hal::UartId::Uart4);
+}
+
+extern "C" void UART5_IRQHandler()
+{
+    handleUartRxIrq(hal::UartId::Uart5);
+}
+
+extern "C" void USART6_IRQHandler()
+{
+    handleUartRxIrq(hal::UartId::Usart6);
+}

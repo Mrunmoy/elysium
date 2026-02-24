@@ -162,4 +162,18 @@ namespace hal
         *c = static_cast<char>(reg(base + kFifo) & 0xFFU);
         return true;
     }
+
+    // Stubs: Zynq GIC IRQ dispatcher does not route UART IRQs yet.
+    void uartRxInterruptEnable(UartId, UartRxNotifyFn, void *)
+    {
+    }
+
+    void uartRxInterruptDisable(UartId)
+    {
+    }
+
+    std::uint8_t uartRxBufferCount(UartId)
+    {
+        return 0;
+    }
 }  // namespace hal

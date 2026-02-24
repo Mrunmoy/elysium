@@ -61,6 +61,36 @@ namespace test
     inline std::vector<WatchdogInitCall> g_watchdogInitCalls;
     inline std::uint32_t g_watchdogFeedCount = 0;
 
+    // UART mock state
+    struct UartInitCall
+    {
+        std::uint8_t id;
+        std::uint32_t baudRate;
+    };
+
+    struct UartPutCharCall
+    {
+        std::uint8_t id;
+        char c;
+    };
+
+    struct UartRxEnableCall
+    {
+        std::uint8_t id;
+        void *notifyFn;
+        void *notifyArg;
+    };
+
+    inline std::vector<UartInitCall> g_uartInitCalls;
+    inline std::vector<UartPutCharCall> g_uartPutCharCalls;
+    inline std::vector<UartRxEnableCall> g_uartRxEnableCalls;
+    inline bool g_uartRxInterruptEnabled = false;
+    inline std::uint32_t g_uartRxInterruptDisableCount = 0;
+
+    // Injectable RX data for uartTryGetChar / uartGetChar
+    inline std::vector<char> g_uartRxBuffer;
+    inline std::size_t g_uartRxReadPos = 0;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -69,6 +99,14 @@ namespace test
 
         g_watchdogInitCalls.clear();
         g_watchdogFeedCount = 0;
+
+        g_uartInitCalls.clear();
+        g_uartPutCharCalls.clear();
+        g_uartRxEnableCalls.clear();
+        g_uartRxInterruptEnabled = false;
+        g_uartRxInterruptDisableCount = 0;
+        g_uartRxBuffer.clear();
+        g_uartRxReadPos = 0;
     }
 
 }  // namespace test

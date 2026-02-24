@@ -1,8 +1,10 @@
 add_executable(hal_tests
     GpioTest.cpp
     WatchdogTest.cpp
+    UartTest.cpp
     MockGpio.cpp
     MockWatchdog.cpp
+    MockUart.cpp
 )
 
 target_include_directories(hal_tests PRIVATE
