@@ -10,6 +10,7 @@
 #include "kernel/Heap.h"
 #include "kernel/Ipc.h"
 #include "kernel/Mpu.h"
+#include "hal/Watchdog.h"
 #include "startup/SystemClock.h"
 
 #include <cstdint>
@@ -28,6 +29,7 @@ namespace kernel
     // Kernel-internal state
     static Scheduler s_scheduler;
     static volatile std::uint32_t s_tickCount = 0;
+    static bool s_watchdogEnabled = false;
 
     namespace internal
     {
@@ -41,6 +43,10 @@ namespace kernel
     {
         while (true)
         {
+            if (s_watchdogEnabled)
+            {
+                hal::watchdogFeed();
+            }
             arch::waitForInterrupt();
         }
     }
@@ -195,6 +201,21 @@ namespace kernel
     std::uint32_t tickCount()
     {
         return s_tickCount;
+    }
+
+    void watchdogStart(std::uint16_t reloadValue, std::uint8_t prescaler)
+    {
+        hal::WatchdogConfig config{};
+        config.prescaler = static_cast<hal::WatchdogPrescaler>(
+            prescaler > 6 ? 6 : prescaler);
+        config.reloadValue = reloadValue;
+        hal::watchdogInit(config);
+        s_watchdogEnabled = true;
+    }
+
+    bool watchdogRunning()
+    {
+        return s_watchdogEnabled;
     }
 
     // Called when a thread function returns (placed in LR of initial stack frame)

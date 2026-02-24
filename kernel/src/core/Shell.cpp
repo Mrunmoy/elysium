@@ -81,6 +81,7 @@ namespace
         writeLine("  uptime  - ticks since boot");
         writeLine("  version - show version");
         writeLine("  dt      - device tree info");
+        writeLine("  wdt     - watchdog status");
     }
 
     const char *threadStateName(ThreadState state)
@@ -286,6 +287,12 @@ namespace
         writeLine(cfg.hasFpu ? "yes" : "no");
     }
 
+    void cmdWdt()
+    {
+        write("watchdog: ");
+        writeLine(kernel::watchdogRunning() ? "active" : "inactive");
+    }
+
     // Command dispatch table
     struct Command
     {
@@ -301,6 +308,7 @@ namespace
         {"uptime",  cmdUptime},
         {"version", cmdVersion},
         {"dt",      cmdDt},
+        {"wdt",     cmdWdt},
     };
 
     static constexpr std::uint8_t kCommandCount =

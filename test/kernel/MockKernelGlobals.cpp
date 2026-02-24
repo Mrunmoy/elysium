@@ -86,6 +86,16 @@ namespace kernel
         arch::triggerContextSwitch();
     }
 
+    void watchdogStart(std::uint16_t /* reloadValue */, std::uint8_t /* prescaler */)
+    {
+        test::g_watchdogRunning = true;
+    }
+
+    bool watchdogRunning()
+    {
+        return test::g_watchdogRunning;
+    }
+
     namespace internal
     {
         static Scheduler s_testScheduler;

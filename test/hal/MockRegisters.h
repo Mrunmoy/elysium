@@ -46,16 +46,29 @@ namespace test
         std::uint8_t pin;
     };
 
+    // Watchdog mock state
+    struct WatchdogInitCall
+    {
+        std::uint8_t prescaler;
+        std::uint16_t reloadValue;
+    };
+
     // Global recording state (reset between tests)
     inline std::vector<GpioInitCall> g_gpioInitCalls;
     inline std::vector<GpioPinAction> g_gpioPinActions;
     inline bool g_gpioReadValue = false;
+
+    inline std::vector<WatchdogInitCall> g_watchdogInitCalls;
+    inline std::uint32_t g_watchdogFeedCount = 0;
 
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
         g_gpioPinActions.clear();
         g_gpioReadValue = false;
+
+        g_watchdogInitCalls.clear();
+        g_watchdogFeedCount = 0;
     }
 
 }  // namespace test

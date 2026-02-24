@@ -31,6 +31,15 @@ namespace kernel
     // Get the tick count since scheduler started
     std::uint32_t tickCount();
 
+    // Enable the hardware watchdog.  The idle thread will automatically
+    // feed it.  If any thread monopolises the CPU (starves idle), the
+    // watchdog fires and resets the MCU.
+    void watchdogStart(std::uint16_t reloadValue = 4095,
+                       std::uint8_t prescaler = 4);
+
+    // Returns true if watchdogStart() has been called
+    bool watchdogRunning();
+
 }  // namespace kernel
 
 // ISR handlers (called from vector table, extern "C" linkage)
