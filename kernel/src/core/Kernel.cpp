@@ -127,6 +127,35 @@ namespace kernel
         return id;
     }
 
+    bool destroyThread(ThreadId id)
+    {
+        // Cannot destroy the idle thread
+        if (id == s_scheduler.idleThreadId() || id >= kMaxThreads)
+        {
+            return false;
+        }
+
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr || tcb->state == ThreadState::Inactive)
+        {
+            return false;
+        }
+
+        arch::enterCritical();
+
+        // Remove from scheduler (ready queue or blocked list)
+        s_scheduler.removeThread(id);
+
+        // Clean up IPC mailbox
+        ipcResetMailbox(id);
+
+        // Free the TCB slot
+        threadDestroy(id);
+
+        arch::exitCritical();
+        return true;
+    }
+
     void startScheduler()
     {
         // Configure interrupt priorities: PendSV lowest, SysTick next-lowest
@@ -221,9 +250,20 @@ namespace kernel
     // Called when a thread function returns (placed in LR of initial stack frame)
     void kernelThreadExit()
     {
-        // Remove the current thread from the scheduler
         ThreadId currentId = s_scheduler.currentThreadId();
+
+        arch::enterCritical();
+
+        // Remove from scheduler
         s_scheduler.removeThread(currentId);
+
+        // Clean up IPC mailbox
+        ipcResetMailbox(currentId);
+
+        // Free the TCB slot for reuse
+        threadDestroy(currentId);
+
+        arch::exitCritical();
 
         // Trigger context switch to next thread
         arch::triggerContextSwitch();

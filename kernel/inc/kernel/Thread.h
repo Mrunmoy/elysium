@@ -70,7 +70,14 @@ namespace kernel
     };
 
     // Create a new thread. Returns thread ID or kInvalidThreadId on failure.
+    // Scans for an unused (Inactive) TCB slot; IDs may be reused after
+    // a thread is destroyed.
     ThreadId threadCreate(const ThreadConfig &config);
+
+    // Mark a thread's TCB slot as Inactive so the ID can be reused.
+    // Caller must first remove the thread from the scheduler and clean
+    // up any IPC state (see kernel::destroyThread for the full sequence).
+    void threadDestroy(ThreadId id);
 
     // Get pointer to a TCB by ID. Returns nullptr if invalid.
     ThreadControlBlock *threadGetTcb(ThreadId id);

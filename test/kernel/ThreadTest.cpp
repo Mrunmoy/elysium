@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "kernel/Thread.h"
+#include "kernel/Kernel.h"
+#include "kernel/Ipc.h"
 #include "kernel/Arch.h"
 
 #include "MockKernel.h"
@@ -300,4 +302,250 @@ TEST_F(ThreadTest, CreateThread_InitializesLinkedListPointers)
     EXPECT_EQ(tcb->nextReady, kernel::kInvalidThreadId);
     EXPECT_EQ(tcb->nextWait, kernel::kInvalidThreadId);
     EXPECT_EQ(tcb->wakeupTick, 0u);
+}
+
+// ---- Dynamic thread destruction tests ----
+
+TEST_F(ThreadTest, DestroyThread_MarksSlotInactive)
+{
+    kernel::ThreadConfig config{};
+    config.function = dummyThread;
+    config.arg = nullptr;
+    config.name = "doomed";
+    config.stack = g_testStack1;
+    config.stackSize = sizeof(g_testStack1);
+
+    kernel::ThreadId id = kernel::threadCreate(config);
+    ASSERT_NE(id, kernel::kInvalidThreadId);
+
+    kernel::threadDestroy(id);
+
+    kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
+    ASSERT_NE(tcb, nullptr);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Inactive);
+    EXPECT_EQ(tcb->id, kernel::kInvalidThreadId);
+    EXPECT_EQ(tcb->name, nullptr);
+    EXPECT_EQ(tcb->stackBase, nullptr);
+}
+
+TEST_F(ThreadTest, DestroyThread_InvalidIdDoesNothing)
+{
+    // Should not crash
+    kernel::threadDestroy(kernel::kInvalidThreadId);
+    kernel::threadDestroy(kernel::kMaxThreads);
+}
+
+TEST_F(ThreadTest, CreateThread_ReusesDestroyedSlot)
+{
+    // Fill all slots
+    alignas(8) static std::uint32_t stacks[kernel::kMaxThreads][128];
+    kernel::ThreadId ids[kernel::kMaxThreads];
+
+    for (std::uint8_t i = 0; i < kernel::kMaxThreads; ++i)
+    {
+        kernel::ThreadConfig config{};
+        config.function = dummyThread;
+        config.arg = nullptr;
+        config.name = "thread";
+        config.stack = stacks[i];
+        config.stackSize = sizeof(stacks[i]);
+
+        ids[i] = kernel::threadCreate(config);
+        ASSERT_NE(ids[i], kernel::kInvalidThreadId);
+    }
+
+    // Should fail when all full
+    kernel::ThreadConfig config{};
+    config.function = dummyThread;
+    config.arg = nullptr;
+    config.name = "extra";
+    config.stack = g_testStack1;
+    config.stackSize = sizeof(g_testStack1);
+    EXPECT_EQ(kernel::threadCreate(config), kernel::kInvalidThreadId);
+
+    // Destroy slot 3
+    kernel::threadDestroy(ids[3]);
+
+    // Now creation should succeed and reuse slot 3
+    config.name = "reused";
+    kernel::ThreadId newId = kernel::threadCreate(config);
+    EXPECT_EQ(newId, ids[3]);
+
+    kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(newId);
+    ASSERT_NE(tcb, nullptr);
+    EXPECT_STREQ(tcb->name, "reused");
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Ready);
+}
+
+TEST_F(ThreadTest, CreateThread_ReusesFirstAvailableSlot)
+{
+    // Create 3 threads
+    alignas(8) static std::uint32_t stacks[3][128];
+    kernel::ThreadId ids[3];
+
+    for (int i = 0; i < 3; ++i)
+    {
+        kernel::ThreadConfig config{};
+        config.function = dummyThread;
+        config.arg = nullptr;
+        config.name = "t";
+        config.stack = stacks[i];
+        config.stackSize = sizeof(stacks[i]);
+        ids[i] = kernel::threadCreate(config);
+    }
+
+    // Destroy threads 0 and 2
+    kernel::threadDestroy(ids[0]);
+    kernel::threadDestroy(ids[2]);
+
+    // Next create should get slot 0 (first available)
+    kernel::ThreadConfig config{};
+    config.function = dummyThread;
+    config.arg = nullptr;
+    config.name = "new";
+    config.stack = g_testStack1;
+    config.stackSize = sizeof(g_testStack1);
+    kernel::ThreadId newId = kernel::threadCreate(config);
+    EXPECT_EQ(newId, ids[0]);
+}
+
+// ---- Kernel destroyThread integration tests ----
+
+class DestroyThreadTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        test::resetKernelMockState();
+        kernel::threadReset();
+        kernel::ipcReset();
+        kernel::internal::scheduler().init();
+    }
+
+    kernel::ThreadId createTestThread(const char *name, std::uint32_t *stack,
+                                      std::uint32_t stackSize, std::uint8_t priority = 10)
+    {
+        return kernel::createThread(dummyThread, nullptr, name,
+                                    stack, stackSize, priority);
+    }
+};
+
+TEST_F(DestroyThreadTest, DestroyThread_ReturnsTrue)
+{
+    alignas(8) static std::uint32_t stack[128];
+    kernel::ThreadId id = createTestThread("victim", stack, sizeof(stack));
+    ASSERT_NE(id, kernel::kInvalidThreadId);
+
+    EXPECT_TRUE(kernel::destroyThread(id));
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_MarksInactive)
+{
+    alignas(8) static std::uint32_t stack[128];
+    kernel::ThreadId id = createTestThread("victim", stack, sizeof(stack));
+
+    kernel::destroyThread(id);
+
+    kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
+    EXPECT_EQ(tcb->state, kernel::ThreadState::Inactive);
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_RemovesFromScheduler)
+{
+    alignas(8) static std::uint32_t stack[128];
+    kernel::ThreadId id = createTestThread("victim", stack, sizeof(stack), 10);
+
+    std::uint8_t countBefore = kernel::internal::scheduler().readyCount();
+    kernel::destroyThread(id);
+    std::uint8_t countAfter = kernel::internal::scheduler().readyCount();
+
+    EXPECT_EQ(countAfter, countBefore - 1);
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_CleansUpMailbox)
+{
+    alignas(8) static std::uint32_t stack[128];
+    kernel::ThreadId id = createTestThread("victim", stack, sizeof(stack));
+
+    // Put something in the mailbox
+    kernel::Message msg{};
+    msg.type = static_cast<std::uint8_t>(kernel::MessageType::OneWay);
+    msg.payloadSize = 0;
+    kernel::messageTrySend(id, msg);
+
+    kernel::ThreadMailbox *box = kernel::ipcGetMailbox(id);
+    ASSERT_NE(box, nullptr);
+    EXPECT_GT(box->count, 0);
+
+    kernel::destroyThread(id);
+
+    // Mailbox should be reset
+    EXPECT_EQ(box->count, 0);
+    EXPECT_EQ(box->head, 0);
+    EXPECT_EQ(box->tail, 0);
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_IdCanBeReused)
+{
+    alignas(8) static std::uint32_t stack1[128];
+    alignas(8) static std::uint32_t stack2[128];
+
+    kernel::ThreadId id1 = createTestThread("first", stack1, sizeof(stack1));
+    kernel::destroyThread(id1);
+
+    kernel::ThreadId id2 = createTestThread("second", stack2, sizeof(stack2));
+    EXPECT_EQ(id1, id2);
+
+    kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id2);
+    EXPECT_STREQ(tcb->name, "second");
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_InvalidIdReturnsFalse)
+{
+    EXPECT_FALSE(kernel::destroyThread(kernel::kInvalidThreadId));
+    EXPECT_FALSE(kernel::destroyThread(kernel::kMaxThreads));
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_InactiveReturnsFalse)
+{
+    // Slot 0 is inactive (never created beyond reset)
+    EXPECT_FALSE(kernel::destroyThread(0));
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_IdleThreadReturnsFalse)
+{
+    // Create idle thread in slot 0 and register it with scheduler
+    alignas(8) static std::uint32_t idleStack[128];
+    kernel::ThreadConfig config{};
+    config.function = dummyThread;
+    config.arg = nullptr;
+    config.name = "idle";
+    config.stack = idleStack;
+    config.stackSize = sizeof(idleStack);
+    config.priority = kernel::kIdlePriority;
+    kernel::ThreadId idleId = kernel::threadCreate(config);
+    ASSERT_EQ(idleId, kernel::kIdleThreadId);
+    kernel::internal::scheduler().setIdleThread(idleId);
+
+    EXPECT_FALSE(kernel::destroyThread(idleId));
+}
+
+TEST_F(DestroyThreadTest, DestroyThread_MultipleCreateDestroyReusesCycles)
+{
+    alignas(8) static std::uint32_t stack[128];
+
+    // Create and destroy the same slot multiple times
+    for (int cycle = 0; cycle < 5; ++cycle)
+    {
+        kernel::ThreadId id = createTestThread("cyclic", stack, sizeof(stack));
+        ASSERT_NE(id, kernel::kInvalidThreadId) << "Cycle " << cycle;
+
+        kernel::ThreadControlBlock *tcb = kernel::threadGetTcb(id);
+        EXPECT_EQ(tcb->state, kernel::ThreadState::Ready);
+
+        kernel::destroyThread(id);
+
+        tcb = kernel::threadGetTcb(id);
+        EXPECT_EQ(tcb->state, kernel::ThreadState::Inactive);
+    }
 }

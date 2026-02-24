@@ -55,6 +55,9 @@ namespace kernel
         // Set the idle thread ID (fallback when ready queue is empty)
         void setIdleThread(ThreadId id);
 
+        // Get the idle thread ID
+        ThreadId idleThreadId() const;
+
         // Get count of threads across all ready lists
         std::uint8_t readyCount() const;
 

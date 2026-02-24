@@ -12,12 +12,10 @@ namespace kernel
 {
     // Static TCB pool
     static ThreadControlBlock s_tcbPool[kMaxThreads];
-    static ThreadId s_nextId = 0;
 
     void threadReset()
     {
         std::memset(s_tcbPool, 0, sizeof(s_tcbPool));
-        s_nextId = 0;
         for (std::uint8_t i = 0; i < kMaxThreads; ++i)
         {
             s_tcbPool[i].state = ThreadState::Inactive;
@@ -27,12 +25,20 @@ namespace kernel
 
     ThreadId threadCreate(const ThreadConfig &config)
     {
-        if (s_nextId >= kMaxThreads)
+        // Scan for a free (Inactive) slot
+        ThreadId id = kInvalidThreadId;
+        for (ThreadId i = 0; i < kMaxThreads; ++i)
+        {
+            if (s_tcbPool[i].state == ThreadState::Inactive)
+            {
+                id = i;
+                break;
+            }
+        }
+        if (id == kInvalidThreadId)
         {
             return kInvalidThreadId;
         }
-
-        ThreadId id = s_nextId++;
         ThreadControlBlock &tcb = s_tcbPool[id];
 
         tcb.id = id;
@@ -108,6 +114,26 @@ namespace kernel
         tcb.stackPointer = stackTop;
 
         return id;
+    }
+
+    void threadDestroy(ThreadId id)
+    {
+        if (id >= kMaxThreads)
+        {
+            return;
+        }
+        ThreadControlBlock &tcb = s_tcbPool[id];
+        tcb.state = ThreadState::Inactive;
+        tcb.id = kInvalidThreadId;
+        tcb.stackPointer = nullptr;
+        tcb.name = nullptr;
+        tcb.stackBase = nullptr;
+        tcb.stackSize = 0;
+        tcb.nextReady = kInvalidThreadId;
+        tcb.nextWait = kInvalidThreadId;
+        tcb.wakeupTick = 0;
+        tcb.mpuStackRbar = 0;
+        tcb.mpuStackRasr = 0;
     }
 
     ThreadControlBlock *threadGetTcb(ThreadId id)

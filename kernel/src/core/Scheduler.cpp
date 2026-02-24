@@ -368,6 +368,11 @@ namespace kernel
         m_idleThreadId = id;
     }
 
+    ThreadId Scheduler::idleThreadId() const
+    {
+        return m_idleThreadId;
+    }
+
     std::uint8_t Scheduler::readyCount() const
     {
         return m_readyCount;
