@@ -4165,6 +4165,359 @@ current test counts and features.
 </div>
 
 <!-- ============================================================ -->
+<!--                     CHAPTER 12                               -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 12</span>
+  The Night Shift
+</h2>
+
+<div class="epigraph">
+  "Never go to sleep without a request to your subconscious."
+  <div class="attribution">&mdash; Thomas Edison</div>
+</div>
+
+<p>
+It was late. The kind of late where the terminal font starts to swim and
+you realize you have been staring at a linker map for forty-five minutes
+without blinking. The developer pushed back from the desk, stretched, and
+typed four sentences that would change the trajectory of the project:
+</p>
+
+<p>
+<em>"I want you to push commits to branches, merge branch to main and
+push everything, don't wait for me."</em>
+</p>
+
+<p>
+Then the screen went dark in the room. Somewhere in the apartment, a door
+closed. And in the terminal, a cursor kept blinking.
+</p>
+
+<p>
+What followed was a night of autonomous work&mdash;two features designed,
+implemented, tested, cross-compiled, flashed, and merged while the
+developer slept. No review cycles. No "LGTM" comments. No waiting. Just
+a machine and a codebase and a list of things that needed doing.
+</p>
+
+<h3>The Quick Win: A Version String</h3>
+
+<p>
+Every serious OS can tell you what it is. Ask Linux its version and it
+answers. Ask FreeRTOS and it answers. Ask ms-os before this night and it
+would stare back silently&mdash;the <code>version</code> shell command
+existed, but printed a hardcoded placeholder.
+</p>
+
+<p>
+The fix was clean. A <code>kernel::version::kString</code> constant,
+injected at compile time through a CMake macro that reads the version
+number from a single source-of-truth variable. Change the version in
+<code>CMakeLists.txt</code>, and every binary, every shell command, every
+log message picks it up automatically. No manual synchronization, no
+risk of the shell saying "0.9.0" while the bootloader thinks it is
+"0.10.0."
+</p>
+
+<p>
+Version bumped to <strong>0.10.0</strong>. First commit of the night.
+Small, self-contained, satisfying. The kind of change that takes ten
+minutes and pays dividends forever.
+</p>
+
+<h3>The Watchdog</h3>
+
+<p>
+A microcontroller without a watchdog is a microcontroller waiting to
+hang. Cosmic rays flip bits. Interrupts fire in unexpected sequences.
+Stack overflows corrupt return addresses. EMI from a nearby motor
+injects noise on the bus. Any of these can send firmware into an
+infinite loop, and without a watchdog, it stays there&mdash;forever.
+The board locks up, the LED stops blinking, and nobody knows until
+someone walks over and notices.
+</p>
+
+<p>
+The STM32 Independent Watchdog (IWDG) is elegantly brutal. It has its
+own dedicated 32 kHz RC oscillator, independent of the system clock.
+If the main PLL locks up, the IWDG keeps counting. If the CPU hangs
+in a busy loop, the IWDG keeps counting. If the flash controller
+stalls, the IWDG keeps counting. And when its downcounter reaches zero,
+it resets the entire chip. No negotiation. No graceful shutdown. A hard
+reset, as if someone yanked the power and plugged it back in.
+</p>
+
+<p>
+The protocol is a dance of magic numbers. Write <code>0x5555</code> to
+the key register to unlock write access to the prescaler and reload
+registers. Write your configuration. Write <code>0xAAAA</code> to reload
+the counter. Write <code>0xCCCC</code> to start the watchdog. Once
+started, it cannot be stopped&mdash;the IWDG has no off switch. This is
+by design. If malicious or buggy code could disable the watchdog, the
+entire safety mechanism would be pointless.
+</p>
+
+<div class="key-decision">
+<strong>Key decision:</strong> The idle thread feeds the watchdog. This
+is the simplest possible health indicator: if the scheduler can still
+run the idle thread, the system is alive. If any higher-priority thread
+enters an infinite loop, the idle thread starves, the watchdog times out,
+and the MCU resets itself. No explicit health checks, no heartbeat
+messages, no watchdog task&mdash;just the natural consequence of priority
+scheduling.
+</div>
+
+<p>
+The implementation required four files: the IWDG driver
+(<code>hal::watchdog</code> namespace with <code>init</code>,
+<code>feed</code>, and <code>isEnabled</code> functions), a mock for
+host testing that records calls into global state, a shell command
+(<code>wdt</code>) that prints the watchdog status and feed count, and
+11 new tests verifying the initialization sequence, feeding behavior,
+and error handling.
+</p>
+
+<p>
+The Zynq-7000 on the PYNQ-Z2 has a system-level watchdog in the PS,
+but configuring it requires accessing the System Level Control Registers
+(SLCR) and navigating Xilinx's clock domain infrastructure. A stub was
+provided&mdash;the functions exist, they compile, they do nothing. The
+real Zynq watchdog driver can come later when there is hardware time
+to validate it.
+</p>
+
+<h3>The Shell Learns a New Word</h3>
+
+<p>
+With the watchdog running, the shell needed a way to inspect it. Type
+<code>wdt</code> and Enter:
+</p>
+
+<pre>
+ms-os> wdt
+Watchdog: enabled
+Feeds: 847293
+ms-os>
+</pre>
+
+<p>
+That feed count is surprisingly useful. If the watchdog has been fed
+847,293 times and the idle thread runs every millisecond, the system has
+been alive for about 14 minutes without a single scheduling failure. If
+you see the count stuck at some number, it means the idle thread stopped
+running at that point&mdash;useful forensic data even after a watchdog
+reset, if you capture serial output.
+</p>
+
+<h3>Dynamic Threads: The Recycling Problem</h3>
+
+<p>
+Until this night, thread IDs in ms-os were like social security numbers:
+assigned once, never reused. Thread 0 was always the idle thread. Thread
+1 was the first user thread. Thread 7 was the eighth. And when a thread
+finished its work and was no longer needed? Its TCB slot sat there,
+marked Inactive, wasting one of the precious eight slots in the thread
+table. Create eight threads over the lifetime of the system, and you
+could never create a ninth&mdash;even if seven of the eight had long
+since completed.
+</p>
+
+<p>
+For the blinky demo, this did not matter. For the IPC demo with its
+fixed set of server, client, LED, and shell threads, this did not
+matter. But for any real application&mdash;a network server that spawns
+handler threads, a sensor system that creates measurement tasks on
+demand, a shell that launches commands as separate threads&mdash;static
+allocation is a death sentence. The system would eventually run out of
+slots and refuse to create new threads, regardless of how many had
+finished.
+</p>
+
+<p>
+The solution was <code>threadDestroy()</code>: a function that takes a
+thread ID and reclaims everything associated with it.
+</p>
+
+<h3>The Cleanup Chain</h3>
+
+<p>
+Destroying a thread is not simply zeroing a struct. A thread is woven
+into the fabric of the kernel: it sits in the scheduler's ready queue
+or a wait queue; it owns an IPC mailbox with potentially unread
+messages; its TCB holds stack pointers, priority, privilege level, and
+MPU configuration. All of it must be unwound in the correct order.
+</p>
+
+<p>
+The cleanup chain runs in three stages. First, the scheduler removes
+the thread from whatever queue it occupies&mdash;ready list, sleep list,
+mutex wait queue, semaphore wait queue, or IPC block list. Second, the
+IPC subsystem resets the thread's mailbox: clears any pending messages,
+resets the ring buffer indices, clears the notification bitmask, unblocks
+any threads that were waiting to send to this mailbox. Third, the TCB
+itself is reset to its initial state&mdash;all fields zeroed, state set
+to Inactive, ready for reuse.
+</p>
+
+<p>
+Thread creation was updated to match: instead of always allocating the
+next monotonically increasing slot, <code>createThread()</code> now
+scans the TCB table for the first Inactive slot. If it finds one, it
+reuses it. The thread gets a new name, a new priority, a new entry
+point&mdash;but the same slot index as some previous thread that no
+longer exists. Thread IDs are now recycled.
+</p>
+
+<h3>The kIdleThreadId Bug</h3>
+
+<p>
+The first test passed. The second test passed. The third test
+crashed.
+</p>
+
+<p>
+The test was straightforward: create a thread, destroy it, verify the
+slot is Inactive. But <code>threadDestroy()</code> was rejecting the
+request with an error code that meant "cannot destroy the idle thread."
+The thread being destroyed was not the idle thread. It was a test
+thread. But it had thread ID 0.
+</p>
+
+<p>
+In the test environment, there is no idle thread. The first thread
+created by a test gets slot 0. And <code>threadDestroy()</code> had a
+guard:
+</p>
+
+<pre>
+<span class="kw">if</span> (id == <span class="fn">kIdleThreadId</span>)  <span class="cmt">// kIdleThreadId = 0</span>
+    <span class="kw">return</span> <span class="fn">kErrorInvalidId</span>;
+</pre>
+
+<p>
+The constant <code>kIdleThreadId</code> was hardcoded to 0. The guard
+assumed that slot 0 always belongs to the idle thread. In production,
+that is true&mdash;the idle thread is always created first and always
+gets slot 0. But in the test environment, there is no idle thread, and
+slot 0 is just another slot.
+</p>
+
+<p>
+The fix was to ask the scheduler which thread is actually the idle
+thread, rather than assuming it is always slot 0:
+</p>
+
+<pre>
+<span class="kw">if</span> (id == <span class="fn">scheduler</span>().<span class="fn">idleThreadId</span>())
+    <span class="kw">return</span> <span class="fn">kErrorInvalidId</span>;
+</pre>
+
+<p>
+In production, this returns 0. In tests where no idle thread exists, it
+returns an invalid sentinel that never matches a real thread ID. The
+guard still protects the idle thread, but it no longer makes assumptions
+about which slot it occupies.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> Hardcoded constants are assumptions in disguise.
+<code>kIdleThreadId = 0</code> looked like a fact, but it was a
+prediction about runtime state&mdash;a prediction that was true in
+production and false in tests. When you find yourself writing
+<code>if (x == MAGIC_NUMBER)</code>, ask: is this a compile-time truth
+or a runtime assumption? If it is the latter, query the source of truth
+instead.
+</div>
+
+<h3>Thirteen New Tests</h3>
+
+<p>
+Dynamic thread management is a minefield of edge cases, and every mine
+got a test. Destroy a running thread? Error&mdash;you cannot pull the
+rug from under a thread that is currently executing. Destroy the idle
+thread? Error&mdash;the scheduler needs it. Destroy a thread that is
+blocked on a mutex? The thread must be removed from the mutex's wait
+queue before the slot is freed. Destroy a thread and then create a new
+one? The new thread must get the recycled slot. Create the maximum
+number of threads, destroy them all, create the maximum again? Every
+slot must be reusable.
+</p>
+
+<p>
+Thirteen tests, each one probing a different edge of the destroy/reuse
+lifecycle. Combined with the 11 watchdog tests, the night added 24 new
+test cases to the suite, bringing the total from 297 to 321.
+</p>
+
+<h3>The Three-Target Gauntlet</h3>
+
+<p>
+Every change that touches the kernel must compile for all three targets.
+The watchdog driver introduced new HAL files for STM32 and stubs for
+Zynq. The dynamic thread functions modified the scheduler, the IPC
+subsystem, and the TCB layout. Any of these changes could break
+architecture-specific code paths that only surface during
+cross-compilation.
+</p>
+
+<p>
+STM32F207: clean. STM32F407: clean. PYNQ-Z2: clean. Three targets,
+three green builds, zero warnings. The dual build system and the
+architecture abstraction layer did their job&mdash;the watchdog stubs
+on Zynq compiled without error, the TCB layout changes were
+architecture-neutral, and the scheduler modifications used no
+platform-specific code.
+</p>
+
+<h3>Hardware Verification</h3>
+
+<p>
+Cross-compilation proves the code compiles. It does not prove the code
+works. The F407 board was still connected from the previous evening's
+debugging session, J-Link cable plugged in, serial terminal open. Flash.
+Boot. Watch.
+</p>
+
+<p>
+The IPC demo came up. The echo server registered. The echo client sent
+its first message. The LED blinked. The shell prompt appeared. Type
+<code>wdt</code>&mdash;watchdog enabled, feed count climbing. Type
+<code>ps</code>&mdash;all threads present and accounted for. Type
+<code>version</code>&mdash;0.10.0. The watchdog was running. The threads
+were scheduling. The IPC was passing messages. The shell was responding.
+Everything the night's work had touched was functioning on real silicon.
+</p>
+
+<h3>The Morning After</h3>
+
+<p>
+When the developer woke up and opened the terminal, the git log told the
+story. A sequence of commits on feature branches, each one merged to
+main, each one pushed. The version string. The watchdog driver with its
+tests. The dynamic thread system with its tests. The cross-compilation
+verification. The hardware flash. All done. All merged. All green.
+</p>
+
+<p>
+321 tests passing. A watchdog guarding the idle thread. Dynamic thread
+creation and destruction with full cleanup and slot reuse. A version
+string that updates from a single source of truth. And a git history
+that reads like a developer's worklog, except the developer was asleep
+for all of it.
+</p>
+
+<div class="highlight">
+<strong>Status after the Night Shift:</strong> ms-os v0.10.0 with
+hardware watchdog (IWDG) feeding from the idle thread, dynamic thread
+creation/destruction with TCB slot reuse, full IPC mailbox cleanup on
+thread destroy, <code>wdt</code> shell command, and CMake-injected
+version string. 321 C++ tests (up from 297). Cross-compiled for F207,
+F407, and PYNQ-Z2. Verified on F407 hardware. All work completed
+autonomously overnight.
+</div>
+
+<!-- ============================================================ -->
 <!--                      EPILOGUE                                -->
 <!-- ============================================================ -->
 <h2 class="chapter">

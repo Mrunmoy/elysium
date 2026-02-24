@@ -320,7 +320,7 @@ Actual baud = 100000000 / (173 * 5) = 115607  <span class="comment">(0.35% error
   <div class="attribution">&mdash; Operating Systems: Three Easy Pieces</div>
 </div>
 
-<p>ms-os supports up to <strong>8 threads</strong> (including the idle thread at ID 0). Thread 0 is always the idle thread, running at priority 31 (lowest). Threads are statically allocated -- there is no dynamic thread creation or destruction.</p>
+<p>ms-os supports up to <strong>8 threads</strong> (including the idle thread at ID 0). Thread 0 is always the idle thread, running at priority 31 (lowest). Thread Control Blocks are statically allocated in a fixed-size array. Dynamic thread creation and destruction (slot recycling) is covered in <a href="#dynamic-threads">Section 11</a>.</p>
 
 <h3>Thread Control Block (TCB) Layout</h3>
 
@@ -1023,6 +1023,289 @@ Dest Thread:     bits = messageCheckNotify()    <span class="comment">// returns
 
 
 <!-- ============================================================ -->
+<!--  SECTION 10: WATCHDOG (IWDG)                                  -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="watchdog">
+  <span class="ch-num">Section 10</span>
+  Watchdog (IWDG)
+</h2>
+
+<div class="epigraph">
+  "A watchdog timer is the last line of defense against a hung system."
+  <div class="attribution">&mdash; Embedded systems design principle</div>
+</div>
+
+<p>The Independent Watchdog (IWDG) on STM32 provides a hardware safety net: if software fails to reload the counter before it reaches zero, the MCU performs a hard reset. ms-os integrates the watchdog with the idle thread -- if any thread starves the idle thread (e.g., an infinite loop at a higher priority), the watchdog fires and resets the system.</p>
+
+<h3>IWDG Register Map</h3>
+
+<p>The IWDG peripheral is clocked by the LSI oscillator (nominally 32 kHz) and is located at base address <code>0x40003000</code>.</p>
+
+<table>
+  <tr><th>Register</th><th>Offset</th><th>Description</th></tr>
+  <tr><td>KR (Key)</td><td><code>0x00</code></td><td>Write-only key register: controls unlock, reload, and start</td></tr>
+  <tr><td>PR (Prescaler)</td><td><code>0x04</code></td><td>3-bit prescaler divider selection (0-6)</td></tr>
+  <tr><td>RLR (Reload)</td><td><code>0x08</code></td><td>12-bit reload value (0-4095), loaded into counter on reload</td></tr>
+  <tr><td>SR (Status)</td><td><code>0x0C</code></td><td>Read-only: PVU (prescaler update) and RVU (reload update) busy flags</td></tr>
+</table>
+
+<h3>Key Register Values</h3>
+
+<p>The IWDG uses a key-based access scheme. The KR register accepts three magic values:</p>
+
+<div class="diagram">
+<span class="label">KR Key Values</span>
+
+  0x5555   Unlock PR and RLR for writing
+           <span class="comment">Must be written before modifying prescaler or reload value</span>
+
+  0xAAAA   Reload the counter
+           <span class="comment">Resets the downcounter to the value in RLR (prevents reset)</span>
+
+  0xCCCC   Start the watchdog
+           <span class="comment">Once started, the IWDG cannot be stopped (hardware limitation)</span>
+
+<span class="label">Typical sequence:</span>
+  1. KR = 0xCCCC    <span class="comment">// start IWDG</span>
+  2. KR = 0x5555    <span class="comment">// unlock registers</span>
+  3. PR = prescaler <span class="comment">// set prescaler divider</span>
+  4. RLR = reload   <span class="comment">// set reload value</span>
+  5. Wait for SR == 0 <span class="comment">// wait for update to complete</span>
+  6. KR = 0xAAAA    <span class="comment">// initial counter reload</span>
+</div>
+
+<div class="lesson">
+  <strong>Hardware constraint:</strong> Once started with <code>0xCCCC</code>, the IWDG cannot be stopped. It is clocked by the independent LSI oscillator and continues running even if the main clock fails. This is by design -- the watchdog must be immune to the failures it protects against.
+</div>
+
+<h3>Prescaler Table</h3>
+
+<table>
+  <tr><th>PR Value</th><th>Name</th><th>Divider</th><th>Min Timeout (RLR=0)</th><th>Max Timeout (RLR=4095)</th></tr>
+  <tr><td>0</td><td>Div4</td><td>/4</td><td>0.125 ms</td><td>512 ms</td></tr>
+  <tr><td>1</td><td>Div8</td><td>/8</td><td>0.25 ms</td><td>1024 ms</td></tr>
+  <tr><td>2</td><td>Div16</td><td>/16</td><td>0.5 ms</td><td>2048 ms</td></tr>
+  <tr><td>3</td><td>Div32</td><td>/32</td><td>1 ms</td><td>4096 ms</td></tr>
+  <tr><td>4</td><td>Div64</td><td>/64</td><td>2 ms</td><td>8192 ms</td></tr>
+  <tr><td>5</td><td>Div128</td><td>/128</td><td>4 ms</td><td>16384 ms</td></tr>
+  <tr><td>6</td><td>Div256</td><td>/256</td><td>8 ms</td><td>32768 ms</td></tr>
+</table>
+
+<h3>Timeout Calculation</h3>
+
+<p>The IWDG downcounter is clocked at <code>LSI / prescaler_divider</code>. The timeout before reset is:</p>
+
+<div class="diagram">
+<span class="label">Timeout Formula</span>
+
+  timeout_ms = (prescaler_divider * reloadValue) / 32
+
+<span class="label">Example:</span> Prescaler = Div64 (divider = 64), Reload = 1000
+
+  timeout_ms = (64 * 1000) / 32 = 2000 ms  <span class="comment">(2 seconds to feed the watchdog)</span>
+
+<span class="label">LSI clock note:</span>
+  The LSI oscillator is nominally 32 kHz but can vary between 17 kHz and 47 kHz
+  depending on temperature and voltage. Timeouts should include safety margin.
+</div>
+
+<h3>Idle Thread Integration</h3>
+
+<p>The watchdog is fed (reloaded) exclusively from the <strong>idle thread</strong>. The idle thread runs at priority 31 (lowest) and only executes when no other thread is ready. This creates a natural starvation detector:</p>
+
+<div class="diagram">
+<span class="label">Watchdog Feed Strategy</span>
+
+<span class="label">Idle Thread</span> (priority 31)
+  |
+  |  loop:
+  |    watchdogFeed()          <span class="comment">// KR = 0xAAAA (reload counter)</span>
+  |    arch::waitForInterrupt() <span class="comment">// WFI -- low power until next tick</span>
+  |    goto loop
+  |
+
+<span class="label">Normal operation:</span>
+  App threads run -> yield/sleep -> idle runs -> feeds watchdog -> OK
+
+<span class="label">Starvation scenario:</span>
+  App thread stuck in infinite loop at priority < 31
+    -> idle thread never runs
+    -> watchdog counter reaches zero
+    -> MCU RESET
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> Feeding the watchdog from the idle thread means the watchdog monitors system liveness holistically. Any condition that prevents the idle thread from running -- priority inversion deadlock, infinite loop, kernel hang -- will trigger a reset. This is simpler and more robust than requiring each thread to feed the watchdog individually.
+</div>
+
+<h3>Kernel API</h3>
+
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>watchdogStart(reloadValue, prescaler)</code></td><td>Start IWDG with the given reload value (0-4095) and prescaler (Div4-Div256). Once called, the watchdog cannot be stopped.</td></tr>
+  <tr><td><code>watchdogFeed()</code></td><td>Reload the IWDG counter (write <code>0xAAAA</code> to KR). Called from the idle thread loop.</td></tr>
+  <tr><td><code>watchdogRunning()</code></td><td>Returns <code>true</code> if the watchdog has been started. Used to avoid double-start and to conditionally feed.</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 11: DYNAMIC THREAD LIFECYCLE                         -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="dynamic-threads">
+  <span class="ch-num">Section 11</span>
+  Dynamic Thread Lifecycle
+</h2>
+
+<div class="epigraph">
+  "Threads should be born, do their work, and die cleanly."
+  <div class="attribution">&mdash; POSIX threading philosophy</div>
+</div>
+
+<p>Earlier versions of ms-os used static thread allocation only -- threads were created at startup and ran forever. Dynamic thread lifecycle adds the ability to <strong>create threads into recycled slots</strong> and <strong>destroy threads at runtime</strong>, enabling patterns like worker threads, one-shot tasks, and dynamic service management.</p>
+
+<h3>TCB Slot Scanning</h3>
+
+<p>Thread creation scans the TCB array for any slot in the <code>Inactive</code> state. There is no monotonic thread ID counter -- a destroyed slot's ID is immediately available for reuse by the next <code>threadCreate()</code> call.</p>
+
+<div class="diagram">
+<span class="label">TCB Array</span> (MAX_THREADS = 8)
+
+  [0]  Idle    (Running)     <span class="comment">-- always occupied, cannot be destroyed</span>
+  [1]  Server  (Ready)       <span class="comment">-- active application thread</span>
+  [2]  Client  (Blocked)     <span class="comment">-- blocked on IPC receive</span>
+  [3]  Worker  (<span class="label">Inactive</span>)    <span class="comment">-- previously destroyed, slot available</span>
+  [4]  (empty) (<span class="label">Inactive</span>)    <span class="comment">-- never used, slot available</span>
+  [5]  Shell   (Ready)       <span class="comment">-- active application thread</span>
+  [6]  (empty) (Inactive)
+  [7]  (empty) (Inactive)
+
+<span class="label">threadCreate()</span> scans for first Inactive slot:
+  -> finds slot [3], creates new thread with ID = 3
+  -> state transitions: Inactive -> Ready
+  -> thread enters scheduler ready queue
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> Thread IDs are recycled, not monotonically increasing. This means a thread ID that previously belonged to a destroyed thread can be reused by a newly created thread. Code that caches thread IDs across destruction boundaries must be aware of this. The simplicity of slot reuse was preferred over generation counters or epoch-based IDs, given the small thread count (max 8).
+</div>
+
+<h3>Thread Destruction Sequence</h3>
+
+<p>Destroying a thread requires coordinated cleanup across multiple kernel subsystems. The <code>destroyThread()</code> function performs the following steps in order:</p>
+
+<div class="diagram">
+<span class="label">destroyThread(threadId)</span>
+
+  1. <span class="label">Validate</span>
+     |  Is threadId valid? (0 <= id < MAX_THREADS)
+     |  Is thread not already Inactive?
+     |  Is thread not the idle thread?  <span class="comment">-- idle thread is protected</span>
+     |
+  2. <span class="label">Remove from scheduler</span>
+     |  scheduler.removeThread(threadId)
+     |  Removes from ready queue or wait queue
+     |  Clears bitmap bit if priority queue is now empty
+     |
+  3. <span class="label">Reset IPC mailbox</span>
+     |  ipcResetMailbox(threadId)
+     |  Drains pending messages
+     |  Unblocks any threads waiting to send to this thread
+     |  Clears notification bits
+     |
+  4. <span class="label">Destroy TCB</span>
+     |  threadDestroy(threadId)
+     |  Sets state = Inactive
+     |  Clears stackPointer, name, priorities
+     |  Slot is now available for reuse
+     |
+  5. <span class="label">Context switch</span> (if destroying current thread)
+     |  Select next thread and trigger switch
+     v
+</div>
+
+<div class="lesson">
+  <strong>Ordering matters:</strong> The scheduler must be updated <em>before</em> the TCB is cleared. If the TCB were cleared first, the scheduler might attempt to access stale pointers in the ready queue or wait queue. Similarly, the IPC mailbox must be drained before the thread disappears, to unblock any senders waiting on this thread's full mailbox.
+</div>
+
+<h3>Self-Termination</h3>
+
+<p>A thread can terminate itself by returning from its entry function. The initial stack frame sets the LR register to <code>kernelThreadExit()</code>, so a normal function return lands in the cleanup handler.</p>
+
+<div class="diagram">
+<span class="label">Thread Entry / Exit Flow</span>
+
+  threadEntryFunction(void *arg)
+  {
+      <span class="comment">// ... thread work ...</span>
+      return;  <span class="comment">// pops LR = kernelThreadExit</span>
+  }
+       |
+       v
+  <span class="label">kernelThreadExit()</span>
+       |
+       |  1. Get current thread ID
+       |  2. scheduler.removeThread(id)
+       |  3. ipcResetMailbox(id)
+       |  4. threadDestroy(id)
+       |  5. Select next ready thread
+       |  6. Trigger context switch
+       |     <span class="comment">// never returns -- thread no longer exists</span>
+       v
+  (thread slot is now Inactive)
+</div>
+
+<div class="highlight">
+  <strong>Stack safety:</strong> After <code>kernelThreadExit()</code> marks the thread as Inactive and triggers a context switch, the destroyed thread's stack memory is no longer referenced. However, the stack memory itself is statically allocated (<code>alignas</code> arrays) and remains valid for reuse if a new thread is created in the same slot with compatible stack requirements.
+</div>
+
+<h3>Idle Thread Protection</h3>
+
+<p>The idle thread (thread ID 0, priority 31) is registered with the scheduler as a special thread that must always exist. Attempting to destroy the idle thread is rejected:</p>
+
+<div class="diagram">
+<span class="label">Idle Thread Guard</span>
+
+  destroyThread(0)  ->  returns error (cannot destroy idle thread)
+
+  <span class="comment">The idle thread serves two critical roles:</span>
+  <span class="comment">  1. Ensures the scheduler always has at least one runnable thread</span>
+  <span class="comment">  2. Feeds the watchdog (if enabled) to prevent MCU reset</span>
+
+  <span class="comment">Destroying it would leave the system with no thread to run</span>
+  <span class="comment">when all other threads are blocked, causing undefined behavior.</span>
+</div>
+
+<h3>Thread State Transitions (Updated)</h3>
+
+<p>With dynamic lifecycle support, the state diagram gains the <code>Inactive</code> state as both start and end:</p>
+
+<div class="diagram">
+                 threadCreate()                   destroyThread()
+                      |                           or kernelThreadExit()
+                      v                                ^
+             +--------+--------+                       |
+  <span class="label">Inactive</span>-->|     <span class="label">Ready</span>       |----> ... ----> <span class="label">Inactive</span>
+             +---------+-------+
+                       |                        (full cleanup:
+             scheduler selects                   remove from scheduler,
+                       |                         reset IPC mailbox,
+                       v                         clear TCB)
+             +---------+-------+
+             |    <span class="label">Running</span>      |
+             |  (exactly one)  +--------> <span class="label">Blocked</span>
+             +--------+-------+            (sleep, mutex,
+                      |                     semaphore, IPC)
+                      v
+             yield() or preempt
+             (returns to Ready)
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> A thread can be destroyed from any state (Ready, Running, or Blocked). If the thread is blocked on a mutex wait queue, <code>scheduler.removeThread()</code> removes it from that queue. If the thread is the current running thread (self-termination via <code>kernelThreadExit()</code>), a context switch is triggered immediately after cleanup.
+</div>
+
+
+<!-- ============================================================ -->
 <!--  APPENDIX: REGISTER QUICK REFERENCE                           -->
 <!-- ============================================================ -->
 <h2 class="chapter" id="registers">
@@ -1078,6 +1361,7 @@ Dest Thread:     bits = messageCheckNotify()    <span class="comment">// returns
   <tr><td>SCB</td><td><code>0xE000ED00</code></td><td>N/A (CP15 coprocessor)</td></tr>
   <tr><td>MPU</td><td><code>0xE000ED90</code></td><td>N/A (MMU via CP15)</td></tr>
   <tr><td>PWR</td><td><code>0x40007000</code></td><td>N/A</td></tr>
+  <tr><td>IWDG</td><td><code>0x40003000</code></td><td>N/A</td></tr>
 </table>
 
 <h3>Crash Dump Output</h3>

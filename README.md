@@ -25,8 +25,10 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 7 | Device tree (FDT binary, runtime parser, DTS source, dt shell command) | Complete |
 | 8 | Power management (WFI idle, sleep-on-exit, deep sleep, clock gating) | Complete |
 | 9 | Shell (interactive CLI: ps, mem, uptime, version, dt, help) | Complete |
+| 10 | Hardware watchdog (IWDG driver, idle-thread feed, shell wdt command) | Complete |
+| 11 | Dynamic threads (TCB slot reuse, destroyThread, lifecycle cleanup) | Complete |
 
-**Test coverage:** 297 C++ host tests, 152 Python tests.
+**Test coverage:** 321 C++ host tests, 152 Python tests.
 
 ## Prerequisites
 
@@ -107,7 +109,7 @@ ms-os/
     stm32f407zgt6/          STM32F407 vector table, linker script, clock init
     pynq-z2/                PYNQ-Z2 startup (ARM mode, GIC, SCU timer)
   hal/
-    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc)
+    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog)
     src/stm32f4/            STM32F2/F4 register-level implementation
     src/zynq7000/           Zynq-7000 register-level implementation
   kernel/
@@ -157,13 +159,14 @@ and process management. Written in C++17 with assembly where required.
 
 ### Kernel Subsystems
 
-- **Threads** -- 8 threads max, 32 priority levels, round-robin within priority
+- **Threads** -- 8 threads max, 32 priority levels, round-robin within priority, dynamic create/destroy with slot reuse
 - **Scheduler** -- O(1) bitmap-based, preemptive, time-sliced
 - **Synchronization** -- Recursive mutexes with priority inheritance, counting semaphores
 - **Memory** -- First-fit heap with coalescing, fixed-size block pools, MPU protection
 - **IPC** -- Per-thread mailbox (4 slots x 64B), synchronous send/receive/reply, async notifications
 - **Power** -- WFI in idle thread, sleep-on-exit, deep sleep mode control, peripheral clock gating
-- **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt)
+- **Watchdog** -- IWDG hardware watchdog, idle-thread feeding, automatic MCU reset on thread starvation
+- **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
 
 ### Shell Commands
@@ -179,6 +182,7 @@ commands:
   uptime  - ticks since boot
   version - show version
   dt      - device tree info
+  wdt     - watchdog status
 
 ms-os> ps
 TID  NAME         STATE   PRI  STACK
