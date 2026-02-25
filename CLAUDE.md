@@ -148,14 +148,20 @@ Production-ready C++17 libraries at `/mnt/data/sandbox/cpp/` that serve as build
 
 ## Development Workflow
 
-Every new component, module, or feature MUST follow these four phases in order:
+Every new component, module, or feature MUST follow these five steps in strict order. Do NOT stop partway through -- complete ALL five steps before considering the task done.
 
-1. **Design** -- Produce a high-level design (architecture, interfaces, data flow) and a low-level detailed design (data structures, algorithms, edge cases) before writing any code.
-2. **Implement** -- Write the code according to the approved design.
-3. **Test** -- Write unit tests with Google Test that cover the implementation. Every kernel component, driver, and API must have corresponding tests.
-4. **Document** -- Update or create the README and both high-level and low-level detailed design docs to reflect what was built.
+1. **Design** -- Create or update the design document in `docs/design/` BEFORE writing any code. Include architecture, interfaces, register maps, data flow, edge cases. Get user approval if needed.
+2. **TDD** -- Write unit tests first (Google Test). Define the expected behavior and mock state, then make the tests compile (they will fail). Every kernel component, driver, and API must have corresponding tests.
+3. **Implement** -- Write the production code to make the tests pass. Follow the approved design.
+4. **Build and test on host AND target** -- Run `python3 build.py -t` (host tests pass), cross-compile all targets (`stm32f207zgt6`, `stm32f407zgt6`, `pynq-z2`), flash to hardware, verify on-target behavior via serial output or debugger. Commit and push.
+5. **Document** -- Update ALL relevant documentation:
+   - Design doc in `docs/design/` (reflect any changes from implementation)
+   - `README.md` (features table, test counts, project structure)
+   - `docs/the-story-of-ms-os.html` (saga chapter for the new phase)
+   - `docs/debugging-playbook.html` (any debug findings, gotchas, resolutions)
+   - Commit and push documentation separately.
 
-Do not skip or reorder phases. No phase is complete until its artifacts exist.
+**CRITICAL:** Do not skip or reorder steps. No step is complete until its artifacts exist. Do not stop after step 3 or step 4 -- always complete through step 5. If blocked on hardware testing (step 4), explicitly tell the user rather than silently skipping it.
 
 ## Testing
 

@@ -1306,6 +1306,138 @@ Dest Thread:     bits = messageCheckNotify()    <span class="comment">// returns
 
 
 <!-- ============================================================ -->
+<!--  SECTION 12: SPI / I2C / DMA DRIVERS                           -->
+<!-- ============================================================ -->
+<h2 class="chapter" id="bus-drivers">
+  <span class="ch-num">Section 12</span>
+  SPI / I2C / DMA Drivers
+</h2>
+
+<div class="epigraph">
+  "Every peripheral is a state machine waiting to be understood."
+  <div class="attribution">&mdash; Embedded systems proverb</div>
+</div>
+
+<p>Phase 12 adds three register-level HAL modules for the STM32F2/F4 bus peripherals. Each module provides both polled (blocking) and interrupt-driven (async) transfer APIs. The Zynq-7000 targets receive no-op stubs since the Cadence SPI/I2C IP on the Zynq PS has a different register layout.</p>
+
+<h3>DMA Controller</h3>
+
+<p>The STM32 DMA subsystem has two controllers (DMA1 at <code>0x40026000</code>, DMA2 at <code>0x40026400</code>), each with 8 streams. Each stream can be assigned one of 8 channels, connecting it to a specific peripheral request line. Per-stream registers are at base + 0x10 + stream * 0x18.</p>
+
+<div class="diagram">
+<span class="label">DMA Transfer Flow</span>
+
+  dmaInit(config)
+    |  Configure stream: channel, direction, sizes, increments, priority
+    |  Do not enable yet (EN=0)
+    v
+  dmaStart(controller, stream, periphAddr, memAddr, count, callback, arg)
+    |  Store callback in s_state[controller][stream]
+    |  Write NDTR, PAR, M0AR
+    |  Clear status flags
+    |  Set EN=1 in SxCR
+    v
+  <span class="label">Hardware Transfer</span>
+    |  DMA moves data autonomously (periph<->memory)
+    |  CPU is free to do other work
+    v
+  <span class="label">ISR</span> (transfer complete or error)
+    |  Read LISR/HISR for flags
+    |  Clear flags via LIFCR/HIFCR
+    |  Disable stream (EN=0)
+    |  Invoke callback(arg, flags)
+    v
+  dmaStop() -- manual abort if needed
+</div>
+
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>dmaInit(config)</code></td><td>Configure stream parameters (channel, direction, sizes, priority)</td></tr>
+  <tr><td><code>dmaStart(ctrl, stream, ...)</code></td><td>Start a transfer with callback notification</td></tr>
+  <tr><td><code>dmaStop(ctrl, stream)</code></td><td>Abort an in-progress transfer</td></tr>
+  <tr><td><code>dmaIsBusy(ctrl, stream)</code></td><td>Check if stream is currently transferring</td></tr>
+  <tr><td><code>dmaRemaining(ctrl, stream)</code></td><td>Read NDTR for remaining transfer count</td></tr>
+</table>
+
+<h3>SPI (Serial Peripheral Interface)</h3>
+
+<p>Three SPI instances: SPI1 on APB2 (<code>0x40013000</code>), SPI2/SPI3 on APB1 (<code>0x40003800</code>, <code>0x40003C00</code>). Configured as master with software NSS management. Four clock modes (CPOL/CPHA combinations), 8 baud rate prescaler settings (Div2 through Div256).</p>
+
+<div class="diagram">
+<span class="label">SPI Polled Transfer (per byte)</span>
+
+  1. Wait TXE=1          <span class="comment">(transmit buffer empty)</span>
+  2. Write byte to DR     <span class="comment">(or 0xFF if tx buffer is null)</span>
+  3. Wait RXNE=1          <span class="comment">(receive buffer not empty)</span>
+  4. Read byte from DR    <span class="comment">(or discard if rx buffer is null)</span>
+  5. Repeat for each byte
+</div>
+
+<p>The async transfer uses per-instance state (<code>s_spiState[3]</code>) with interrupt-driven byte pumping. The ISR processes RXNE first (read received byte), then TXE (write next byte). When all bytes are received, interrupts are disabled and the completion callback is invoked.</p>
+
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>spiInit(config)</code></td><td>Configure SPI: mode, prescaler, data size, bit order, master/slave</td></tr>
+  <tr><td><code>spiTransfer(id, tx, rx, len)</code></td><td>Polled full-duplex transfer (tx or rx may be null)</td></tr>
+  <tr><td><code>spiTransferByte(id, byte)</code></td><td>Convenience: send one byte, return received byte</td></tr>
+  <tr><td><code>spiTransferAsync(id, tx, rx, len, cb, arg)</code></td><td>Interrupt-driven transfer with completion callback</td></tr>
+</table>
+
+<h3>I2C (Inter-Integrated Circuit)</h3>
+
+<p>Three I2C instances, all on APB1: I2C1 (<code>0x40005400</code>), I2C2 (<code>0x40005800</code>), I2C3 (<code>0x40005C00</code>). Standard mode (100 kHz) and Fast mode (400 kHz). 7-bit addressing. The STM32 I2C peripheral requires careful sequencing for ADDR flag clearing, byte-count-dependent ACK/NACK timing, and STOP generation.</p>
+
+<div class="diagram">
+<span class="label">I2C Write Sequence</span>
+
+  START -> wait SB -> addr&lt;&lt;1|0 -> wait ADDR -> clear ADDR (read SR1+SR2)
+    -> for each byte: wait TXE -> write DR
+    -> wait BTF -> STOP
+
+<span class="label">I2C Read Sequence (N > 2 bytes)</span>
+
+  START -> wait SB -> addr&lt;&lt;1|1 -> wait ADDR -> clear ADDR
+    -> for each byte: wait RXNE -> read DR
+    -> before last 2 bytes: clear ACK, set STOP
+    -> read final 2 bytes
+
+<span class="label">I2C WriteRead (register read pattern)</span>
+
+  Write phase (no STOP) -> repeated START -> Read phase -> STOP
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The <code>readDiscard()</code> helper reads a volatile register into a volatile local variable to guarantee the load instruction is generated. This avoids the ARM GCC <code>-Werror=conversion-to-void</code> warning that occurs when casting a volatile read to <code>(void)</code>. The pattern is used for I2C ADDR flag clearing (must read SR1 then SR2) and is documented in the project gotchas file.
+</div>
+
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>i2cInit(config)</code></td><td>Configure I2C: speed, analog/digital filters, CCR/TRISE timing</td></tr>
+  <tr><td><code>i2cWrite(id, addr, data, len)</code></td><td>Polled write to slave (returns I2cError)</td></tr>
+  <tr><td><code>i2cRead(id, addr, data, len)</code></td><td>Polled read from slave (returns I2cError)</td></tr>
+  <tr><td><code>i2cWriteRead(id, addr, tx, txLen, rx, rxLen)</code></td><td>Write then read with repeated START</td></tr>
+  <tr><td><code>i2cWriteAsync(id, addr, data, len, cb, arg)</code></td><td>Interrupt-driven write with callback</td></tr>
+  <tr><td><code>i2cReadAsync(id, addr, data, len, cb, arg)</code></td><td>Interrupt-driven read with callback</td></tr>
+</table>
+
+<h3>RCC Clock Extensions</h3>
+
+<p>Six new functions in the RCC module provide clock gating for all three peripherals:</p>
+
+<table>
+  <tr><th>Peripheral</th><th>Bus</th><th>Register</th><th>Bit</th></tr>
+  <tr><td>SPI1</td><td>APB2</td><td>APB2ENR</td><td>12</td></tr>
+  <tr><td>SPI2</td><td>APB1</td><td>APB1ENR</td><td>14</td></tr>
+  <tr><td>SPI3</td><td>APB1</td><td>APB1ENR</td><td>15</td></tr>
+  <tr><td>I2C1</td><td>APB1</td><td>APB1ENR</td><td>21</td></tr>
+  <tr><td>I2C2</td><td>APB1</td><td>APB1ENR</td><td>22</td></tr>
+  <tr><td>I2C3</td><td>APB1</td><td>APB1ENR</td><td>23</td></tr>
+  <tr><td>DMA1</td><td>AHB1</td><td>AHB1ENR</td><td>21</td></tr>
+  <tr><td>DMA2</td><td>AHB1</td><td>AHB1ENR</td><td>22</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
 <!--  APPENDIX: REGISTER QUICK REFERENCE                           -->
 <!-- ============================================================ -->
 <h2 class="chapter" id="registers">

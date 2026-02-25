@@ -27,8 +27,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 9 | Shell (interactive CLI: ps, mem, uptime, version, dt, help) | Complete |
 | 10 | Hardware watchdog (IWDG driver, idle-thread feed, shell wdt command) | Complete |
 | 11 | Dynamic threads (TCB slot reuse, destroyThread, lifecycle cleanup) | Complete |
+| 12 | SPI / I2C / DMA drivers (register-level, polled + async, loopback demo) | Complete |
 
-**Test coverage:** 321 C++ host tests, 152 Python tests.
+**Test coverage:** 374 C++ host tests, 135 Python tests.
 
 ## Prerequisites
 
@@ -109,7 +110,7 @@ ms-os/
     stm32f407zgt6/          STM32F407 vector table, linker script, clock init
     pynq-z2/                PYNQ-Z2 startup (ARM mode, GIC, SCU timer)
   hal/
-    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog)
+    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c)
     src/stm32f4/            STM32F2/F4 register-level implementation
     src/zynq7000/           Zynq-7000 register-level implementation
   kernel/
@@ -137,6 +138,7 @@ ms-os/
     hello/                  UART hello world (PYNQ-Z2)
     threads/                Multi-thread demo with sleep-based timing
     ipc-demo/               IPC echo server/client + interactive shell
+    spi-demo/               SPI loopback test (polled + async)
   tools/
     ipcgen/                 IDL code generator (embedded backend)
     fdtlib.py               Python FDT builder (creates DTB binaries)
@@ -166,6 +168,9 @@ and process management. Written in C++17 with assembly where required.
 - **IPC** -- Per-thread mailbox (4 slots x 64B), synchronous send/receive/reply, async notifications
 - **Power** -- WFI in idle thread, sleep-on-exit, deep sleep mode control, peripheral clock gating
 - **Watchdog** -- IWDG hardware watchdog, idle-thread feeding, automatic MCU reset on thread starvation
+- **DMA** -- Dual-controller DMA with 8 streams each, interrupt callbacks, configurable data sizes and priorities
+- **SPI** -- Full-duplex SPI master with polled and interrupt-driven async transfers
+- **I2C** -- I2C master (standard/fast mode) with polled and async read/write/writeRead
 - **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
 

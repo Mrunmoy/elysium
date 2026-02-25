@@ -1233,6 +1233,182 @@ which address was denied, and <code>nm</code> tells you what symbol lives there.
 
 
 <!-- ============================================================ -->
+<!--             BUG HUNT 4.6: THE VOLATILE DISCARD                  -->
+<!-- ============================================================ -->
+<h3 id="volatile-discard">4.6 The Volatile Discard (Phase 12)</h3>
+
+<p><strong>Symptom:</strong> I2C driver fails to compile on ARM GCC 12 with
+<code>-Werror</code>. The error message reads: "conversion to void will not
+access object of type 'volatile uint32_t'". The offending lines are register
+reads that exist solely for their side effects (clearing the ADDR flag by
+reading SR1 then SR2).</p>
+
+<h4>Investigation</h4>
+
+<p>
+The I2C ADDR flag on STM32 is cleared by a two-step read sequence: read SR1,
+then read SR2. The result of neither read is needed -- only the side effect
+matters (the hardware clears the flag when SR2 is read after SR1). The natural
+pattern is:
+</p>
+
+<pre>
+(<span class="kw">void</span>)reg(base + kSr1);   <span class="cmt">// read and discard</span>
+(<span class="kw">void</span>)reg(base + kSr2);   <span class="cmt">// read and discard -- ADDR cleared</span>
+</pre>
+
+<p>
+ARM GCC 12 with <code>-Werror</code> treats the cast-to-void of a volatile
+read as suspicious. The compiler cannot guarantee that the load instruction
+will be generated if the result is immediately discarded. This is technically
+implementation-defined behavior in C++17: whether a volatile read through a
+cast-to-void constitutes an access is up to the compiler.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The C++ standard says that accessing a volatile object is a side effect, but
+<code>(void)expr</code> may allow the compiler to optimize away the access
+if the result is unused. ARM GCC 12 warns about this ambiguity. The previous
+solution to this problem (Phase 10, watchdog SR reads) had been lost in the
+implementation -- the same gotcha hit again.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+A <code>readDiscard()</code> helper that reads the volatile register into a
+volatile local variable. The volatile local forces the compiler to generate
+the load instruction (it must store the result), and then the local is cast
+to void (which is safe because locals are not volatile objects in the same
+sense as memory-mapped registers):
+</p>
+
+<pre>
+<span class="kw">static void</span> <span class="fn">readDiscard</span>(std::uint32_t addr)
+{
+    <span class="kw">volatile</span> std::uint32_t tmp =
+        *<span class="kw">reinterpret_cast</span>&lt;<span class="kw">volatile</span> std::uint32_t *&gt;(addr);
+    (<span class="kw">void</span>)tmp;
+}
+</pre>
+
+<p>
+Applied to all 8 register read-and-discard sites in I2c.cpp (4 in write,
+2 in read, 2 in writeRead -- each clearing the ADDR flag).
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> <code>(void)volatile_read</code> is not guaranteed to
+generate a load instruction on all compilers. When you need to read a volatile
+register solely for its side effect (flag clearing, bus synchronization),
+assign the result to a volatile local variable first. This is the only
+portable way to guarantee the read actually happens. Document the pattern
+in the project gotchas file so it does not have to be rediscovered.
+</div>
+
+<!-- ============================================================ -->
+<!--             BUG HUNT 4.7: THE SERIAL TIMING TRAP                -->
+<!-- ============================================================ -->
+<h3 id="serial-timing">4.7 The Serial Timing Trap (Phase 12)</h3>
+
+<p><strong>Symptom:</strong> Flashing the spi-demo and blinky apps to the
+STM32F407 via J-Link produces no serial output. The board resets, the LED
+blinks (for blinky), but the serial terminal shows nothing. The ipc-demo,
+however, works fine.</p>
+
+<h4>Investigation</h4>
+
+<p>
+The difference between the apps: ipc-demo runs a continuous kernel with
+threads that periodically print output. spi-demo and blinky are one-shot
+applications that print their output immediately at startup, then enter a
+WFI loop or spin forever.
+</p>
+
+<p>
+The debug sequence was: J-Link flash, J-Link reset, then open serial port
+with pyserial. By the time pyserial connects, the board has already printed
+its one-shot messages. The UART has no flow control, no buffering, and no
+retransmission. The bytes are gone.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+Race condition between the serial port open and the board reset. The J-Link
+reset command causes the board to immediately begin executing from the reset
+vector. By the time the host opens the serial port (even milliseconds later),
+the startup messages have already been transmitted and lost.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Open the serial port <em>before</em> issuing the J-Link reset command.
+pyserial's <code>Serial()</code> constructor opens the port and begins
+buffering received data immediately. When the board resets and starts
+transmitting, the bytes are captured in the OS receive buffer rather than
+being lost.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> For one-shot applications that print output at startup
+and then go silent, always open the serial port before resetting the target.
+Continuous applications (kernel with threads) mask this timing issue because
+they keep producing output. When debugging startup behavior, the serial port
+must be ready before the first byte leaves the UART.
+</div>
+
+<!-- ============================================================ -->
+<!--             BUG HUNT 4.8: THE SNPRINTF LINKER BOMB              -->
+<!-- ============================================================ -->
+<h3 id="snprintf-linker">4.8 The snprintf Linker Bomb (Phase 12)</h3>
+
+<p><strong>Symptom:</strong> spi-demo fails to link with undefined reference to
+<code>end</code> when using <code>std::snprintf</code> for formatting the test
+summary.</p>
+
+<h4>Root Cause</h4>
+
+<p>
+newlib's snprintf (via nano.specs) pulls in the printf formatting machinery,
+which calls <code>malloc</code> for internal buffering, which calls
+<code>_sbrk</code>, which references the <code>end</code> linker symbol
+marking the end of the BSS segment. ms-os linker scripts do not define
+<code>end</code> because the kernel manages its own heap through the Heap
+allocator, not through the C library sbrk interface.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Replaced snprintf with direct character arithmetic. The pass/total counts
+are single-digit numbers:
+</p>
+
+<pre>
+<span class="kw">char</span> passChar = <span class="str">'0'</span> + <span class="kw">static_cast</span>&lt;<span class="kw">char</span>&gt;(pass);
+</pre>
+
+<p>
+No <code>&lt;cstdio&gt;</code> include, no printf machinery, no linker symbol
+dependencies. This pattern should be used in all freestanding applications
+that do not link against the full C library.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> In freestanding embedded environments with custom heap
+management, any use of C library formatting functions (printf, snprintf,
+sprintf) can pull in the entire malloc/sbrk chain. Audit includes carefully
+and prefer manual formatting for simple numeric output. The
+<code>-Wl,--trace</code> linker flag can help identify which object file
+introduced the unwanted dependency.
+</div>
+
+
+<!-- ============================================================ -->
 <!--             SECTION 5: OPENOCD TCL SCRIPTS                    -->
 <!-- ============================================================ -->
 <h2 class="chapter" id="openocd-scripts"><span class="ch-num">Section 5</span>OpenOCD TCL Scripts</h2>
