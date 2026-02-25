@@ -42,9 +42,6 @@ namespace
 
 namespace kernel
 {
-// Syscall flag: set by svcDispatch to indicate that kernel functions
-// (sleep, messageSend, etc.) should treat this as thread context, not ISR.
-volatile bool g_inSyscall = false;
 namespace arch
 {
     void triggerContextSwitch()
@@ -94,18 +91,21 @@ namespace arch
         return 0x01000000u;    // xPSR: Thumb bit set
     }
 
+    void setSyscallContext(bool) {}
+
     bool inIsrContext()
     {
-        // During SVC dispatch, we are in handler mode but semantically acting
-        // on behalf of a thread. Return false so kernel functions can block.
-        if (g_inSyscall)
+        // ICSR bits 8:0 (VECTACTIVE) hold the active exception number.
+        // SVCall is exception 11. During SVC dispatch we are in handler mode
+        // but acting on behalf of a thread, so return false to let kernel
+        // functions block. Any ISR that preempts SVC will have its own
+        // VECTACTIVE value, so this check is preemption-safe.
+        std::uint32_t vectActive = reg(kScbIcsr) & 0x1FFu;
+        if (vectActive == 11u)
         {
             return false;
         }
-
-        // ICSR bits 8:0 (VECTACTIVE) hold the active exception number.
-        // Non-zero means we are in an exception handler.
-        return (reg(kScbIcsr) & 0x1FFu) != 0;
+        return vectActive != 0;
     }
 
     void waitForInterrupt()

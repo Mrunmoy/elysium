@@ -18,14 +18,6 @@ namespace kernel
     // Called by kernel when a thread function returns
     void kernelThreadExit();
 
-    // Set by svcDispatch to indicate that inIsrContext() should return false
-    // even though we are in SVC handler mode. This allows kernel functions
-    // (sleep, messageSend, etc.) to block the calling thread during a syscall.
-    extern "C"
-    {
-        extern volatile bool g_inSyscall;
-    }
-
 namespace arch
 {
     // Trigger a context switch.
@@ -54,8 +46,13 @@ namespace arch
     // Cortex-A9: 0x1F (CPSR: SYS mode, ARM state, IRQ/FIQ enabled).
     std::uint32_t initialStatusRegister();
 
+    // Mark syscall context as active/inactive. On ARM this is a no-op because
+    // inIsrContext() reads VECTACTIVE directly. On the host mock, it sets a
+    // file-local flag so that inIsrContext() returns false during SVC dispatch.
+    void setSyscallContext(bool active);
+
     // Return true if currently executing in an interrupt/exception handler.
-    // Cortex-M: ICSR VECTACTIVE != 0.
+    // Cortex-M: ICSR VECTACTIVE != 0 (returns false when VECTACTIVE == 11, SVCall).
     // Cortex-A9: CPSR mode bits != USR (0x10) and != SYS (0x1F).
     bool inIsrContext();
 

@@ -101,4 +101,16 @@ namespace hal
         }
         restoreIrq(saved);
     }
+
+    // Zynq PS has SPI0/SPI1 on APER_CLK_CTRL but not used in current port
+    void rccEnableSpiClock(SpiId /* id */) {}
+    void rccDisableSpiClock(SpiId /* id */) {}
+
+    // Zynq PS has I2C0/I2C1 on APER_CLK_CTRL but not used in current port
+    void rccEnableI2cClock(I2cId /* id */) {}
+    void rccDisableI2cClock(I2cId /* id */) {}
+
+    // Zynq PS DMA (DMAC) clock is always on
+    void rccEnableDmaClock(DmaController /* controller */) {}
+    void rccDisableDmaClock(DmaController /* controller */) {}
 }  // namespace hal

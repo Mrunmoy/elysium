@@ -63,7 +63,7 @@ namespace test
         g_deepSleep = false;
         g_tickCount = 0;
         g_watchdogRunning = false;
-        kernel::g_inSyscall = false;
+        kernel::arch::setSyscallContext(false);
     }
 
 }  // namespace test

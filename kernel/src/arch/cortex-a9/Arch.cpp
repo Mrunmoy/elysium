@@ -149,6 +149,8 @@ namespace arch
         return 0x1Fu;
     }
 
+    void setSyscallContext(bool) {}
+
     bool inIsrContext()
     {
         // Read CPSR mode bits (4:0).

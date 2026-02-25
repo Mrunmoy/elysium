@@ -88,6 +88,7 @@ if(CMAKE_CROSSCOMPILING)
         add_subdirectory(app/blinky)
         add_subdirectory(app/threads)
         add_subdirectory(app/ipc-demo)
+        add_subdirectory(app/spi-demo)
     endif()
 
 else()

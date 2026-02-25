@@ -103,4 +103,118 @@ namespace hal
         }
         restoreIrq(saved);
     }
+
+    void rccEnableSpiClock(SpiId id)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (id)
+        {
+            case SpiId::Spi1:
+                reg(kRccBase + kRccApb2enr) |= (1U << 12);
+                break;
+            case SpiId::Spi2:
+                reg(kRccBase + kRccApb1enr) |= (1U << 14);
+                break;
+            case SpiId::Spi3:
+                reg(kRccBase + kRccApb1enr) |= (1U << 15);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
+
+    void rccDisableSpiClock(SpiId id)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (id)
+        {
+            case SpiId::Spi1:
+                reg(kRccBase + kRccApb2enr) &= ~(1U << 12);
+                break;
+            case SpiId::Spi2:
+                reg(kRccBase + kRccApb1enr) &= ~(1U << 14);
+                break;
+            case SpiId::Spi3:
+                reg(kRccBase + kRccApb1enr) &= ~(1U << 15);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
+
+    void rccEnableI2cClock(I2cId id)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (id)
+        {
+            case I2cId::I2c1:
+                reg(kRccBase + kRccApb1enr) |= (1U << 21);
+                break;
+            case I2cId::I2c2:
+                reg(kRccBase + kRccApb1enr) |= (1U << 22);
+                break;
+            case I2cId::I2c3:
+                reg(kRccBase + kRccApb1enr) |= (1U << 23);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
+
+    void rccDisableI2cClock(I2cId id)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (id)
+        {
+            case I2cId::I2c1:
+                reg(kRccBase + kRccApb1enr) &= ~(1U << 21);
+                break;
+            case I2cId::I2c2:
+                reg(kRccBase + kRccApb1enr) &= ~(1U << 22);
+                break;
+            case I2cId::I2c3:
+                reg(kRccBase + kRccApb1enr) &= ~(1U << 23);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
+
+    void rccEnableDmaClock(DmaController controller)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (controller)
+        {
+            case DmaController::Dma1:
+                reg(kRccBase + kRccAhb1enr) |= (1U << 21);
+                break;
+            case DmaController::Dma2:
+                reg(kRccBase + kRccAhb1enr) |= (1U << 22);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
+
+    void rccDisableDmaClock(DmaController controller)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (controller)
+        {
+            case DmaController::Dma1:
+                reg(kRccBase + kRccAhb1enr) &= ~(1U << 21);
+                break;
+            case DmaController::Dma2:
+                reg(kRccBase + kRccAhb1enr) &= ~(1U << 22);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
 }  // namespace hal

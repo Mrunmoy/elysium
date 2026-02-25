@@ -5,10 +5,13 @@
 
 #include "MockKernel.h"
 
+namespace
+{
+    bool s_inSyscall = false;
+}  // namespace
+
 namespace kernel
 {
-// Syscall flag (host mock -- Arch.cpp defines it for cross-compile)
-volatile bool g_inSyscall = false;
 namespace arch
 {
     void triggerContextSwitch()
@@ -48,11 +51,16 @@ namespace arch
         return 0x01000000u;    // xPSR: Thumb bit (matches Cortex-M)
     }
 
+    void setSyscallContext(bool active)
+    {
+        s_inSyscall = active;
+    }
+
     bool inIsrContext()
     {
-        // Match real Arch.cpp: during SVC dispatch (handler mode), g_inSyscall
-        // is set so kernel functions can block on behalf of the calling thread.
-        if (g_inSyscall)
+        // Match real Arch.cpp: during SVC dispatch, setSyscallContext(true)
+        // is called so kernel functions can block on behalf of the calling thread.
+        if (s_inSyscall)
         {
             return false;
         }

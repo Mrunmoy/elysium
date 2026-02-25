@@ -2,9 +2,17 @@ add_executable(hal_tests
     GpioTest.cpp
     WatchdogTest.cpp
     UartTest.cpp
+    RccTest.cpp
+    DmaTest.cpp
+    SpiTest.cpp
+    I2cTest.cpp
     MockGpio.cpp
     MockWatchdog.cpp
     MockUart.cpp
+    MockRcc.cpp
+    MockDma.cpp
+    MockSpi.cpp
+    MockI2c.cpp
 )
 
 target_include_directories(hal_tests PRIVATE

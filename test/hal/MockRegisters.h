@@ -18,6 +18,7 @@
 // record calls and verify parameters.
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace test
@@ -91,6 +92,121 @@ namespace test
     inline std::vector<char> g_uartRxBuffer;
     inline std::size_t g_uartRxReadPos = 0;
 
+    // RCC mock state
+    struct RccEnableCall
+    {
+        std::string peripheral;
+        std::uint8_t id;
+    };
+
+    inline std::vector<RccEnableCall> g_rccEnableCalls;
+    inline std::vector<RccEnableCall> g_rccDisableCalls;
+
+    // DMA mock state
+    struct DmaInitCall
+    {
+        std::uint8_t controller;
+        std::uint8_t stream;
+        std::uint8_t channel;
+        std::uint8_t direction;
+        std::uint8_t peripheralSize;
+        std::uint8_t memorySize;
+        bool peripheralIncrement;
+        bool memoryIncrement;
+        std::uint8_t priority;
+        bool circular;
+    };
+
+    struct DmaStartCall
+    {
+        std::uint8_t controller;
+        std::uint8_t stream;
+        std::uint32_t peripheralAddr;
+        std::uint32_t memoryAddr;
+        std::uint16_t count;
+        void *callback;
+        void *arg;
+    };
+
+    inline std::vector<DmaInitCall> g_dmaInitCalls;
+    inline std::vector<DmaStartCall> g_dmaStartCalls;
+    inline std::uint32_t g_dmaStopCount = 0;
+    inline bool g_dmaBusy = false;
+    inline std::uint16_t g_dmaRemaining = 0;
+    inline std::uint32_t g_dmaInterruptEnableCount = 0;
+    inline std::uint32_t g_dmaInterruptDisableCount = 0;
+
+    // SPI mock state
+    struct SpiInitCall
+    {
+        std::uint8_t id;
+        std::uint8_t mode;
+        std::uint8_t prescaler;
+        std::uint8_t dataSize;
+        std::uint8_t bitOrder;
+        bool master;
+        bool softwareNss;
+    };
+
+    struct SpiTransferCall
+    {
+        std::uint8_t id;
+        std::size_t length;
+        bool hasTxData;
+        bool hasRxData;
+    };
+
+    inline std::vector<SpiInitCall> g_spiInitCalls;
+    inline std::vector<SpiTransferCall> g_spiTransferCalls;
+    inline std::vector<std::uint8_t> g_spiRxData;
+    inline std::size_t g_spiRxReadPos = 0;
+    inline std::uint32_t g_spiAsyncCount = 0;
+    inline void *g_spiAsyncCallback = nullptr;
+    inline void *g_spiAsyncArg = nullptr;
+
+    // I2C mock state
+    struct I2cInitCall
+    {
+        std::uint8_t id;
+        std::uint8_t speed;
+        bool analogFilter;
+        std::uint8_t digitalFilterCoeff;
+    };
+
+    struct I2cWriteCall
+    {
+        std::uint8_t id;
+        std::uint8_t addr;
+        std::size_t length;
+    };
+
+    struct I2cReadCall
+    {
+        std::uint8_t id;
+        std::uint8_t addr;
+        std::size_t length;
+    };
+
+    struct I2cWriteReadCall
+    {
+        std::uint8_t id;
+        std::uint8_t addr;
+        std::size_t txLength;
+        std::size_t rxLength;
+    };
+
+    inline std::vector<I2cInitCall> g_i2cInitCalls;
+    inline std::vector<I2cWriteCall> g_i2cWriteCalls;
+    inline std::vector<I2cReadCall> g_i2cReadCalls;
+    inline std::vector<I2cWriteReadCall> g_i2cWriteReadCalls;
+    inline std::vector<std::uint8_t> g_i2cRxData;
+    inline std::size_t g_i2cRxReadPos = 0;
+    inline std::uint8_t g_i2cReturnError = 0;  // I2cError::Ok
+    inline std::uint32_t g_i2cAsyncWriteCount = 0;
+    inline std::uint32_t g_i2cAsyncReadCount = 0;
+    inline void *g_i2cAsyncCallback = nullptr;
+    inline void *g_i2cAsyncArg = nullptr;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -107,6 +223,37 @@ namespace test
         g_uartRxInterruptDisableCount = 0;
         g_uartRxBuffer.clear();
         g_uartRxReadPos = 0;
+
+        g_rccEnableCalls.clear();
+        g_rccDisableCalls.clear();
+
+        g_dmaInitCalls.clear();
+        g_dmaStartCalls.clear();
+        g_dmaStopCount = 0;
+        g_dmaBusy = false;
+        g_dmaRemaining = 0;
+        g_dmaInterruptEnableCount = 0;
+        g_dmaInterruptDisableCount = 0;
+
+        g_spiInitCalls.clear();
+        g_spiTransferCalls.clear();
+        g_spiRxData.clear();
+        g_spiRxReadPos = 0;
+        g_spiAsyncCount = 0;
+        g_spiAsyncCallback = nullptr;
+        g_spiAsyncArg = nullptr;
+
+        g_i2cInitCalls.clear();
+        g_i2cWriteCalls.clear();
+        g_i2cReadCalls.clear();
+        g_i2cWriteReadCalls.clear();
+        g_i2cRxData.clear();
+        g_i2cRxReadPos = 0;
+        g_i2cReturnError = 0;
+        g_i2cAsyncWriteCount = 0;
+        g_i2cAsyncReadCount = 0;
+        g_i2cAsyncCallback = nullptr;
+        g_i2cAsyncArg = nullptr;
     }
 
 }  // namespace test

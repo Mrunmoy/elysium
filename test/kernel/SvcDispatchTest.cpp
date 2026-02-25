@@ -366,8 +366,8 @@ TEST_F(SvcDispatchTest, InvalidSvcNumber_ReturnsZero)
 // On Cortex-M, SVC_Handler runs in handler mode where ICSR.VECTACTIVE != 0,
 // so inIsrContext() returns true. Blocking kernel functions (sleep, mutexLock,
 // semaphoreWait, messageSend) check inIsrContext() and early-return as no-ops
-// from ISR context. The g_inSyscall flag set by svcDispatch() tells
-// inIsrContext() to return false, allowing these functions to block on behalf
+// from ISR context. svcDispatch() calls arch::setSyscallContext(true) so that
+// inIsrContext() returns false, allowing these functions to block on behalf
 // of the calling thread.
 //
 // These tests simulate handler mode (g_isrContext=true) and verify that
@@ -416,7 +416,7 @@ TEST_F(SvcDispatchTest, Sleep_InIsrContext_DirectCall_IsNoop)
     kernel::internal::scheduler().switchContext();
 
     // Direct call to sleep (NOT through svcDispatch) -- should be a no-op
-    // because g_inSyscall is false and g_isrContext is true
+    // because setSyscallContext was not called and g_isrContext is true
     kernel::sleep(100);
 
     auto *tcb = kernel::threadGetTcb(id);
@@ -479,10 +479,16 @@ TEST_F(SvcDispatchTest, SemaphoreWait_InHandlerMode_ViaDispatch_Succeeds)
     EXPECT_EQ(scb->count, 0u);
 }
 
-TEST_F(SvcDispatchTest, SvcDispatch_ClearsInSyscallOnReturn)
+TEST_F(SvcDispatchTest, SvcDispatch_RestoresIsrContextOnReturn)
 {
-    // Verify g_inSyscall is false before and after dispatch
-    EXPECT_FALSE(kernel::g_inSyscall);
-    svcDispatch(kernel::syscall::kYield, m_frame);
-    EXPECT_FALSE(kernel::g_inSyscall);
+    test::g_isrContext = true;
+
+    // Before dispatch, inIsrContext() should return true (handler mode)
+    EXPECT_TRUE(kernel::arch::inIsrContext());
+
+    svcDispatch(kernel::syscall::kTickCount, m_frame);
+
+    // After dispatch, inIsrContext() should return true again (syscall
+    // context cleared, so the underlying g_isrContext=true is visible)
+    EXPECT_TRUE(kernel::arch::inIsrContext());
 }

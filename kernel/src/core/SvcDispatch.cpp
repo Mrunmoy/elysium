@@ -19,7 +19,7 @@
 
 extern "C" std::uint32_t svcDispatch(std::uint8_t svcNum, std::uint32_t *frame)
 {
-    kernel::g_inSyscall = true;
+    kernel::arch::setSyscallContext(true);
 
     // frame[0]=r0, frame[1]=r1, frame[2]=r2, frame[3]=r3
     std::uint32_t result = 0;
@@ -152,6 +152,6 @@ extern "C" std::uint32_t svcDispatch(std::uint8_t svcNum, std::uint32_t *frame)
         break;
     }
 
-    kernel::g_inSyscall = false;
+    kernel::arch::setSyscallContext(false);
     return result;
 }
