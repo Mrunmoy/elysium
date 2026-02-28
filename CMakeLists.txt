@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(ms-os
     LANGUAGES C CXX ASM
-    VERSION 0.10.0
+    VERSION 0.13.0
 )
 
 set(CMAKE_CXX_STANDARD 17)
@@ -89,6 +89,8 @@ if(CMAKE_CROSSCOMPILING)
         add_subdirectory(app/threads)
         add_subdirectory(app/ipc-demo)
         add_subdirectory(app/spi-demo)
+        add_subdirectory(app/uart2-echo)
+        add_subdirectory(app/uart2-test)
     endif()
 
 else()

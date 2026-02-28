@@ -1775,6 +1775,72 @@ which stack and mode the faulting code was using.
 </p>
 
 
+<!-- ============================================================ -->
+<!--         BOARD-TO-BOARD UART TESTING                          -->
+<!-- ============================================================ -->
+
+<h2 class="section-title">Board-to-Board UART Testing</h2>
+
+<p>
+Phase 13 introduced dual-board testing. Two STM32F407 boards with USART2
+cross-wired (TX-to-RX, RX-to-TX). Common issues and resolutions:
+</p>
+
+<h3>Wiring</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>TX-TX / RX-RX (not crossed)</td>
+    <td>Timeout on every test, no echo</td>
+    <td>Cross the wires: Board1 TX (PA2) to Board2 RX (PA3) and vice versa</td>
+  </tr>
+  <tr>
+    <td>Missing common ground</td>
+    <td>Garbled data, random byte values</td>
+    <td>Connect GND between both boards</td>
+  </tr>
+  <tr>
+    <td>Long wires / noise</td>
+    <td>Occasional bit errors, especially at higher baud rates</td>
+    <td>Use short jumper wires (< 20cm), reduce baud rate if needed</td>
+  </tr>
+</table>
+
+<h3>Timing</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>Echo server not ready</td>
+    <td>First test times out, rest pass</td>
+    <td>Test runner waits 500ms after boot before starting tests</td>
+  </tr>
+  <tr>
+    <td>Ring buffer overflow on burst</td>
+    <td>Lost bytes in stress test</td>
+    <td>Echo server must poll fast enough; consider reducing burst size or adding inter-byte delay</td>
+  </tr>
+</table>
+
+<h3>Dual-Probe Flashing</h3>
+<p>
+Board 1 (J-Link): <code>python3 build.py -f --target stm32f407zgt6 --app uart2-test</code><br>
+Board 2 (CMSIS-DAP): <code>python3 build.py -f --target stm32f407zgt6 --app uart2-echo --probe cmsis-dap</code>
+</p>
+<p>
+If OpenOCD fails to connect to CMSIS-DAP, check <code>lsusb</code> for VID:PID
+<code>0xc251:0xf001</code>. If the device uses a different VID/PID, update the
+<code>cmsis_dap_vid_pid</code> command in <code>build.py</code>.
+</p>
+
+<h3>Console Monitoring</h3>
+<p>
+Board 1 console: <code>/dev/ttyUSB0</code> (CP2102, 115200 baud)<br>
+Board 2 console: <code>/dev/ttyACM0</code> (CMSIS-DAP UART bridge, 115200 baud)<br>
+Use <code>minicom -D /dev/ttyUSB0 -b 115200</code> or
+<code>screen /dev/ttyACM0 115200</code> to monitor.
+</p>
+
+
 <div class="epigraph" style="margin-top: 4em;">
   "The most effective debugging tool is still careful thought,<br>
   coupled with judiciously placed print statements."

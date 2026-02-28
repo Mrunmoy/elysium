@@ -173,3 +173,10 @@ Every new component, module, or feature MUST follow these five steps in strict o
 ## CI
 
 - GitHub Actions with matrix testing (GCC + Clang, Debug + Release)
+
+
+## Testing Peripheral Drivers
+Between two exactly same STM32F407ZGT6 boards
+- Connected USART2 RX (PA3) , TX (PA2) to the TX (PA2) and RX(PA3) of second board
+- Connected SPI2 MOSI (PB15), MISO (PB14), SCK (PB13), NSS (PB12) to same pins of second board
+- Connected I2C1 SDA (PB7), SCL (PB6) to same pins of second board

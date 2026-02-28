@@ -4677,6 +4677,112 @@ and external memory.
 
 
 <!-- ============================================================ -->
+<!--   CHAPTER 13: BOARD-TO-BOARD USART2 INTEGRATION TEST         -->
+<!-- ============================================================ -->
+<h2 class="chapter">
+  <span class="ch-num">Chapter 13</span>
+  The Wire Between Two Worlds
+</h2>
+
+<div class="epigraph">
+  "A peripheral driver is not truly tested until it talks to another device."
+  <div class="attribution">&mdash; Embedded systems folklore</div>
+</div>
+
+<p>
+Every phase up to this point had tested peripherals in isolation. SPI loopback
+wired MOSI to MISO on the same chip. UART tests ran on the host with mocks.
+The question lingered: does the UART driver actually work when two separate
+boards talk to each other over real wires?
+</p>
+
+<p>
+Phase 13 answered that question. Two identical STM32F407ZGT6 boards sat side
+by side on the bench, their USART2 TX and RX pins cross-wired. Board 1 drove
+its J-Link debug probe and printed test results on its USART1 console.
+Board 2 drove its CMSIS-DAP debug probe and reported echo activity on its own
+USART1 console. Between them, two wires carried the actual test traffic: PA2
+(TX) on one board to PA3 (RX) on the other, and vice versa.
+</p>
+
+<h3>The Echo Server</h3>
+
+<p>
+Board 2 ran the simplest possible firmware: initialize USART2 with interrupt-
+driven RX, then poll the ring buffer in a tight loop. Every byte that arrives
+gets sent right back. The main loop also reports a running total on the
+console, so the operator can see activity happening in real time. No kernel,
+no threads, no scheduler&mdash;just a bare-metal echo loop that exercises
+the exact same UART HAL code that the kernel uses.
+</p>
+
+<h3>The Test Runner</h3>
+
+<p>
+Board 1 ran a structured test harness with five tests of increasing
+complexity:
+</p>
+
+<ol>
+  <li><strong>Single byte</strong> &mdash; Send 0xA5, wait for echo, verify
+      the returned byte matches. The simplest possible round-trip.</li>
+  <li><strong>Multi-byte</strong> &mdash; Send {0xDE, 0xAD, 0xBE, 0xEF},
+      verify all four bytes echo back in order. Tests that the ring buffer
+      handles sequential bytes correctly.</li>
+  <li><strong>Sequential</strong> &mdash; Send every byte value from 0x00
+      through 0xFF, one at a time, verifying each echo. Tests that no byte
+      value is special-cased or corrupted.</li>
+  <li><strong>Burst</strong> &mdash; Send 16 bytes rapidly without waiting
+      between sends, then collect all echoes. Tests the ring buffer under
+      moderate burst load.</li>
+  <li><strong>Stress</strong> &mdash; Send 64 bytes rapidly (the full ring
+      buffer capacity), collect all echoes. The maximum burst the 64-byte
+      ring buffer can handle without overflow.</li>
+</ol>
+
+<p>
+Each test drains any stale bytes from the RX buffer before starting, sends
+its pattern, and waits for echoed responses with a timeout loop. On
+mismatch, the test prints the expected and actual byte values in hex for
+immediate diagnosis. The final summary reports pass/total count.
+</p>
+
+<h3>Dual-Probe Flashing</h3>
+
+<p>
+With two boards, flashing became a two-step process. Board 1 used the
+existing J-Link path. Board 2 needed its own path through the CMSIS-DAP
+probe. A new <code>--probe cmsis-dap</code> argument in <code>build.py</code>
+routes the flash command through OpenOCD with the CMSIS-DAP interface
+configuration instead of J-Link. The same binary format, the same flash
+address (0x08000000), just a different debug probe on the other end of the
+USB cable.
+</p>
+
+<h3>What This Proves</h3>
+
+<p>
+No new HAL code was written for Phase 13. The UART driver, the RCC clock
+enable, the GPIO alternate function configuration&mdash;all existed since
+Phase 0. What Phase 13 proved is that the existing code works in the
+scenario it was designed for: two devices communicating over UART at 115200
+baud, with interrupt-driven receive and polled transmit, across physical
+wires. The ring buffer handles bursts up to its full 64-byte capacity. The
+baud rate calculation produces matching bit timing on two boards with
+identical clock configurations. No bytes are lost, no bytes are corrupted,
+no bytes arrive out of order.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 13:</strong> First board-to-board peripheral test
+passing. Two STM32F407 boards communicating over USART2 with 5 integration
+tests (single byte, multi-byte, sequential 0x00-0xFF, 16-byte burst, 64-byte
+stress). Dual-probe flashing via J-Link and CMSIS-DAP. Total test count: 389
+C++ host tests, 135 Python tests.
+</div>
+
+
+<!-- ============================================================ -->
 <!--                      EPILOGUE                                -->
 <!-- ============================================================ -->
 <h2 class="chapter">
@@ -4690,16 +4796,17 @@ and external memory.
 </div>
 
 <p>
-As of February 2026, ms-os has completed twelve phases of development. It runs
+As of March 2026, ms-os has completed thirteen phases of development. It runs
 on three hardware targets spanning two ARM architecture families, with
-374 C++ unit tests and 135 Python tests verified by GitHub Actions CI on
+389 C++ unit tests and 135 Python tests verified by GitHub Actions CI on
 every push. The kernel schedules 8 threads across 32 priority levels,
 enforces a hardware privilege boundary with SVC syscalls and MPU protection,
 communicates through Minix-style IPC, parses standard FDT device trees at
 runtime, conserves power via WFI and sleep modes, drives SPI/I2C/DMA
 peripherals at the register level, and provides an interactive shell for
 runtime introspection. All of it cross-compiles for Cortex-M3, Cortex-M4,
-and Cortex-A9 from the same source tree.
+and Cortex-A9 from the same source tree. And now, for the first time, two
+boards talk to each other.
 </p>
 
 <p>
@@ -4708,9 +4815,10 @@ CI has been one of accumulation. Each phase built on the infrastructure of
 the last. The dual build system from Phase 0 made every subsequent phase
 testable on the host. The architecture abstraction from Phase 4 made every
 subsequent feature portable across three targets. The SVC dispatch from
-Phase 6 made the IPC from Phase 5 available to unprivileged threads. None
-of these phases exist in isolation; they form a stack where each layer
-depends on the ones below.
+Phase 6 made the IPC from Phase 5 available to unprivileged threads. Phase
+13 proved that the HAL drivers work not just in isolation but across physical
+wires between real devices. None of these phases exist in isolation; they
+form a stack where each layer depends on the ones below.
 </p>
 
 <p>
@@ -4728,6 +4836,8 @@ But the journey is far from over. The roadmap includes:
       using <code>ps7_init</code> for standalone Zynq PS initialization</li>
   <li><strong>Networking</strong> &mdash; A lightweight TCP/IP stack for
       the STM32 Ethernet peripheral</li>
+  <li><strong>Board-to-board SPI and I2C</strong> &mdash; Extend the
+      cross-board test infrastructure to SPI master/slave and I2C</li>
 </ul>
 
 <p>

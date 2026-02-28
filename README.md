@@ -28,8 +28,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 10 | Hardware watchdog (IWDG driver, idle-thread feed, shell wdt command) | Complete |
 | 11 | Dynamic threads (TCB slot reuse, destroyThread, lifecycle cleanup) | Complete |
 | 12 | SPI / I2C / DMA drivers (register-level, polled + async, loopback demo) | Complete |
+| 13 | Board-to-board USART2 integration test (echo server + test runner) | Complete |
 
-**Test coverage:** 374 C++ host tests, 135 Python tests.
+**Test coverage:** 389 C++ host tests, 135 Python tests.
 
 ## Prerequisites
 
@@ -86,6 +87,7 @@ Runs tests via ctest. No ARM toolchain required.
 ```bash
 python3 build.py -f                           # STM32F207 via J-Link
 python3 build.py -f --target stm32f407zgt6    # STM32F407 via J-Link
+python3 build.py -f --probe cmsis-dap         # STM32 via CMSIS-DAP
 python3 build.py -f --target pynq-z2          # PYNQ-Z2 via OpenOCD
 ```
 
@@ -139,6 +141,8 @@ ms-os/
     threads/                Multi-thread demo with sleep-based timing
     ipc-demo/               IPC echo server/client + interactive shell
     spi-demo/               SPI loopback test (polled + async)
+    uart2-echo/             UART2 echo server (board-to-board, Board 2)
+    uart2-test/             UART2 test runner (board-to-board, Board 1)
   tools/
     ipcgen/                 IDL code generator (embedded backend)
     fdtlib.py               Python FDT builder (creates DTB binaries)
