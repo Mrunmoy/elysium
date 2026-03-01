@@ -18,6 +18,7 @@ namespace
     constexpr std::uint32_t kCr2 = 0x04;
     constexpr std::uint32_t kSr = 0x08;
     constexpr std::uint32_t kDr = 0x0C;
+    constexpr std::uint32_t kI2sCfgr = 0x1C;
 
     // CR1 bit positions
     constexpr std::uint32_t kCr1Cpha = 0;
@@ -83,57 +84,109 @@ namespace
 
     SpiAsyncState s_spiState[3];
 
+    // SPI slave RX interrupt state
+    struct SpiSlaveRxState
+    {
+        hal::SpiSlaveRxCallbackFn callback = nullptr;
+        void *arg = nullptr;
+        bool active = false;
+    };
+
+    SpiSlaveRxState s_spiSlaveState[3];
+
+    // NVIC registers
+    constexpr std::uint32_t kNvicIser = 0xE000E100;
+    constexpr std::uint32_t kNvicIpr = 0xE000E400;
+
+    void nvicEnableIrq(std::uint8_t irqn)
+    {
+        reg(kNvicIser + (irqn / 32) * 4) = 1U << (irqn % 32);
+    }
+
+    void nvicSetPriority(std::uint8_t irqn, std::uint8_t priority)
+    {
+        volatile auto *ipr = reinterpret_cast<volatile std::uint8_t *>(kNvicIpr);
+        ipr[irqn] = priority;
+    }
+
+    std::uint8_t spiIrqNumber(hal::SpiId id)
+    {
+        switch (id)
+        {
+            case hal::SpiId::Spi1: return 35;
+            case hal::SpiId::Spi2: return 36;
+            case hal::SpiId::Spi3: return 51;
+            default: return 35;
+        }
+    }
+
     void handleSpiIrq(std::uint8_t idx)
     {
+        // Async master transfer path
         auto &st = s_spiState[idx];
-        if (!st.active)
+        if (st.active)
         {
+            std::uint32_t base = spiBase(static_cast<hal::SpiId>(idx));
+            std::uint32_t sr = reg(base + kSr);
+
+            // TX empty -- send next byte
+            if ((sr & (1U << kSrTxe)) && st.txIndex < st.length)
+            {
+                if (st.txBuf)
+                {
+                    reg(base + kDr) = st.txBuf[st.txIndex];
+                }
+                else
+                {
+                    reg(base + kDr) = 0xFF;
+                }
+                ++st.txIndex;
+
+                // Disable TXE interrupt if all bytes sent
+                if (st.txIndex >= st.length)
+                {
+                    reg(base + kCr2) &= ~(1U << kCr2Txeie);
+                }
+            }
+
+            // RX not empty -- read byte
+            if ((sr & (1U << kSrRxne)) && st.rxIndex < st.length)
+            {
+                std::uint8_t data = static_cast<std::uint8_t>(reg(base + kDr));
+                if (st.rxBuf)
+                {
+                    st.rxBuf[st.rxIndex] = data;
+                }
+                ++st.rxIndex;
+
+                // Transfer complete
+                if (st.rxIndex >= st.length)
+                {
+                    // Disable all SPI interrupts
+                    reg(base + kCr2) &=
+                        ~((1U << kCr2Txeie) | (1U << kCr2Rxneie) | (1U << kCr2Errie));
+                    st.active = false;
+
+                    if (st.callback)
+                    {
+                        st.callback(st.arg);
+                    }
+                }
+            }
             return;
         }
 
-        std::uint32_t base = spiBase(static_cast<hal::SpiId>(idx));
-        std::uint32_t sr = reg(base + kSr);
-
-        // TX empty -- send next byte
-        if ((sr & (1U << kSrTxe)) && st.txIndex < st.length)
+        // Slave RX interrupt path
+        auto &slave = s_spiSlaveState[idx];
+        if (slave.active)
         {
-            if (st.txBuf)
+            std::uint32_t base = spiBase(static_cast<hal::SpiId>(idx));
+            if (reg(base + kSr) & (1U << kSrRxne))
             {
-                reg(base + kDr) = st.txBuf[st.txIndex];
-            }
-            else
-            {
-                reg(base + kDr) = 0xFF;
-            }
-            ++st.txIndex;
-
-            // Disable TXE interrupt if all bytes sent
-            if (st.txIndex >= st.length)
-            {
-                reg(base + kCr2) &= ~(1U << kCr2Txeie);
-            }
-        }
-
-        // RX not empty -- read byte
-        if ((sr & (1U << kSrRxne)) && st.rxIndex < st.length)
-        {
-            std::uint8_t data = static_cast<std::uint8_t>(reg(base + kDr));
-            if (st.rxBuf)
-            {
-                st.rxBuf[st.rxIndex] = data;
-            }
-            ++st.rxIndex;
-
-            // Transfer complete
-            if (st.rxIndex >= st.length)
-            {
-                // Disable all SPI interrupts
-                reg(base + kCr2) &= ~((1U << kCr2Txeie) | (1U << kCr2Rxneie) | (1U << kCr2Errie));
-                st.active = false;
-
-                if (st.callback)
+                std::uint8_t rxByte = static_cast<std::uint8_t>(reg(base + kDr));
+                if (slave.callback)
                 {
-                    st.callback(st.arg);
+                    slave.callback(slave.arg, rxByte);
                 }
             }
         }
@@ -187,7 +240,12 @@ namespace hal
 
         if (config.softwareNss)
         {
-            cr1 |= (1U << kCr1Ssm) | (1U << kCr1Ssi);
+            cr1 |= (1U << kCr1Ssm);
+            if (config.master)
+            {
+                cr1 |= (1U << kCr1Ssi);  // SSI=1 for master (prevent MODF)
+            }
+            // SSI=0 for slave (slave selected)
         }
 
         reg(base + kCr1) = cr1;
@@ -195,8 +253,17 @@ namespace hal
         // Clear CR2 (no interrupts initially)
         reg(base + kCr2) = 0;
 
-        // Enable SPI
-        reg(base + kCr1) |= (1U << kCr1Spe);
+        // Ensure SPI mode, not I2S (clear I2SMOD bit in I2SCFGR)
+        reg(base + kI2sCfgr) &= ~(1U << 11);
+
+        // Enable SPI for master mode immediately.
+        // For slave mode, SPE is deferred so the application can pre-load
+        // DR before enabling (per RM0090: "the data byte must be written
+        // to SPI_DR before the master starts to transmit").
+        if (config.master)
+        {
+            reg(base + kCr1) |= (1U << kCr1Spe);
+        }
     }
 
     void spiTransfer(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
@@ -265,10 +332,64 @@ namespace hal
         st.arg = arg;
         st.active = true;
 
+        // Enable NVIC for SPI IRQ
+        nvicSetPriority(spiIrqNumber(id), 0x80);
+        nvicEnableIrq(spiIrqNumber(id));
+
         // Enable RXNE and TXE interrupts
         reg(base + kCr2) |= (1U << kCr2Rxneie) | (1U << kCr2Txeie) | (1U << kCr2Errie);
 
         restoreIrq(saved);
+    }
+
+    void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg)
+    {
+        std::uint8_t idx = static_cast<std::uint8_t>(id);
+        std::uint32_t base = spiBase(id);
+
+        std::uint32_t saved = disableIrq();
+
+        auto &slave = s_spiSlaveState[idx];
+        slave.callback = callback;
+        slave.arg = arg;
+        slave.active = true;
+
+        // Enable NVIC for SPI IRQ
+        nvicSetPriority(spiIrqNumber(id), 0x80);
+        nvicEnableIrq(spiIrqNumber(id));
+
+        // Enable SPE if not already set.  For slave mode, spiInit()
+        // defers SPE so this is the first time it gets set.
+        reg(base + kCr1) |= (1U << kCr1Spe);
+
+        // Enable RXNE interrupt in CR2
+        reg(base + kCr2) |= (1U << kCr2Rxneie);
+
+        restoreIrq(saved);
+    }
+
+    void spiSlaveRxInterruptDisable(SpiId id)
+    {
+        std::uint8_t idx = static_cast<std::uint8_t>(id);
+        std::uint32_t base = spiBase(id);
+
+        std::uint32_t saved = disableIrq();
+
+        // Disable RXNE interrupt in CR2
+        reg(base + kCr2) &= ~(1U << kCr2Rxneie);
+
+        auto &slave = s_spiSlaveState[idx];
+        slave.callback = nullptr;
+        slave.arg = nullptr;
+        slave.active = false;
+
+        restoreIrq(saved);
+    }
+
+    void spiSlaveSetTxByte(SpiId id, std::uint8_t value)
+    {
+        std::uint32_t base = spiBase(id);
+        reg(base + kDr) = value;
     }
 }  // namespace hal
 

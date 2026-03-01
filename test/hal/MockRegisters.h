@@ -164,6 +164,19 @@ namespace test
     inline void *g_spiAsyncCallback = nullptr;
     inline void *g_spiAsyncArg = nullptr;
 
+    // SPI slave mock state
+    struct SpiSlaveRxEnableCall
+    {
+        std::uint8_t id;
+    };
+
+    inline std::vector<SpiSlaveRxEnableCall> g_spiSlaveRxEnableCalls;
+    inline std::uint32_t g_spiSlaveRxDisableCount = 0;
+    inline void *g_spiSlaveRxCallback = nullptr;
+    inline void *g_spiSlaveRxArg = nullptr;
+    inline bool g_spiSlaveRxActive = false;
+    inline std::vector<std::uint8_t> g_spiSlaveSetTxBytes;
+
     // I2C mock state
     struct I2cInitCall
     {
@@ -242,6 +255,13 @@ namespace test
         g_spiAsyncCount = 0;
         g_spiAsyncCallback = nullptr;
         g_spiAsyncArg = nullptr;
+
+        g_spiSlaveRxEnableCalls.clear();
+        g_spiSlaveRxDisableCount = 0;
+        g_spiSlaveRxCallback = nullptr;
+        g_spiSlaveRxArg = nullptr;
+        g_spiSlaveRxActive = false;
+        g_spiSlaveSetTxBytes.clear();
 
         g_i2cInitCalls.clear();
         g_i2cWriteCalls.clear();

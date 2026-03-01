@@ -90,4 +90,25 @@ namespace hal
             callback(arg);
         }
     }
+
+    void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg)
+    {
+        test::g_spiSlaveRxEnableCalls.push_back({static_cast<std::uint8_t>(id)});
+        test::g_spiSlaveRxCallback = reinterpret_cast<void *>(callback);
+        test::g_spiSlaveRxArg = arg;
+        test::g_spiSlaveRxActive = true;
+    }
+
+    void spiSlaveRxInterruptDisable(SpiId /* id */)
+    {
+        ++test::g_spiSlaveRxDisableCount;
+        test::g_spiSlaveRxCallback = nullptr;
+        test::g_spiSlaveRxArg = nullptr;
+        test::g_spiSlaveRxActive = false;
+    }
+
+    void spiSlaveSetTxByte(SpiId /* id */, std::uint8_t value)
+    {
+        test::g_spiSlaveSetTxBytes.push_back(value);
+    }
 }  // namespace hal

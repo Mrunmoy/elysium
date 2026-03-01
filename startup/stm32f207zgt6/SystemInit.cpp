@@ -66,6 +66,16 @@ std::uint32_t g_apb2Clock = 60000000;
 
 extern "C" void SystemInit()
 {
+    // Clear stale debug state left by CMSIS-DAP/OpenOCD.  Hardware
+    // breakpoints (FPB) and DEMCR.MON_EN persist across reset.  After
+    // the debugger disconnects, C_DEBUGEN=0 but MON_EN may still be 1;
+    // any FPB match then triggers a DebugMon exception which vectors to
+    // Default_Handler (infinite loop), hanging the CPU.
+    //
+    // Disable FPB (FP_CTRL: KEY=1, ENABLE=0) and clear MON_EN in DEMCR.
+    *reinterpret_cast<volatile std::uint32_t *>(0xE0002000) = (1U << 1);
+    *reinterpret_cast<volatile std::uint32_t *>(0xE000EDFC) &= ~(1U << 16);
+
     // Enable HSE oscillator and wait until ready
     reg(kRccBase, kRccCr) |= kRccCrHseon;
     while ((reg(kRccBase, kRccCr) & kRccCrHserdy) == 0)

@@ -71,4 +71,16 @@ namespace hal
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg);
 
+    // Slave RX callback: called in ISR context with each received byte.
+    using SpiSlaveRxCallbackFn = void (*)(void *arg, std::uint8_t rxByte);
+
+    // Enable SPI slave RXNE interrupt. Callback fires for each received byte.
+    void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg);
+
+    // Disable SPI slave RXNE interrupt.
+    void spiSlaveRxInterruptDisable(SpiId id);
+
+    // Pre-load a byte into DR for the slave's next TX (response to master).
+    void spiSlaveSetTxByte(SpiId id, std::uint8_t value);
+
 }  // namespace hal

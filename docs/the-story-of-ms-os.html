@@ -5023,6 +5023,33 @@ continues to grow.
     targets. GitHub Pages deployment for project documentation.
     374 C++ tests, 135 Python tests.
   </div>
+  <div class="event">
+    <div class="event-title">Phase 13 &mdash; Board-to-Board UART Test</div>
+    First board-to-board integration test. Two identical STM32F407ZGT6 boards
+    with USART2 TX/RX cross-wired. Board 2 runs an interrupt-driven echo
+    server; Board 1 runs a five-test harness: single byte, multi-byte,
+    sequential 0x00-0xFF, 16-byte burst, and 64-byte stress. Added
+    <code>--probe cmsis-dap</code> to build.py for flashing Board 2 via
+    OpenOCD. No new HAL code required&mdash;validates the existing UART driver
+    across physical wires. 5/5 PASS on hardware. 389 C++ host tests.
+  </div>
+  <div class="event">
+    <div class="event-title">Phase 14 &mdash; Board-to-Board SPI Test</div>
+    SPI slave mode support added to the HAL: interrupt-driven RX callback
+    (<code>spiSlaveRxInterruptEnable</code>), TX pre-load
+    (<code>spiSlaveSetTxByte</code>), SSI bit fix for slave mode, SPE deferral
+    so slave can pre-load DR before the peripheral enables. NVIC setup added
+    for SPI IRQs (SPI1=35, SPI2=36, SPI3=51). Board 2 runs an echo server on
+    SPI1 (PA5/PA6/PA7); Board 1 runs a master test harness with five tests
+    using a 1-byte-offset echo protocol (full-duplex constraint). Debugging
+    saga: DebugMon exception after OpenOCD reset&mdash;stale FPB hardware
+    breakpoints and DEMCR.MON_EN persist across reset, causing vectoring to
+    Default_Handler. Fixed by clearing FPB and DEMCR in SystemInit() for both
+    F407 and F207. Discovered that OpenOCD merely connecting via SWD
+    permanently breaks SPI on the slave until reflash&mdash;all registers read
+    correct but RXNE never fires. Documented as a known CMSIS-DAP interaction
+    limitation. 8 new SPI slave host tests. 397 C++ tests, 135 Python tests.
+  </div>
 </div>
 
 <div style="text-align: center; margin-top: 4cm; color: #999; font-style: italic;">

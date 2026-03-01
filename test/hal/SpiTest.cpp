@@ -187,6 +187,109 @@ TEST_F(SpiTest, AsyncTransferStoresCallbackAndArg)
     EXPECT_EQ(test::g_spiAsyncArg, &ctx);
 }
 
+// ---- Slave RX Interrupt ----
+
+static void dummySlaveRxCb(void *, std::uint8_t) {}
+
+TEST_F(SpiTest, SlaveRxInterruptEnableRecordsCall)
+{
+    int ctx = 42;
+
+    hal::spiSlaveRxInterruptEnable(hal::SpiId::Spi2, dummySlaveRxCb, &ctx);
+
+    ASSERT_EQ(test::g_spiSlaveRxEnableCalls.size(), 1u);
+    EXPECT_EQ(test::g_spiSlaveRxEnableCalls[0].id, static_cast<std::uint8_t>(hal::SpiId::Spi2));
+    EXPECT_EQ(test::g_spiSlaveRxCallback, reinterpret_cast<void *>(dummySlaveRxCb));
+    EXPECT_EQ(test::g_spiSlaveRxArg, &ctx);
+    EXPECT_TRUE(test::g_spiSlaveRxActive);
+}
+
+TEST_F(SpiTest, SlaveRxInterruptDisableRecordsCall)
+{
+    hal::spiSlaveRxInterruptEnable(hal::SpiId::Spi1, dummySlaveRxCb, nullptr);
+
+    hal::spiSlaveRxInterruptDisable(hal::SpiId::Spi1);
+
+    EXPECT_EQ(test::g_spiSlaveRxDisableCount, 1u);
+    EXPECT_FALSE(test::g_spiSlaveRxActive);
+    EXPECT_EQ(test::g_spiSlaveRxCallback, nullptr);
+    EXPECT_EQ(test::g_spiSlaveRxArg, nullptr);
+}
+
+TEST_F(SpiTest, SlaveSetTxByteRecordsCall)
+{
+    hal::spiSlaveSetTxByte(hal::SpiId::Spi2, 0xA5);
+
+    ASSERT_EQ(test::g_spiSlaveSetTxBytes.size(), 1u);
+    EXPECT_EQ(test::g_spiSlaveSetTxBytes[0], 0xA5);
+}
+
+TEST_F(SpiTest, SlaveRxEnableThenDisableClearsState)
+{
+    hal::spiSlaveRxInterruptEnable(hal::SpiId::Spi1, dummySlaveRxCb, nullptr);
+    EXPECT_TRUE(test::g_spiSlaveRxActive);
+
+    hal::spiSlaveRxInterruptDisable(hal::SpiId::Spi1);
+    EXPECT_FALSE(test::g_spiSlaveRxActive);
+    EXPECT_EQ(test::g_spiSlaveRxCallback, nullptr);
+}
+
+TEST_F(SpiTest, SlaveRxCallbackInvokedWithByte)
+{
+    std::uint8_t received = 0;
+    auto cb = [](void *arg, std::uint8_t rxByte) {
+        *static_cast<std::uint8_t *>(arg) = rxByte;
+    };
+
+    hal::spiSlaveRxInterruptEnable(hal::SpiId::Spi1, cb, &received);
+
+    // Simulate ISR invoking the callback
+    auto fn = reinterpret_cast<hal::SpiSlaveRxCallbackFn>(test::g_spiSlaveRxCallback);
+    fn(test::g_spiSlaveRxArg, 0x42);
+
+    EXPECT_EQ(received, 0x42);
+}
+
+TEST_F(SpiTest, SlaveSetTxByteRecordsMultipleCalls)
+{
+    hal::spiSlaveSetTxByte(hal::SpiId::Spi1, 0x11);
+    hal::spiSlaveSetTxByte(hal::SpiId::Spi1, 0x22);
+    hal::spiSlaveSetTxByte(hal::SpiId::Spi1, 0x33);
+
+    ASSERT_EQ(test::g_spiSlaveSetTxBytes.size(), 3u);
+    EXPECT_EQ(test::g_spiSlaveSetTxBytes[0], 0x11);
+    EXPECT_EQ(test::g_spiSlaveSetTxBytes[1], 0x22);
+    EXPECT_EQ(test::g_spiSlaveSetTxBytes[2], 0x33);
+}
+
+TEST_F(SpiTest, InitRecordsSoftwareNssForSlave)
+{
+    hal::SpiConfig config{};
+    config.id = hal::SpiId::Spi2;
+    config.master = false;
+    config.softwareNss = true;
+
+    hal::spiInit(config);
+
+    ASSERT_EQ(test::g_spiInitCalls.size(), 1u);
+    EXPECT_FALSE(test::g_spiInitCalls[0].master);
+    EXPECT_TRUE(test::g_spiInitCalls[0].softwareNss);
+}
+
+TEST_F(SpiTest, InitRecordsMasterSoftwareNss)
+{
+    hal::SpiConfig config{};
+    config.id = hal::SpiId::Spi1;
+    config.master = true;
+    config.softwareNss = true;
+
+    hal::spiInit(config);
+
+    ASSERT_EQ(test::g_spiInitCalls.size(), 1u);
+    EXPECT_TRUE(test::g_spiInitCalls[0].master);
+    EXPECT_TRUE(test::g_spiInitCalls[0].softwareNss);
+}
+
 // ---- Mock state reset ----
 
 TEST_F(SpiTest, MockStateResetsCleanly)
@@ -196,6 +299,8 @@ TEST_F(SpiTest, MockStateResetsCleanly)
     hal::spiInit(config);
     test::g_spiRxData = {0x01};
     test::g_spiAsyncCount = 5;
+    hal::spiSlaveRxInterruptEnable(hal::SpiId::Spi1, dummySlaveRxCb, nullptr);
+    hal::spiSlaveSetTxByte(hal::SpiId::Spi1, 0xFF);
 
     test::resetMockState();
 
@@ -205,4 +310,9 @@ TEST_F(SpiTest, MockStateResetsCleanly)
     EXPECT_EQ(test::g_spiRxReadPos, 0u);
     EXPECT_EQ(test::g_spiAsyncCount, 0u);
     EXPECT_EQ(test::g_spiAsyncCallback, nullptr);
+    EXPECT_TRUE(test::g_spiSlaveRxEnableCalls.empty());
+    EXPECT_EQ(test::g_spiSlaveRxDisableCount, 0u);
+    EXPECT_EQ(test::g_spiSlaveRxCallback, nullptr);
+    EXPECT_FALSE(test::g_spiSlaveRxActive);
+    EXPECT_TRUE(test::g_spiSlaveSetTxBytes.empty());
 }

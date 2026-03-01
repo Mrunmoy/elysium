@@ -29,8 +29,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 11 | Dynamic threads (TCB slot reuse, destroyThread, lifecycle cleanup) | Complete |
 | 12 | SPI / I2C / DMA drivers (register-level, polled + async, loopback demo) | Complete |
 | 13 | Board-to-board USART2 integration test (echo server + test runner) | Complete |
+| 14 | Board-to-board SPI1 integration test (slave echo + master test runner) | Complete |
 
-**Test coverage:** 389 C++ host tests, 135 Python tests.
+**Test coverage:** 397 C++ host tests, 135 Python tests.
 
 ## Prerequisites
 
@@ -143,6 +144,8 @@ ms-os/
     spi-demo/               SPI loopback test (polled + async)
     uart2-echo/             UART2 echo server (board-to-board, Board 2)
     uart2-test/             UART2 test runner (board-to-board, Board 1)
+    spi2-slave/             SPI1 slave echo server (board-to-board, Board 2)
+    spi2-test/              SPI1 master test runner (board-to-board, Board 1)
   tools/
     ipcgen/                 IDL code generator (embedded backend)
     fdtlib.py               Python FDT builder (creates DTB binaries)
@@ -173,7 +176,7 @@ and process management. Written in C++17 with assembly where required.
 - **Power** -- WFI in idle thread, sleep-on-exit, deep sleep mode control, peripheral clock gating
 - **Watchdog** -- IWDG hardware watchdog, idle-thread feeding, automatic MCU reset on thread starvation
 - **DMA** -- Dual-controller DMA with 8 streams each, interrupt callbacks, configurable data sizes and priorities
-- **SPI** -- Full-duplex SPI master with polled and interrupt-driven async transfers
+- **SPI** -- Full-duplex SPI master and slave with polled, async, and interrupt-driven transfers
 - **I2C** -- I2C master (standard/fast mode) with polled and async read/write/writeRead
 - **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)

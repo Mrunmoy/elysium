@@ -1841,6 +1841,83 @@ Use <code>minicom -D /dev/ttyUSB0 -b 115200</code> or
 </p>
 
 
+<h2>SPI Board-to-Board (Phase 14)</h2>
+
+<h3>SPI Wiring</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>MOSI/MISO swapped</td>
+    <td>Master reads 0x00 or 0xFF on every transfer</td>
+    <td>Wire master MOSI to slave MOSI, master MISO to slave MISO (not crossed like UART)</td>
+  </tr>
+  <tr>
+    <td>Missing SCK connection</td>
+    <td>RXNE never fires on slave, master TXE/RXNE hang</td>
+    <td>SCK must be connected between both boards (master drives SCK)</td>
+  </tr>
+  <tr>
+    <td>Missing common ground</td>
+    <td>Garbled data, random byte values</td>
+    <td>Connect GND between both boards</td>
+  </tr>
+</table>
+
+<h3>SPI Slave Mode Gotchas</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>SSI=1 in slave mode</td>
+    <td>Slave ignores all bus traffic, RXNE never fires</td>
+    <td>Set SSI=0 when softwareNss=true and master=false; SSI=1 is only for master (prevents MODF)</td>
+  </tr>
+  <tr>
+    <td>DR written before SPE=1</td>
+    <td>First slave response is 0x00 instead of pre-loaded value</td>
+    <td>Enable SPE (via spiSlaveRxInterruptEnable) before writing DR (via spiSlaveSetTxByte)</td>
+  </tr>
+  <tr>
+    <td>SPI overrun (OVR)</td>
+    <td>Slave echoes wrong bytes, SR bit 6 set</td>
+    <td>Slave ISR must read DR before next byte arrives; avoid slow operations (UART prints) in ISR</td>
+  </tr>
+  <tr>
+    <td>Master too fast for slave</td>
+    <td>First few bytes correct, then data corruption</td>
+    <td>Use slower prescaler (Div256 = 328 kHz at 84 MHz APB2) or add inter-byte delay on master</td>
+  </tr>
+</table>
+
+<h3>DebugMon Exception After OpenOCD</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>FPB hardware breakpoints persist across reset</td>
+    <td>CPU hangs on boot (DebugMon vectors to Default_Handler infinite loop)</td>
+    <td>Clear FPB in SystemInit: <code>*(0xE0002000) = (1 &lt;&lt; 1)</code> (KEY=1, ENABLE=0)</td>
+  </tr>
+  <tr>
+    <td>DEMCR.MON_EN persists across reset</td>
+    <td>Any FPB match triggers DebugMon even with C_DEBUGEN=0</td>
+    <td>Clear MON_EN in SystemInit: <code>*(0xE000EDFC) &amp;= ~(1 &lt;&lt; 16)</code></td>
+  </tr>
+  <tr>
+    <td>OpenOCD connect/disconnect breaks SPI</td>
+    <td>SPI RXNE never fires after <code>openocd -c "init; shutdown"</code>, all registers read correct</td>
+    <td>Known limitation. Reflash the board. Do not connect OpenOCD to slave after flashing.</td>
+  </tr>
+</table>
+
+<h3>Dual-Probe SPI Flashing</h3>
+<p>
+Board 2 (slave, CMSIS-DAP): <code>python3 build.py -f --target stm32f407zgt6 --app spi2-slave --probe cmsis-dap</code><br>
+Board 1 (master, J-Link): <code>python3 build.py -f --target stm32f407zgt6 --app spi2-test</code>
+</p>
+<p>
+Flash the slave first, then the master. The master waits 500ms for the slave to
+initialize before starting tests.
+</p>
+
 <div class="epigraph" style="margin-top: 4em;">
   "The most effective debugging tool is still careful thought,<br>
   coupled with judiciously placed print statements."

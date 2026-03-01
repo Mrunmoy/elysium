@@ -21,4 +21,13 @@ namespace hal
                           SpiCallbackFn /* callback */, void * /* arg */)
     {
     }
+
+    void spiSlaveRxInterruptEnable(SpiId /* id */, SpiSlaveRxCallbackFn /* callback */,
+                                   void * /* arg */)
+    {
+    }
+
+    void spiSlaveRxInterruptDisable(SpiId /* id */) {}
+
+    void spiSlaveSetTxByte(SpiId /* id */, std::uint8_t /* value */) {}
 }  // namespace hal
