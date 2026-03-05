@@ -151,6 +151,11 @@ TEST_F(ShellTest, ExecuteLine_KnownCommandReturnsOk)
     EXPECT_EQ(kernel::shellExecuteLine("help"), msos::error::kOk);
 }
 
+TEST_F(ShellTest, ExecuteLine_NullReturnsInvalid)
+{
+    EXPECT_EQ(kernel::shellExecuteLine(nullptr), msos::error::kInvalid);
+}
+
 // ---- help command ----
 
 TEST_F(ShellTest, Help_ListsCommands)

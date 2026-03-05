@@ -412,3 +412,51 @@ TEST_F(MutexTest, Lock_RejectsFromIsrContext)
     EXPECT_EQ(mcb->owner, kernel::kInvalidThreadId);
     EXPECT_EQ(mcb->lockCount, 0u);
 }
+
+// ---- Status API coverage ----
+
+TEST_F(MutexTest, DestroyStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::mutexDestroyStatus(kernel::kInvalidMutexId), kernel::kMutexErrInvalid);
+}
+
+TEST_F(MutexTest, DestroyStatus_ValidIdReturnsOk)
+{
+    kernel::MutexId id = kernel::mutexCreate("m");
+    EXPECT_EQ(kernel::mutexDestroyStatus(id), kernel::kMutexOk);
+}
+
+TEST_F(MutexTest, UnlockStatus_NotOwnerReturnsPerm)
+{
+    kernel::ThreadId t1 = createThread("t1", g_stack1, sizeof(g_stack1), 10);
+    kernel::ThreadId t2 = createThread("t2", g_stack2, sizeof(g_stack2), 10);
+
+    makeRunning(t1);
+    kernel::MutexId mid = kernel::mutexCreate("mtx");
+    kernel::mutexLock(mid);
+
+    m_scheduler.addThread(t2);
+    m_scheduler.switchContext();
+
+    EXPECT_EQ(kernel::mutexUnlockStatus(mid), kernel::kMutexErrPerm);
+}
+
+TEST_F(MutexTest, CreateStatus_NullOutIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::mutexCreateStatus(nullptr), kernel::kMutexErrInvalid);
+}
+
+TEST_F(MutexTest, LockStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::mutexLockStatus(kernel::kInvalidMutexId), kernel::kMutexErrInvalid);
+}
+
+TEST_F(MutexTest, TryLockStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::mutexTryLockStatus(kernel::kInvalidMutexId), kernel::kMutexErrInvalid);
+}
+
+TEST_F(MutexTest, UnlockStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::mutexUnlockStatus(kernel::kInvalidMutexId), kernel::kMutexErrInvalid);
+}

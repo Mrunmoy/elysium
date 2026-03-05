@@ -85,6 +85,12 @@ TEST_F(SchedulerTest, AddThreadStatus_InvalidThreadReturnsInvalid)
     EXPECT_EQ(m_scheduler.addThreadStatus(kernel::kInvalidThreadId), msos::error::kInvalid);
 }
 
+TEST_F(SchedulerTest, AddThreadStatus_ValidThreadReturnsOk)
+{
+    kernel::ThreadId id = createThread("t1", g_stack1, sizeof(g_stack1));
+    EXPECT_EQ(m_scheduler.addThreadStatus(id), msos::error::kOk);
+}
+
 // ---- Priority selection ----
 
 TEST_F(SchedulerTest, PickNext_HighestPriorityThread)
@@ -337,6 +343,17 @@ TEST_F(SchedulerTest, UnblockThread_ReturnsToReadyQueue)
 TEST_F(SchedulerTest, UnblockThreadStatus_ReturnsNoThreadForInvalidId)
 {
     EXPECT_EQ(m_scheduler.unblockThreadStatus(kernel::kInvalidThreadId), msos::error::kNoThread);
+}
+
+TEST_F(SchedulerTest, UnblockThreadStatus_ReturnsOkForValidThread)
+{
+    createAndRun("low", g_stack1, sizeof(g_stack1), 20);
+    kernel::ThreadId high = createThread("high", g_stack2, sizeof(g_stack2), 5);
+
+    kernel::ThreadControlBlock *highTcb = kernel::threadGetTcb(high);
+    highTcb->state = kernel::ThreadState::Blocked;
+
+    EXPECT_EQ(m_scheduler.unblockThreadStatus(high), msos::error::kOk);
 }
 
 TEST_F(SchedulerTest, UnblockThread_ReturnsTrueIfHigherPriority)

@@ -12,11 +12,11 @@ namespace kernel
     static constexpr SemaphoreId kInvalidSemaphoreId = 0xFF;
     using SemaphoreStatus = std::int32_t;
 
-    static constexpr SemaphoreStatus kSemaphoreOk = msos::error::kOk;
-    static constexpr SemaphoreStatus kSemaphoreErrInvalid = msos::error::kInvalid;
-    static constexpr SemaphoreStatus kSemaphoreErrNoMem = msos::error::kNoMem;
-    static constexpr SemaphoreStatus kSemaphoreErrAgain = msos::error::kAgain;
-    static constexpr SemaphoreStatus kSemaphoreErrPerm = msos::error::kPerm;
+    constexpr SemaphoreStatus kSemaphoreOk = msos::error::kOk;
+    constexpr SemaphoreStatus kSemaphoreErrInvalid = msos::error::kInvalid;
+    constexpr SemaphoreStatus kSemaphoreErrNoMem = msos::error::kNoMem;
+    constexpr SemaphoreStatus kSemaphoreErrAgain = msos::error::kAgain;
+    constexpr SemaphoreStatus kSemaphoreErrPerm = msos::error::kPerm;
 
     struct SemaphoreControlBlock
     {

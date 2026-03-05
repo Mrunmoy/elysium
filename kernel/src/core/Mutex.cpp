@@ -197,7 +197,7 @@ namespace kernel
         {
             return kMutexErrPerm;
         }
-        return msos::error::boolToStatus(mutexLock(id), kMutexErrBusy);
+        return msos::error::boolToStatus(mutexLock(id), kMutexErrPerm);
     }
 
     bool mutexTryLock(MutexId id)

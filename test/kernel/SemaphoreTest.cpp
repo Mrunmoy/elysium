@@ -309,3 +309,46 @@ TEST_F(SemaphoreTest, WaitStatus_RejectsFromIsrContext)
     test::g_isrContext = true;
     EXPECT_EQ(kernel::semaphoreWaitStatus(sid), kernel::kSemaphoreErrPerm);
 }
+
+// ---- Status API coverage ----
+
+TEST_F(SemaphoreTest, DestroyStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::semaphoreDestroyStatus(kernel::kInvalidSemaphoreId),
+              kernel::kSemaphoreErrInvalid);
+}
+
+TEST_F(SemaphoreTest, DestroyStatus_ValidIdReturnsOk)
+{
+    kernel::SemaphoreId id = kernel::semaphoreCreate(0, 1);
+    EXPECT_EQ(kernel::semaphoreDestroyStatus(id), kernel::kSemaphoreOk);
+}
+
+TEST_F(SemaphoreTest, CreateStatus_NullOutIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::semaphoreCreateStatus(nullptr, 0, 1), kernel::kSemaphoreErrInvalid);
+}
+
+TEST_F(SemaphoreTest, SignalStatus_OverflowReturnsInvalid)
+{
+    kernel::SemaphoreId sid = kernel::semaphoreCreate(5, 5);
+    EXPECT_EQ(kernel::semaphoreSignalStatus(sid), kernel::kSemaphoreErrInvalid);
+}
+
+TEST_F(SemaphoreTest, SignalStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::semaphoreSignalStatus(kernel::kInvalidSemaphoreId),
+              kernel::kSemaphoreErrInvalid);
+}
+
+TEST_F(SemaphoreTest, WaitStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::semaphoreWaitStatus(kernel::kInvalidSemaphoreId),
+              kernel::kSemaphoreErrInvalid);
+}
+
+TEST_F(SemaphoreTest, TryWaitStatus_InvalidIdReturnsInvalid)
+{
+    EXPECT_EQ(kernel::semaphoreTryWaitStatus(kernel::kInvalidSemaphoreId),
+              kernel::kSemaphoreErrInvalid);
+}

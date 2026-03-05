@@ -26,3 +26,19 @@ TEST(ErrorCodeTest, HandleToStatus_UsesInvalidSentinel)
     EXPECT_EQ(msos::error::handleToStatus<std::uint8_t>(kInvalid, kInvalid, msos::error::kNoMem),
               msos::error::kNoMem);
 }
+
+TEST(ErrorCodeTest, IsOk_TrueForZero)
+{
+    EXPECT_TRUE(msos::error::isOk(msos::error::kOk));
+    EXPECT_FALSE(msos::error::isOk(msos::error::kInvalid));
+    EXPECT_FALSE(msos::error::isOk(msos::error::kPerm));
+    EXPECT_FALSE(msos::error::isOk(1));
+}
+
+TEST(ErrorCodeTest, IsError_TrueForNegative)
+{
+    EXPECT_TRUE(msos::error::isError(msos::error::kInvalid));
+    EXPECT_TRUE(msos::error::isError(msos::error::kNoAck));
+    EXPECT_FALSE(msos::error::isError(msos::error::kOk));
+    EXPECT_FALSE(msos::error::isError(1));
+}

@@ -244,7 +244,7 @@ namespace kernel
         {
             return kSemaphoreErrInvalid;
         }
-        return msos::error::boolToStatus(semaphoreSignal(id), kSemaphoreErrAgain);
+        return msos::error::boolToStatus(semaphoreSignal(id), kSemaphoreErrInvalid);
     }
 
     SemaphoreControlBlock *semaphoreGetBlock(SemaphoreId id)

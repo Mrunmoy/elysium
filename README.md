@@ -32,7 +32,7 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 14 | Board-to-board SPI1 integration test (slave echo + master test runner) | Complete |
 | 15 | Board-to-board I2C1 integration test (slave echo + master test runner + BME680) | Complete |
 
-**Test coverage:** 442 C++ host tests, 135 Python tests.
+**Test coverage:** 462 C++ host tests, 135 Python tests.
 
 ## Prerequisites
 

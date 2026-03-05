@@ -12,11 +12,11 @@ namespace kernel
     static constexpr MutexId kInvalidMutexId = 0xFF;
     using MutexStatus = std::int32_t;
 
-    static constexpr MutexStatus kMutexOk = msos::error::kOk;
-    static constexpr MutexStatus kMutexErrInvalid = msos::error::kInvalid;
-    static constexpr MutexStatus kMutexErrNoMem = msos::error::kNoMem;
-    static constexpr MutexStatus kMutexErrBusy = msos::error::kBusy;
-    static constexpr MutexStatus kMutexErrPerm = msos::error::kPerm;
+    constexpr MutexStatus kMutexOk = msos::error::kOk;
+    constexpr MutexStatus kMutexErrInvalid = msos::error::kInvalid;
+    constexpr MutexStatus kMutexErrNoMem = msos::error::kNoMem;
+    constexpr MutexStatus kMutexErrBusy = msos::error::kBusy;
+    constexpr MutexStatus kMutexErrPerm = msos::error::kPerm;
 
     struct MutexControlBlock
     {
