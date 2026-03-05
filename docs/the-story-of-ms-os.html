@@ -5050,6 +5050,27 @@ continues to grow.
     correct but RXNE never fires. Documented as a known CMSIS-DAP interaction
     limitation. 8 new SPI slave host tests. 397 C++ tests, 135 Python tests.
   </div>
+  <div class="event">
+    <div class="event-title">Phase 15 &mdash; Board-to-Board I2C Test</div>
+    I2C slave mode support added to the HAL: interrupt-driven slave with
+    transaction-based callbacks. Unlike SPI&rsquo;s per-byte model, I2C is
+    START/STOP delimited&mdash;<code>rxCallback</code> delivers complete
+    received messages on STOP detection, <code>txCallback</code> is called on
+    ADDR match with read bit to fill a response buffer. ISR state machine
+    handles ADDR, RXNE, TXE, and STOPF events. AF (acknowledge failure) in
+    slave TX mode is normal&mdash;master NACK signals end-of-read. Slave state
+    struct with 256-byte RX/TX buffers per I2C instance. NVIC setup for I2C
+    EV+ER IRQs (I2C1: 31/32, I2C2: 33/34, I2C3: 72/73). Board 2 runs an echo
+    server on I2C1 (PB6/PB7, address 0x44); Board 1 runs a master test harness
+    with six tests: single byte, multi-byte, sequential 0x00-0xFF, 16-byte
+    burst, 64-byte stress, and BME680 chip ID read (address 0x77, register
+    0xD0, expected value 0x61). Added <code>--probe stlink</code> to build.py
+    for flashing Board 2 via ST-Link V2 and OpenOCD. Internal pull-ups
+    sufficient for short board-to-board wires at 100 kHz. GPIO configured as
+    open-drain AF4. 6/6 PASS on hardware including multi-device bus operation
+    (slave board + BME680 sensor coexisting). 10 new I2C slave host tests.
+    407 C++ tests, 135 Python tests.
+  </div>
 </div>
 
 <div style="text-align: center; margin-top: 4cm; color: #999; font-style: italic;">

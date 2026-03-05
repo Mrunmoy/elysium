@@ -1918,6 +1918,47 @@ Flash the slave first, then the master. The master waits 500ms for the slave to
 initialize before starting tests.
 </p>
 
+<h3>I2C Slave Mode</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>STOPF clearing sequence</td>
+    <td>Slave stops responding after first transaction</td>
+    <td>Clear STOPF by reading SR1 then writing CR1 with PE=1 (RM0090 requirement)</td>
+  </tr>
+  <tr>
+    <td>AF (NACK) in slave TX mode</td>
+    <td>Error ISR fires after every master read</td>
+    <td>AF is normal in slave TX (master NACK = done reading). Check slave active flag, clear AF, return.</td>
+  </tr>
+  <tr>
+    <td>OAR1 bit 14</td>
+    <td>Slave never responds to address</td>
+    <td>Bit 14 of OAR1 must be set to 1 for 7-bit addressing (RM0090 requirement)</td>
+  </tr>
+  <tr>
+    <td>I2C bus lockup (SDA stuck low)</td>
+    <td>I2C hangs, START condition cannot be generated</td>
+    <td>Toggle SCL 9 times via GPIO before configuring AF mode. Or power-cycle boards.</td>
+  </tr>
+  <tr>
+    <td>Internal pull-ups too weak</td>
+    <td>I2C errors at higher speeds or longer wires</td>
+    <td>Add 4.7K external pull-ups. Internal pull-ups (~40K) work for short wires at 100 kHz.</td>
+  </tr>
+</table>
+
+<h3>Dual-Probe I2C Flashing</h3>
+<p>
+Board 2 (slave, ST-Link V2): <code>python3 build.py -f --target stm32f407zgt6 --app i2c-slave --probe stlink</code><br>
+Board 1 (master, J-Link): <code>python3 build.py -f --target stm32f407zgt6 --app i2c-test</code>
+</p>
+<p>
+Flash the slave first, then the master. The master waits 500ms for the slave to
+initialize before starting tests. BME680 sensor at address 0x77 can coexist on
+the same I2C1 bus -- Test 6 reads chip ID register 0xD0 (expected 0x61).
+</p>
+
 <div class="epigraph" style="margin-top: 4em;">
   "The most effective debugging tool is still careful thought,<br>
   coupled with judiciously placed print statements."

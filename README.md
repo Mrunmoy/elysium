@@ -30,8 +30,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 12 | SPI / I2C / DMA drivers (register-level, polled + async, loopback demo) | Complete |
 | 13 | Board-to-board USART2 integration test (echo server + test runner) | Complete |
 | 14 | Board-to-board SPI1 integration test (slave echo + master test runner) | Complete |
+| 15 | Board-to-board I2C1 integration test (slave echo + master test runner + BME680) | Complete |
 
-**Test coverage:** 397 C++ host tests, 135 Python tests.
+**Test coverage:** 407 C++ host tests, 135 Python tests.
 
 ## Prerequisites
 
@@ -89,6 +90,7 @@ Runs tests via ctest. No ARM toolchain required.
 python3 build.py -f                           # STM32F207 via J-Link
 python3 build.py -f --target stm32f407zgt6    # STM32F407 via J-Link
 python3 build.py -f --probe cmsis-dap         # STM32 via CMSIS-DAP
+python3 build.py -f --probe stlink            # STM32 via ST-Link V2
 python3 build.py -f --target pynq-z2          # PYNQ-Z2 via OpenOCD
 ```
 
@@ -146,6 +148,8 @@ ms-os/
     uart2-test/             UART2 test runner (board-to-board, Board 1)
     spi2-slave/             SPI1 slave echo server (board-to-board, Board 2)
     spi2-test/              SPI1 master test runner (board-to-board, Board 1)
+    i2c-slave/              I2C1 slave echo server (board-to-board, Board 2)
+    i2c-test/               I2C1 master test runner (board-to-board, Board 1)
   tools/
     ipcgen/                 IDL code generator (embedded backend)
     fdtlib.py               Python FDT builder (creates DTB binaries)
@@ -177,7 +181,7 @@ and process management. Written in C++17 with assembly where required.
 - **Watchdog** -- IWDG hardware watchdog, idle-thread feeding, automatic MCU reset on thread starvation
 - **DMA** -- Dual-controller DMA with 8 streams each, interrupt callbacks, configurable data sizes and priorities
 - **SPI** -- Full-duplex SPI master and slave with polled, async, and interrupt-driven transfers
-- **I2C** -- I2C master (standard/fast mode) with polled and async read/write/writeRead
+- **I2C** -- I2C master and slave (standard/fast mode), polled and async, interrupt-driven slave with RX/TX callbacks
 - **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
 
