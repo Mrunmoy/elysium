@@ -51,3 +51,33 @@ target_link_libraries(kernel_tests PRIVATE
 )
 
 gtest_discover_tests(kernel_tests)
+
+add_executable(kernel_integration_tests
+    KernelIntegrationTest.cpp
+    MockArch.cpp
+    MockCrashDump.cpp
+    MockMpu.cpp
+    MockHalWatchdog.cpp
+    MockSystemClock.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Kernel.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Thread.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Scheduler.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/WaitQueue.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Ipc.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/Heap.cpp
+    ${CMAKE_SOURCE_DIR}/kernel/src/core/CrashDumpCommon.cpp
+)
+
+target_include_directories(kernel_integration_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/kernel/inc
+    ${CMAKE_SOURCE_DIR}/kernel/src/core
+    ${CMAKE_SOURCE_DIR}/hal/inc
+    ${CMAKE_SOURCE_DIR}/startup/inc
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(kernel_integration_tests PRIVATE
+    GTest::gtest_main
+)
+
+gtest_discover_tests(kernel_integration_tests)

@@ -11,6 +11,7 @@
 
 #include "kernel/Arch.h"
 #include "kernel/Scheduler.h"
+#include "hal/Watchdog.h"
 
 #include <cstdint>
 #include <vector>
@@ -25,6 +26,12 @@ namespace test
     struct SysTickConfig
     {
         std::uint32_t ticks;
+    };
+
+    struct WatchdogInitCall
+    {
+        hal::WatchdogPrescaler prescaler;
+        std::uint16_t reloadValue;
     };
 
     struct CriticalSectionAction
@@ -49,6 +56,8 @@ namespace test
     inline bool g_deepSleep = false;
     inline std::uint32_t g_tickCount = 0;
     inline bool g_watchdogRunning = false;
+    inline std::vector<WatchdogInitCall> g_watchdogInitCalls;
+    inline std::uint32_t g_watchdogFeedCount = 0;
 
     inline void resetKernelMockState()
     {
@@ -63,6 +72,8 @@ namespace test
         g_deepSleep = false;
         g_tickCount = 0;
         g_watchdogRunning = false;
+        g_watchdogInitCalls.clear();
+        g_watchdogFeedCount = 0;
         kernel::arch::setSyscallContext(false);
     }
 
