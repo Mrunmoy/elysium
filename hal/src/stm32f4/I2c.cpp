@@ -15,7 +15,7 @@ namespace
     constexpr std::uint32_t kI2c1Base = 0x40005400;
     constexpr std::uint32_t kI2c2Base = 0x40005800;
     constexpr std::uint32_t kI2c3Base = 0x40005C00;
-    constexpr std::uint8_t kI2cCount = 3;
+    constexpr std::uint32_t kI2cCount = 3;
 
     // Register offsets
     constexpr std::uint32_t kCr1 = 0x00;
@@ -747,6 +747,7 @@ namespace hal
         // Generate START
         reg(base + kCr1) |= (1U << kCr1Start);
     }
+
     // --- Slave mode ---
 
     void i2cSlaveInit(I2cId id, std::uint8_t ownAddr,

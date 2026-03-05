@@ -68,6 +68,8 @@ namespace hal
     std::uint8_t spiTransferByte(SpiId id, std::uint8_t txByte);
 
     // Interrupt-driven async transfer. Calls callback when complete.
+    // Invalid ID: invokes callback immediately (prevents caller deadlock).
+    // Zero length: no-op, callback is NOT invoked.
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg);
 

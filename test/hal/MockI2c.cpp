@@ -9,9 +9,11 @@ namespace hal
 {
     namespace
     {
+        constexpr std::uint8_t kI2cCount = 3;
+
         bool isValidI2cId(I2cId id)
         {
-            return static_cast<std::uint8_t>(id) <= static_cast<std::uint8_t>(I2cId::I2c3);
+            return static_cast<std::uint8_t>(id) < kI2cCount;
         }
     }  // namespace
 

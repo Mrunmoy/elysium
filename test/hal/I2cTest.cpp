@@ -198,6 +198,17 @@ TEST_F(I2cTest, WriteReadFillsRxBuffer)
     EXPECT_EQ(rx[2], 0xC0);
 }
 
+TEST_F(I2cTest, WriteReadInvalidIdReturnsInvalid)
+{
+    std::uint8_t tx[] = {0x00};
+    std::uint8_t rx[1] = {};
+    hal::I2cError err = hal::i2cWriteRead(static_cast<hal::I2cId>(99), 0x50,
+                                          tx, 1, rx, 1);
+
+    EXPECT_EQ(err, hal::I2cError::Invalid);
+    EXPECT_TRUE(test::g_i2cWriteReadCalls.empty());
+}
+
 TEST_F(I2cTest, WriteReadReturnsInjectableError)
 {
     test::g_i2cReturnError = static_cast<std::uint8_t>(hal::I2cError::ArbitrationLost);

@@ -54,10 +54,14 @@ namespace hal
                           std::uint8_t *rxData, std::size_t rxLength);
 
     // Interrupt-driven async write.
+    // Invalid ID or null data: invokes callback with I2cError::Invalid.
+    // Zero length: no-op, callback is NOT invoked.
     void i2cWriteAsync(I2cId id, std::uint8_t addr, const std::uint8_t *data,
                        std::size_t length, I2cCallbackFn callback, void *arg);
 
     // Interrupt-driven async read.
+    // Invalid ID or null data: invokes callback with I2cError::Invalid.
+    // Zero length: no-op, callback is NOT invoked.
     void i2cReadAsync(I2cId id, std::uint8_t addr, std::uint8_t *data,
                       std::size_t length, I2cCallbackFn callback, void *arg);
 

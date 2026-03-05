@@ -408,6 +408,19 @@ TEST_F(IpcTest, Send_NullReply_ReturnsInvalid)
     EXPECT_EQ(kernel::messageSend(t2, msg, nullptr), kernel::kIpcErrInvalid);
 }
 
+// HOST-ONLY TEST: On the host, arch::triggerContextSwitch() is a no-op, so
+// the sender never actually yields the CPU.  messageSend() enters the blocking
+// path (sets state=Blocked, inserts into senderWaitHead), but immediately
+// continues without a real context switch.  When it re-checks the mailbox, it
+// is still full, so it returns kIpcErrFull.
+//
+// On real hardware, messageReceive() on another thread would drain the mailbox
+// and wake the sender before it re-checks.  The sender's Blocked state and
+// senderWaitCount are cleaned up by the receiver's wake path.
+//
+// In this test those invariants are NOT restored because no receiver runs.
+// We only verify the return value and that blockReason is reset to None
+// (which messageSend() does on the error path).
 TEST_F(IpcTest, Send_FullMailboxAfterResume_ReturnsFull)
 {
     kernel::ThreadId sender = createThread("sender", g_stack1, sizeof(g_stack1), 10);

@@ -9,9 +9,11 @@ namespace hal
 {
     namespace
     {
+        constexpr std::uint8_t kSpiCount = 3;
+
         bool isValidSpiId(SpiId id)
         {
-            return static_cast<std::uint8_t>(id) <= static_cast<std::uint8_t>(SpiId::Spi3);
+            return static_cast<std::uint8_t>(id) < kSpiCount;
         }
     }  // namespace
 
@@ -80,7 +82,15 @@ namespace hal
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg)
     {
-        if (!isValidSpiId(id) || length == 0)
+        if (!isValidSpiId(id))
+        {
+            if (callback != nullptr)
+            {
+                callback(arg);
+            }
+            return;
+        }
+        if (length == 0)
         {
             return;
         }

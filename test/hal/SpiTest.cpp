@@ -201,8 +201,10 @@ TEST_F(SpiTest, AsyncTransferZeroLengthDoesNothing)
     EXPECT_TRUE(test::g_spiTransferCalls.empty());
 }
 
-TEST_F(SpiTest, AsyncTransferInvalidIdDoesNothing)
+TEST_F(SpiTest, AsyncTransferInvalidIdInvokesCallback)
 {
+    // Invalid ID must still invoke the callback so callers waiting on
+    // completion (e.g. via semaphore) do not deadlock.
     bool called = false;
     auto cb = [](void *arg) { *static_cast<bool *>(arg) = true; };
 
@@ -210,7 +212,7 @@ TEST_F(SpiTest, AsyncTransferInvalidIdDoesNothing)
     std::uint8_t rx[1] = {};
     hal::spiTransferAsync(static_cast<hal::SpiId>(99), tx, rx, 1, cb, &called);
 
-    EXPECT_FALSE(called);
+    EXPECT_TRUE(called);
     EXPECT_EQ(test::g_spiAsyncCount, 0u);
     EXPECT_TRUE(test::g_spiTransferCalls.empty());
 }

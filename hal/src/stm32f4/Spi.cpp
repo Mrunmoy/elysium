@@ -12,7 +12,7 @@ namespace
     constexpr std::uint32_t kSpi1Base = 0x40013000;
     constexpr std::uint32_t kSpi2Base = 0x40003800;
     constexpr std::uint32_t kSpi3Base = 0x40003C00;
-    constexpr std::uint8_t kSpiCount = 3;
+    constexpr std::uint32_t kSpiCount = 3;
 
     // Register offsets
     constexpr std::uint32_t kCr1 = 0x00;
@@ -338,7 +338,15 @@ namespace hal
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg)
     {
-        if (!isValidSpiId(id) || length == 0)
+        if (!isValidSpiId(id))
+        {
+            if (callback != nullptr)
+            {
+                callback(arg);
+            }
+            return;
+        }
+        if (length == 0)
         {
             return;
         }

@@ -32,9 +32,10 @@ protected:
         kernel::init();
     }
 
-    kernel::ThreadId createThread(const char *name, std::uint32_t *stack, std::uint8_t priority)
+    kernel::ThreadId createThread(const char *name, std::uint32_t *stack,
+                                   std::size_t stackSize, std::uint8_t priority)
     {
-        return kernel::createThread(dummyThread, nullptr, name, stack, sizeof(g_stackA), priority);
+        return kernel::createThread(dummyThread, nullptr, name, stack, stackSize, priority);
     }
 
     void makeSchedulerCurrent()
@@ -48,7 +49,7 @@ protected:
 
 TEST_F(KernelIntegrationTest, StartScheduler_ConfiguresSysTickAndCurrentTcb)
 {
-    kernel::ThreadId worker = createThread("worker", g_stackA, 5);
+    kernel::ThreadId worker = createThread("worker", g_stackA, sizeof(g_stackA), 5);
     ASSERT_NE(worker, kernel::kInvalidThreadId);
 
     kernel::startScheduler();
@@ -64,8 +65,8 @@ TEST_F(KernelIntegrationTest, StartScheduler_ConfiguresSysTickAndCurrentTcb)
 
 TEST_F(KernelIntegrationTest, SysTickHandler_WakesSleepingThreadAndPreempts)
 {
-    kernel::ThreadId high = createThread("high", g_stackA, 5);
-    kernel::ThreadId low = createThread("low", g_stackB, 20);
+    kernel::ThreadId high = createThread("high", g_stackA, sizeof(g_stackA), 5);
+    kernel::ThreadId low = createThread("low", g_stackB, sizeof(g_stackB), 20);
     ASSERT_NE(high, kernel::kInvalidThreadId);
     ASSERT_NE(low, kernel::kInvalidThreadId);
 
@@ -98,6 +99,8 @@ TEST_F(KernelIntegrationTest, WatchdogStart_InitializesHalAndMarksRunning)
     EXPECT_FALSE(kernel::watchdogRunning());
     EXPECT_TRUE(test::g_watchdogInitCalls.empty());
 
+    // Prescaler 99 exceeds the valid range (0-6), so watchdogStart() clamps
+    // to the maximum prescaler value: Div256 (enum value 6).
     kernel::watchdogStart(1234, 99);
 
     EXPECT_TRUE(kernel::watchdogRunning());
