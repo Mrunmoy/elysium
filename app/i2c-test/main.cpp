@@ -28,6 +28,8 @@ extern "C" const std::uint32_t g_boardDtbSize;
 namespace
 {
     constexpr std::uint8_t kSlaveAddr = 0x44;
+    constexpr std::uint8_t kWrongAddr = 0x45;
+    constexpr std::uint8_t kNoPeerAddr = 0x7E;
     constexpr std::uint8_t kBme680Addr = 0x77;
 
     hal::UartId g_consoleUart;
@@ -69,6 +71,33 @@ namespace
     {
         print(testName);
         print(pass ? ": PASS\r\n" : ": FAIL\r\n");
+    }
+
+    void printMachineCase(const char *caseName, bool pass)
+    {
+        print("MSOS_CASE:i2c:");
+        print(caseName);
+        print(pass ? ":PASS\r\n" : ":FAIL\r\n");
+    }
+
+    void printMachineSummary(std::uint32_t passCount, std::uint32_t totalCount)
+    {
+        print("MSOS_SUMMARY:i2c:pass=");
+        printDecimal(passCount);
+        print(":total=");
+        printDecimal(totalCount);
+        print(":result=");
+        print(passCount == totalCount ? "PASS\r\n" : "FAIL\r\n");
+    }
+
+    void printErrorWithStatus(const char *prefix, hal::I2cError err)
+    {
+        print(prefix);
+        print(" err=0x");
+        printHex(static_cast<std::uint8_t>(err));
+        print(" status=");
+        printDecimal(static_cast<std::uint32_t>(-hal::i2cErrorToStatus(err)));
+        print("\r\n");
     }
 
     void initConsole()
@@ -164,9 +193,7 @@ namespace
                                            txData, length);
         if (err != hal::I2cError::Ok)
         {
-            print("  [write error: 0x");
-            printHex(static_cast<std::uint8_t>(err));
-            print("]\r\n");
+            printErrorWithStatus("  [write]", err);
             return false;
         }
 
@@ -178,9 +205,7 @@ namespace
         err = hal::i2cRead(hal::I2cId::I2c1, kSlaveAddr, rxBuf, length);
         if (err != hal::I2cError::Ok)
         {
-            print("  [read error: 0x");
-            printHex(static_cast<std::uint8_t>(err));
-            print("]\r\n");
+            printErrorWithStatus("  [read]", err);
             return false;
         }
 
@@ -260,9 +285,7 @@ namespace
                                                &regAddr, 1, &chipId, 1);
         if (err != hal::I2cError::Ok)
         {
-            print("  [BME680 error: 0x");
-            printHex(static_cast<std::uint8_t>(err));
-            print("]\r\n");
+            printErrorWithStatus("  [BME680]", err);
             return false;
         }
 
@@ -271,6 +294,32 @@ namespace
         print("]\r\n");
 
         return (chipId == 0x61);
+    }
+
+    // --- Test 7: Wrong address should NACK ---
+    bool testWrongAddressNack()
+    {
+        const std::uint8_t tx[] = {0xAA};
+        hal::I2cError err = hal::i2cWrite(hal::I2cId::I2c1, kWrongAddr, tx, 1);
+        if (err != hal::I2cError::Nack)
+        {
+            printErrorWithStatus("  [wrong-address]", err);
+            return false;
+        }
+        return true;
+    }
+
+    // --- Test 8: No peer should return NACK or timeout-oriented error ---
+    bool testNoPeerOrTimeout()
+    {
+        std::uint8_t rx = 0;
+        hal::I2cError err = hal::i2cRead(hal::I2cId::I2c1, kNoPeerAddr, &rx, 1);
+        if (err != hal::I2cError::Nack && err != hal::I2cError::Timeout)
+        {
+            printErrorWithStatus("  [no-peer]", err);
+            return false;
+        }
+        return true;
     }
 }  // namespace
 
@@ -291,10 +340,11 @@ int main()
     delayMs(500);
 
     std::uint32_t pass = 0;
-    constexpr std::uint32_t kTotal = 6;
+    constexpr std::uint32_t kTotal = 8;
 
     bool r1 = testSingleByte();
     printResult("Test 1: Single byte echo", r1);
+    printMachineCase("single-byte", r1);
     if (r1) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
@@ -302,6 +352,7 @@ int main()
 
     bool r2 = testMultiByte();
     printResult("Test 2: Multi-byte echo (4 bytes)", r2);
+    printMachineCase("multi-byte", r2);
     if (r2) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
@@ -309,6 +360,7 @@ int main()
 
     bool r3 = testSequential();
     printResult("Test 3: Sequential echo (0x00-0xFF)", r3);
+    printMachineCase("sequential", r3);
     if (r3) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
@@ -316,6 +368,7 @@ int main()
 
     bool r4 = testBurst();
     printResult("Test 4: Burst echo (16 bytes)", r4);
+    printMachineCase("burst", r4);
     if (r4) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
@@ -323,6 +376,7 @@ int main()
 
     bool r5 = testStress();
     printResult("Test 5: Stress echo (64 bytes)", r5);
+    printMachineCase("stress", r5);
     if (r5) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
@@ -330,7 +384,24 @@ int main()
 
     bool r6 = testBme680ChipId();
     printResult("Test 6: BME680 chip ID (0x77)", r6);
+    printMachineCase("bme680-chip-id", r6);
     if (r6) ++pass;
+    hal::gpioToggle(hal::Port::C, 13);
+
+    delayMs(10);
+
+    bool r7 = testWrongAddressNack();
+    printResult("Test 7: Wrong address NACK", r7);
+    printMachineCase("wrong-address-nack", r7);
+    if (r7) ++pass;
+    hal::gpioToggle(hal::Port::C, 13);
+
+    delayMs(10);
+
+    bool r8 = testNoPeerOrTimeout();
+    printResult("Test 8: No peer (NACK/timeout)", r8);
+    printMachineCase("no-peer-timeout", r8);
+    if (r8) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
     print("\r\n--- Summary: ");
@@ -340,6 +411,7 @@ int main()
     print(" passed");
     print(pass == kTotal ? " (ALL PASS)" : " (SOME FAILED)");
     print(" ---\r\n");
+    printMachineSummary(pass, kTotal);
 
     while (true)
     {

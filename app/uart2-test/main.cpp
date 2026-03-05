@@ -71,6 +71,23 @@ namespace
         print(pass ? ": PASS\r\n" : ": FAIL\r\n");
     }
 
+    void printMachineCase(const char *caseName, bool pass)
+    {
+        print("MSOS_CASE:uart:");
+        print(caseName);
+        print(pass ? ":PASS\r\n" : ":FAIL\r\n");
+    }
+
+    void printMachineSummary(std::uint32_t passCount, std::uint32_t totalCount)
+    {
+        print("MSOS_SUMMARY:uart:pass=");
+        printDecimal(passCount);
+        print(":total=");
+        printDecimal(totalCount);
+        print(":result=");
+        print(passCount == totalCount ? "PASS\r\n" : "FAIL\r\n");
+    }
+
     void initConsole()
     {
         const board::BoardConfig &cfg = board::config();
@@ -404,22 +421,27 @@ int main()
 
     bool r1 = testSingleByte();
     printResult("Single byte (0xA5)", r1);
+    printMachineCase("single-byte", r1);
     if (r1) ++pass;
 
     bool r2 = testMultiByte();
     printResult("Multi-byte (4 bytes)", r2);
+    printMachineCase("multi-byte", r2);
     if (r2) ++pass;
 
     bool r3 = testSequential();
     printResult("Sequential (0x00-0xFF)", r3);
+    printMachineCase("sequential", r3);
     if (r3) ++pass;
 
     bool r4 = testBurst();
     printResult("Burst (16 bytes)", r4);
+    printMachineCase("burst", r4);
     if (r4) ++pass;
 
     bool r5 = testStress();
     printResult("Stress (64 bytes)", r5);
+    printMachineCase("stress", r5);
     if (r5) ++pass;
 
     ledOff();
@@ -431,6 +453,7 @@ int main()
     print(" passed");
     print(pass == kTotal ? " (ALL PASS)" : " (SOME FAILED)");
     print(" ---\r\n");
+    printMachineSummary(pass, kTotal);
 
     while (true)
     {
