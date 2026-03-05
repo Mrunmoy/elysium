@@ -13,6 +13,7 @@
 // Async notifications use a per-thread 32-bit bitmask (ISR-safe, no copy).
 
 #include "kernel/Thread.h"
+#include "msos/ErrorCode.h"
 
 #include <cstdint>
 
@@ -25,13 +26,13 @@ namespace kernel
     static constexpr std::uint8_t kMailboxDepth = 4;
 
     // IPC status codes
-    static constexpr std::int32_t kIpcOk           =  0;
-    static constexpr std::int32_t kIpcErrInvalid   = -1;  // Invalid argument
-    static constexpr std::int32_t kIpcErrFull      = -2;  // Mailbox full (non-blocking)
-    static constexpr std::int32_t kIpcErrEmpty     = -3;  // Mailbox empty (non-blocking)
-    static constexpr std::int32_t kIpcErrNoThread  = -4;  // Destination thread invalid
-    static constexpr std::int32_t kIpcErrIsr       = -5;  // Cannot block from ISR
-    static constexpr std::int32_t kIpcErrMethod    = -6;  // Unknown method ID
+    static constexpr std::int32_t kIpcOk = msos::error::kOk;
+    static constexpr std::int32_t kIpcErrInvalid = msos::error::kInvalid;
+    static constexpr std::int32_t kIpcErrFull = msos::error::kAgain;
+    static constexpr std::int32_t kIpcErrEmpty = msos::error::kNoData;
+    static constexpr std::int32_t kIpcErrNoThread = msos::error::kNoThread;
+    static constexpr std::int32_t kIpcErrIsr = msos::error::kPerm;
+    static constexpr std::int32_t kIpcErrMethod = msos::error::kNoSys;
 
     enum class MessageType : std::uint8_t
     {

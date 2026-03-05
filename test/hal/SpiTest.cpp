@@ -217,6 +217,12 @@ TEST_F(SpiTest, AsyncTransferInvalidIdInvokesCallback)
     EXPECT_TRUE(test::g_spiTransferCalls.empty());
 }
 
+TEST_F(SpiTest, TransferRequestStatusMapping_UsesGlobalCodes)
+{
+    EXPECT_EQ(hal::spiTransferRequestToStatus(true), msos::error::kOk);
+    EXPECT_EQ(hal::spiTransferRequestToStatus(false), msos::error::kInvalid);
+}
+
 // ---- Slave RX Interrupt ----
 
 static void dummySlaveRxCb(void *, std::uint8_t) {}

@@ -141,6 +141,16 @@ TEST_F(ShellTest, UnknownCommand_PrintsError)
     EXPECT_NE(g_output.find("unknown command: bogus"), std::string::npos);
 }
 
+TEST_F(ShellTest, ExecuteLine_UnknownCommandReturnsNoEntry)
+{
+    EXPECT_EQ(kernel::shellExecuteLine("bogus"), msos::error::kNoEntry);
+}
+
+TEST_F(ShellTest, ExecuteLine_KnownCommandReturnsOk)
+{
+    EXPECT_EQ(kernel::shellExecuteLine("help"), msos::error::kOk);
+}
+
 // ---- help command ----
 
 TEST_F(ShellTest, Help_ListsCommands)

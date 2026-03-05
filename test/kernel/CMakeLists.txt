@@ -1,4 +1,5 @@
 add_executable(kernel_tests
+    ErrorCodeTest.cpp
     ThreadTest.cpp
     SchedulerTest.cpp
     MutexTest.cpp
@@ -37,6 +38,7 @@ target_include_directories(kernel_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/inc
     ${CMAKE_SOURCE_DIR}/kernel/src/core
     ${CMAKE_SOURCE_DIR}/hal/inc
+    ${CMAKE_SOURCE_DIR}/common/inc
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -72,6 +74,7 @@ target_include_directories(kernel_integration_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/inc
     ${CMAKE_SOURCE_DIR}/kernel/src/core
     ${CMAKE_SOURCE_DIR}/hal/inc
+    ${CMAKE_SOURCE_DIR}/common/inc
     ${CMAKE_SOURCE_DIR}/startup/inc
     ${CMAKE_CURRENT_SOURCE_DIR}
 )

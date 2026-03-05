@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include "msos/ErrorCode.h"
+
 #include <cstdint>
 
 namespace kernel
@@ -31,6 +33,10 @@ namespace kernel
     // Process a single input character.
     // Handles line editing (backspace, enter) and command dispatch.
     void shellProcessChar(char c);
+
+    // Execute one command line and return canonical status.
+    // Empty lines return kOk, unknown commands return kNoEntry.
+    std::int32_t shellExecuteLine(const char *line);
 
     // Print the shell prompt.
     void shellPrompt();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "msos/ErrorCode.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -83,6 +85,10 @@ namespace hal
                   std::uint16_t count, DmaCallbackFn callback, void *arg);
     void dmaStop(DmaController controller, DmaStream stream);
     bool dmaIsBusy(DmaController controller, DmaStream stream);
+    constexpr std::int32_t dmaBusyToStatus(bool busy)
+    {
+        return busy ? msos::error::kBusy : msos::error::kOk;
+    }
     std::uint16_t dmaRemaining(DmaController controller, DmaStream stream);
     void dmaInterruptEnable(DmaController controller, DmaStream stream);
     void dmaInterruptDisable(DmaController controller, DmaStream stream);

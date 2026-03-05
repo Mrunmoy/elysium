@@ -99,6 +99,13 @@ TEST_F(SemaphoreTest, Create_MaxSemaphoresReturnsInvalid)
     EXPECT_EQ(kernel::semaphoreCreate(0, 1), kernel::kInvalidSemaphoreId);
 }
 
+TEST_F(SemaphoreTest, CreateStatus_ReturnsOkAndId)
+{
+    kernel::SemaphoreId id = kernel::kInvalidSemaphoreId;
+    EXPECT_EQ(kernel::semaphoreCreateStatus(&id, 1, 2, "status-sem"), kernel::kSemaphoreOk);
+    EXPECT_NE(id, kernel::kInvalidSemaphoreId);
+}
+
 // ---- Wait / Signal (no blocking) ----
 
 TEST_F(SemaphoreTest, Wait_DecrementsCount)
@@ -166,6 +173,12 @@ TEST_F(SemaphoreTest, TryWait_FailsWhenZero)
 {
     kernel::SemaphoreId sid = kernel::semaphoreCreate(0, 1);
     EXPECT_FALSE(kernel::semaphoreTryWait(sid));
+}
+
+TEST_F(SemaphoreTest, TryWaitStatus_ReturnsAgainWhenUnavailable)
+{
+    kernel::SemaphoreId sid = kernel::semaphoreCreate(0, 1);
+    EXPECT_EQ(kernel::semaphoreTryWaitStatus(sid), kernel::kSemaphoreErrAgain);
 }
 
 // ---- Blocking behavior ----
@@ -288,4 +301,11 @@ TEST_F(SemaphoreTest, Wait_RejectsFromIsrContext)
     // Count should be unchanged
     kernel::SemaphoreControlBlock *scb = kernel::semaphoreGetBlock(sid);
     EXPECT_EQ(scb->count, 3u);
+}
+
+TEST_F(SemaphoreTest, WaitStatus_RejectsFromIsrContext)
+{
+    kernel::SemaphoreId sid = kernel::semaphoreCreate(1, 1);
+    test::g_isrContext = true;
+    EXPECT_EQ(kernel::semaphoreWaitStatus(sid), kernel::kSemaphoreErrPerm);
 }

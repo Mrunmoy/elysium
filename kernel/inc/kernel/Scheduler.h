@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kernel/Thread.h"
+#include "msos/ErrorCode.h"
 
 #include <cstdint>
 
@@ -14,6 +15,7 @@ namespace kernel
 
         // Add a thread to the ready queue (at its priority level)
         bool addThread(ThreadId id);
+        std::int32_t addThreadStatus(ThreadId id);
 
         // Remove a thread from all scheduler lists (thread terminated)
         void removeThread(ThreadId id);
@@ -41,6 +43,7 @@ namespace kernel
         // Unblock a thread (move from Blocked to Ready, enqueue).
         // Returns true if the unblocked thread has higher priority than current.
         bool unblockThread(ThreadId id);
+        std::int32_t unblockThreadStatus(ThreadId id);
 
         // Change a thread's effective priority (for priority inheritance).
         // If the thread is in the ready queue, repositions it.

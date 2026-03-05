@@ -13,6 +13,16 @@ protected:
     }
 };
 
+TEST_F(I2cTest, ErrorMapping_UsesGlobalStatusCodes)
+{
+    EXPECT_EQ(hal::i2cErrorToStatus(hal::I2cError::Ok), msos::error::kOk);
+    EXPECT_EQ(hal::i2cErrorToStatus(hal::I2cError::Nack), msos::error::kNoAck);
+    EXPECT_EQ(hal::i2cErrorToStatus(hal::I2cError::BusError), msos::error::kIo);
+    EXPECT_EQ(hal::i2cErrorToStatus(hal::I2cError::ArbitrationLost), msos::error::kBusy);
+    EXPECT_EQ(hal::i2cErrorToStatus(hal::I2cError::Timeout), msos::error::kTimedOut);
+    EXPECT_EQ(hal::i2cErrorToStatus(hal::I2cError::Invalid), msos::error::kInvalid);
+}
+
 // ---- Init ----
 
 TEST_F(I2cTest, InitRecordsIdAndSpeed)

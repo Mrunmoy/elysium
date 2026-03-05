@@ -135,6 +135,12 @@ TEST_F(DmaTest, IsBusyReturnsInjectableValue)
     EXPECT_TRUE(hal::dmaIsBusy(hal::DmaController::Dma1, hal::DmaStream::Stream0));
 }
 
+TEST_F(DmaTest, BusyStatusMapping_UsesGlobalCodes)
+{
+    EXPECT_EQ(hal::dmaBusyToStatus(false), msos::error::kOk);
+    EXPECT_EQ(hal::dmaBusyToStatus(true), msos::error::kBusy);
+}
+
 // ---- Remaining ----
 
 TEST_F(DmaTest, RemainingReturnsZeroByDefault)

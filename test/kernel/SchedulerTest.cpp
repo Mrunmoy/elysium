@@ -80,6 +80,11 @@ TEST_F(SchedulerTest, AddThread_AppearsInReadyQueue)
     EXPECT_EQ(m_scheduler.readyCount(), 1u);
 }
 
+TEST_F(SchedulerTest, AddThreadStatus_InvalidThreadReturnsInvalid)
+{
+    EXPECT_EQ(m_scheduler.addThreadStatus(kernel::kInvalidThreadId), msos::error::kInvalid);
+}
+
 // ---- Priority selection ----
 
 TEST_F(SchedulerTest, PickNext_HighestPriorityThread)
@@ -327,6 +332,11 @@ TEST_F(SchedulerTest, UnblockThread_ReturnsToReadyQueue)
 
     EXPECT_EQ(tcb2->state, kernel::ThreadState::Ready);
     EXPECT_EQ(m_scheduler.readyCount(), 1u);  // id2 is now in ready queue
+}
+
+TEST_F(SchedulerTest, UnblockThreadStatus_ReturnsNoThreadForInvalidId)
+{
+    EXPECT_EQ(m_scheduler.unblockThreadStatus(kernel::kInvalidThreadId), msos::error::kNoThread);
 }
 
 TEST_F(SchedulerTest, UnblockThread_ReturnsTrueIfHigherPriority)

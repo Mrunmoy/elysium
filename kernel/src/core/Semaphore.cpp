@@ -54,6 +54,32 @@ namespace kernel
         return id;
     }
 
+    SemaphoreStatus semaphoreCreateStatus(SemaphoreId *outId,
+                                          std::uint32_t initialCount,
+                                          std::uint32_t maxCount,
+                                          const char *name)
+    {
+        if (outId == nullptr)
+        {
+            return kSemaphoreErrInvalid;
+        }
+        if (initialCount > maxCount)
+        {
+            *outId = kInvalidSemaphoreId;
+            return kSemaphoreErrInvalid;
+        }
+
+        SemaphoreId id = semaphoreCreate(initialCount, maxCount, name);
+        if (id == kInvalidSemaphoreId)
+        {
+            *outId = kInvalidSemaphoreId;
+            return kSemaphoreErrNoMem;
+        }
+
+        *outId = id;
+        return kSemaphoreOk;
+    }
+
     void semaphoreDestroy(SemaphoreId id)
     {
         if (id >= kMaxSemaphores)
@@ -61,6 +87,16 @@ namespace kernel
             return;
         }
         s_semPool[id].active = false;
+    }
+
+    SemaphoreStatus semaphoreDestroyStatus(SemaphoreId id)
+    {
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
+        {
+            return kSemaphoreErrInvalid;
+        }
+        semaphoreDestroy(id);
+        return kSemaphoreOk;
     }
 
     bool semaphoreWait(SemaphoreId id)
@@ -109,6 +145,19 @@ namespace kernel
         return true;
     }
 
+    SemaphoreStatus semaphoreWaitStatus(SemaphoreId id)
+    {
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
+        {
+            return kSemaphoreErrInvalid;
+        }
+        if (arch::inIsrContext())
+        {
+            return kSemaphoreErrPerm;
+        }
+        return msos::error::boolToStatus(semaphoreWait(id), kSemaphoreErrAgain);
+    }
+
     bool semaphoreTryWait(SemaphoreId id)
     {
         if (id >= kMaxSemaphores || !s_semPool[id].active)
@@ -128,6 +177,15 @@ namespace kernel
 
         arch::exitCritical();
         return false;
+    }
+
+    SemaphoreStatus semaphoreTryWaitStatus(SemaphoreId id)
+    {
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
+        {
+            return kSemaphoreErrInvalid;
+        }
+        return msos::error::boolToStatus(semaphoreTryWait(id), kSemaphoreErrAgain);
     }
 
     bool semaphoreSignal(SemaphoreId id)
@@ -178,6 +236,15 @@ namespace kernel
         ++scb.count;
         arch::exitCritical();
         return true;
+    }
+
+    SemaphoreStatus semaphoreSignalStatus(SemaphoreId id)
+    {
+        if (id >= kMaxSemaphores || !s_semPool[id].active)
+        {
+            return kSemaphoreErrInvalid;
+        }
+        return msos::error::boolToStatus(semaphoreSignal(id), kSemaphoreErrAgain);
     }
 
     SemaphoreControlBlock *semaphoreGetBlock(SemaphoreId id)

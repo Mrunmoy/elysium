@@ -167,6 +167,11 @@ namespace kernel
         return true;
     }
 
+    std::int32_t Scheduler::addThreadStatus(ThreadId id)
+    {
+        return msos::error::boolToStatus(addThread(id), msos::error::kInvalid);
+    }
+
     void Scheduler::removeThread(ThreadId id)
     {
         ThreadControlBlock *tcb = threadGetTcb(id);
@@ -324,6 +329,22 @@ namespace kernel
             return true;
         }
         return tcb->currentPriority < curTcb->currentPriority;
+    }
+
+    std::int32_t Scheduler::unblockThreadStatus(ThreadId id)
+    {
+        ThreadControlBlock *tcb = threadGetTcb(id);
+        if (tcb == nullptr)
+        {
+            return msos::error::kNoThread;
+        }
+        if (tcb->state != ThreadState::Blocked)
+        {
+            return msos::error::kAgain;
+        }
+
+        (void)unblockThread(id);
+        return msos::error::kOk;
     }
 
     void Scheduler::setThreadPriority(ThreadId id, std::uint8_t newPriority)

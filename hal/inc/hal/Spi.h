@@ -1,5 +1,7 @@
 #pragma once
 
+#include "msos/ErrorCode.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -72,6 +74,12 @@ namespace hal
     // Zero length: no-op, callback is NOT invoked.
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg);
+
+    // Canonical status mapping for transfer request validation.
+    constexpr std::int32_t spiTransferRequestToStatus(bool accepted)
+    {
+        return accepted ? msos::error::kOk : msos::error::kInvalid;
+    }
 
     // Slave RX callback: called in ISR context with each received byte.
     using SpiSlaveRxCallbackFn = void (*)(void *arg, std::uint8_t rxByte);

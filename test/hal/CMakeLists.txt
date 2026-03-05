@@ -17,6 +17,7 @@ add_executable(hal_tests
 
 target_include_directories(hal_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/hal/inc
+    ${CMAKE_SOURCE_DIR}/common/inc
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

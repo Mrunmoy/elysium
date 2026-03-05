@@ -80,6 +80,24 @@ namespace kernel
         return id;
     }
 
+    MutexStatus mutexCreateStatus(MutexId *outId, const char *name)
+    {
+        if (outId == nullptr)
+        {
+            return kMutexErrInvalid;
+        }
+
+        MutexId id = mutexCreate(name);
+        if (id == kInvalidMutexId)
+        {
+            *outId = kInvalidMutexId;
+            return kMutexErrNoMem;
+        }
+
+        *outId = id;
+        return kMutexOk;
+    }
+
     void mutexDestroy(MutexId id)
     {
         if (id >= kMaxMutexes)
@@ -87,6 +105,16 @@ namespace kernel
             return;
         }
         s_mutexPool[id].active = false;
+    }
+
+    MutexStatus mutexDestroyStatus(MutexId id)
+    {
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
+        {
+            return kMutexErrInvalid;
+        }
+        mutexDestroy(id);
+        return kMutexOk;
     }
 
     bool mutexLock(MutexId id)
@@ -159,6 +187,19 @@ namespace kernel
         return true;
     }
 
+    MutexStatus mutexLockStatus(MutexId id)
+    {
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
+        {
+            return kMutexErrInvalid;
+        }
+        if (arch::inIsrContext())
+        {
+            return kMutexErrPerm;
+        }
+        return msos::error::boolToStatus(mutexLock(id), kMutexErrBusy);
+    }
+
     bool mutexTryLock(MutexId id)
     {
         if (id >= kMaxMutexes || !s_mutexPool[id].active)
@@ -189,6 +230,15 @@ namespace kernel
 
         arch::exitCritical();
         return false;
+    }
+
+    MutexStatus mutexTryLockStatus(MutexId id)
+    {
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
+        {
+            return kMutexErrInvalid;
+        }
+        return msos::error::boolToStatus(mutexTryLock(id), kMutexErrBusy);
     }
 
     bool mutexUnlock(MutexId id)
@@ -287,6 +337,15 @@ namespace kernel
         }
 
         return true;
+    }
+
+    MutexStatus mutexUnlockStatus(MutexId id)
+    {
+        if (id >= kMaxMutexes || !s_mutexPool[id].active)
+        {
+            return kMutexErrInvalid;
+        }
+        return msos::error::boolToStatus(mutexUnlock(id), kMutexErrPerm);
     }
 
     MutexControlBlock *mutexGetBlock(MutexId id)
