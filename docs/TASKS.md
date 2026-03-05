@@ -13,8 +13,8 @@
 
 ## Next (Do Not Forget): Hardware-Backed Driver Validation
 
-- [ ] Add on-target smoke tests per driver (`uart`, `spi`, `i2c`, `dma`) with machine-parseable PASS/FAIL.
-- [ ] Build a host runner that flashes two STM32F407 boards, captures UART logs, and asserts expected results.
-- [ ] Add negative/error-path hardware scenarios (NACK, wrong address, no peer, timeout).
+- [x] Add on-target smoke tests per driver (`uart`, `spi`, `i2c`, `dma`) with machine-parseable PASS/FAIL.
+- [x] Build a host runner that flashes two STM32F407 boards, captures UART logs, and asserts expected results.
+- [x] Add negative/error-path hardware scenarios (NACK, wrong address, no peer, timeout).
 - [ ] Add nightly hardware test stage in CI (or local scheduled run script if CI hardware is unavailable).
-- [ ] Add optional register-trace logging mode for failure diagnostics.
+- [x] Add optional register-trace logging mode for failure diagnostics.

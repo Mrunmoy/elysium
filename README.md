@@ -31,8 +31,10 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 13 | Board-to-board USART2 integration test (echo server + test runner) | Complete |
 | 14 | Board-to-board SPI1 integration test (slave echo + master test runner) | Complete |
 | 15 | Board-to-board I2C1 integration test (slave echo + master test runner + BME680) | Complete |
+| 16 | Global error-code unification (`msos::error`) across kernel/HAL layers | Complete |
+| 17 | Hardware driver validation runner (machine-parseable UART/SPI/I2C/DMA smoke tests) | Complete |
 
-**Test coverage:** 442 C++ host tests, 135 Python tests.
+**Test coverage:** 443 C++ host tests, 145 Python tests.
 
 ## Prerequisites
 
@@ -150,7 +152,9 @@ ms-os/
     spi2-test/              SPI1 master test runner (board-to-board, Board 1)
     i2c-slave/              I2C1 slave echo server (board-to-board, Board 2)
     i2c-test/               I2C1 master test runner (board-to-board, Board 1)
+    dma-test/               DMA2 hardware smoke test runner
   tools/
+    hw_driver_runner.py     Host runner: flash boards + parse machine test output
     ipcgen/                 IDL code generator (embedded backend)
     fdtlib.py               Python FDT builder (creates DTB binaries)
     build_dtbs.py           Builds DTBs for all boards
@@ -162,6 +166,7 @@ ms-os/
   test/
     hal/                    HAL unit tests (host-compiled with mocks)
     kernel/                 Kernel unit tests (scheduler, mutex, IPC, shell, ...)
+    tools/                  Host-side Python tests for validation tooling
   docs/                     Design documents and project story
 ```
 
@@ -197,6 +202,34 @@ Global error semantics are centralized in `common/inc/msos/ErrorCode.h`.
   - `msos::error::handleToStatus(...)`
 
 Design details and rollout plan: `docs/design/phase-16-global-error-codes.md`.
+
+### Hardware Driver Validation Runner
+
+`tools/hw_driver_runner.py` automates board-to-board validation for STM32F407.
+
+- Flashes Board 2 service firmware, then Board 1 test firmware
+- Captures serial output from Board 1
+- Parses machine lines:
+  - `MSOS_CASE:<driver>:<case-name>:PASS|FAIL`
+  - `MSOS_SUMMARY:<driver>:pass=<n>:total=<m>:result=PASS|FAIL`
+- Fails with non-zero exit code if expected output is missing or inconsistent
+
+Example usage:
+
+```bash
+python3 tools/hw_driver_runner.py \
+  --target stm32f407zgt6 \
+  --drivers uart,spi,i2c,dma \
+  --board1-port /dev/ttyUSB0 \
+  --board1-probe jlink \
+  --board2-probe stlink
+```
+
+Enable raw log artifact capture:
+
+```bash
+python3 tools/hw_driver_runner.py --register-trace
+```
 
 ### Shell Commands
 
