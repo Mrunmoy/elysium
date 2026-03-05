@@ -143,29 +143,6 @@ int main()
 
     while (true)
     {
-        // Aggressively clear all debug state that OpenOCD may have left.
-        // This runs every loop iteration so it catches late debug connections.
-
-        // 1. Clear C_DEBUGEN via DHCSR (DBGKEY=0xA05F, C_DEBUGEN=0)
-        *reinterpret_cast<volatile std::uint32_t *>(0xE000EDF0) = 0xA05F0000;
-
-        // 2. Clear DEMCR: disable TRCENA and MON_EN
-        *reinterpret_cast<volatile std::uint32_t *>(0xE000EDFC) &=
-            ~((1U << 24) | (1U << 16));
-
-        // 3. Disable FPB and clear all comparators
-        *reinterpret_cast<volatile std::uint32_t *>(0xE0002000) = (1U << 1);
-        for (std::uint32_t i = 0; i < 8; ++i)
-        {
-            *reinterpret_cast<volatile std::uint32_t *>(0xE0002008 + i * 4) = 0;
-        }
-
-        // 4. Disable all DWT comparators
-        for (std::uint32_t i = 0; i < 4; ++i)
-        {
-            *reinterpret_cast<volatile std::uint32_t *>(0xE0001028 + i * 0x10) = 0;
-        }
-
         __asm volatile("wfi");
     }
 }

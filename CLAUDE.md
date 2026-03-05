@@ -178,5 +178,22 @@ Every new component, module, or feature MUST follow these five steps in strict o
 ## Testing Peripheral Drivers
 Between two exactly same STM32F407ZGT6 boards
 - Connected USART2 RX (PA3) , TX (PA2) to the TX (PA2) and RX(PA3) of second board
-- Connected SPI2 MOSI (PB15), MISO (PB14), SCK (PB13), NSS (PB12) to same pins of second board
+- Connected SPI1 MOSI (PA7), MISO (PA6), SCK (PA5) to same pins of second board
 - Connected I2C1 SDA (PB7), SCL (PB6) to same pins of second board
+
+## Debug Probes
+
+- **Board 1 (J-Link):** Flash via `python3 build.py -f --target stm32f407zgt6 --app <app>`
+- **Board 2 (ST-Link V2):** Flash via `python3 build.py -f --target stm32f407zgt6 --app <app> --probe stlink`
+- **Serial Board 1:** /dev/ttyUSB0 (CP2102, 115200)
+- **Serial Board 2:** /dev/ttyACM0 (CMSIS-DAP UART, 115200)
+
+### CMSIS-DAP SWD Adapter Warning
+
+**Do NOT use CMSIS-DAP (Keil c251:f001) for SWD debug on boards running SPI slave firmware.**
+Connecting this adapter via SWD permanently breaks SPI RXNE interrupts until reflash.
+The issue is specific to this CMSIS-DAP adapter -- ST-Link V2 works perfectly and does
+not disturb SPI. Never attempt to work around debugger issues by writing to debug
+registers (DHCSR, DEMCR, FPB, DWT) from firmware -- this locks the AHB-AP and bricks
+the debug port. If a peripheral stops working after a debugger connection, suspect the
+debug adapter, not the firmware.
