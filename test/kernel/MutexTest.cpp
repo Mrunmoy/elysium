@@ -97,6 +97,13 @@ TEST_F(MutexTest, Create_MaxMutexesReturnsInvalid)
     EXPECT_EQ(kernel::mutexCreate(), kernel::kInvalidMutexId);
 }
 
+TEST_F(MutexTest, CreateStatus_ReturnsOkAndId)
+{
+    kernel::MutexId id = kernel::kInvalidMutexId;
+    EXPECT_EQ(kernel::mutexCreateStatus(&id, "status-mtx"), kernel::kMutexOk);
+    EXPECT_NE(id, kernel::kInvalidMutexId);
+}
+
 // ---- Lock / Unlock ----
 
 TEST_F(MutexTest, Lock_AcquiresFreeMutex)
@@ -145,6 +152,13 @@ TEST_F(MutexTest, Unlock_FailsIfNotOwner)
 
     kernel::MutexControlBlock *mcb = kernel::mutexGetBlock(mid);
     EXPECT_EQ(mcb->owner, t1);
+}
+
+TEST_F(MutexTest, LockStatus_ReturnsPermInIsrContext)
+{
+    kernel::MutexId id = kernel::mutexCreate("m");
+    test::g_isrContext = true;
+    EXPECT_EQ(kernel::mutexLockStatus(id), kernel::kMutexErrPerm);
 }
 
 // ---- Recursive locking ----
@@ -211,6 +225,21 @@ TEST_F(MutexTest, TryLock_FailsWhenHeldByOther)
     m_scheduler.switchContext();
 
     EXPECT_FALSE(kernel::mutexTryLock(mid));
+}
+
+TEST_F(MutexTest, TryLockStatus_ReturnsBusyWhenHeldByOther)
+{
+    kernel::ThreadId t1 = createThread("t1", g_stack1, sizeof(g_stack1), 10);
+    kernel::ThreadId t2 = createThread("t2", g_stack2, sizeof(g_stack2), 10);
+
+    makeRunning(t1);
+    kernel::MutexId mid = kernel::mutexCreate("mtx");
+    kernel::mutexLock(mid);
+
+    m_scheduler.addThread(t2);
+    m_scheduler.switchContext();
+
+    EXPECT_EQ(kernel::mutexTryLockStatus(mid), kernel::kMutexErrBusy);
 }
 
 // ---- Contention and priority inheritance ----

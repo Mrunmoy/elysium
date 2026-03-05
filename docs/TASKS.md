@@ -8,8 +8,8 @@
 - [x] Add I2C-to-global-status mapping helper.
 - [x] Add baseline tests for IPC/global-code wiring and I2C mapping.
 - [x] Define canonical code ownership/rules (which layer returns which codes).
-- [ ] Roll out global status usage to additional modules (scheduler, sync primitives, shell commands, drivers).
-- [ ] Add docs section in `README.md` describing global error semantics.
+- [x] Roll out global status usage to additional modules (scheduler, sync primitives, shell commands, drivers).
+- [x] Add docs section in `README.md` describing global error semantics.
 
 ## Next (Do Not Forget): Hardware-Backed Driver Validation
 

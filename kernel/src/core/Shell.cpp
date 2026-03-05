@@ -314,8 +314,13 @@ namespace
     static constexpr std::uint8_t kCommandCount =
         sizeof(kCommands) / sizeof(kCommands[0]);
 
-    void executeCommand(const char *line)
+    std::int32_t executeCommand(const char *line)
     {
+        if (line == nullptr)
+        {
+            return msos::error::kInvalid;
+        }
+
         // Skip leading whitespace
         while (*line == ' ')
         {
@@ -325,7 +330,7 @@ namespace
         // Empty line
         if (*line == '\0')
         {
-            return;
+            return msos::error::kOk;
         }
 
         for (std::uint8_t i = 0; i < kCommandCount; ++i)
@@ -333,12 +338,13 @@ namespace
             if (std::strcmp(line, kCommands[i].name) == 0)
             {
                 kCommands[i].handler();
-                return;
+                return msos::error::kOk;
             }
         }
 
         write("unknown command: ");
         writeLine(line);
+        return msos::error::kNoEntry;
     }
 
 }  // namespace
@@ -357,7 +363,7 @@ namespace
         {
             write("\r\n");
             s_lineBuffer[s_linePos] = '\0';
-            executeCommand(s_lineBuffer);
+            (void)executeCommand(s_lineBuffer);
             s_linePos = 0;
             shellPrompt();
             return;
@@ -396,6 +402,11 @@ namespace
         s_writeFn = nullptr;
         s_linePos = 0;
         s_lineBuffer[0] = '\0';
+    }
+
+    std::int32_t shellExecuteLine(const char *line)
+    {
+        return executeCommand(line);
     }
 
 }  // namespace kernel

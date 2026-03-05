@@ -1,5 +1,7 @@
 #pragma once
 
+#include "msos/ErrorCode.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -36,6 +38,12 @@ namespace hal
     // Receive: try to read a character (non-blocking).
     // Returns true if a character was available.
     bool uartTryGetChar(UartId id, char *c);
+
+    // Canonical status mapping for non-blocking RX polling.
+    constexpr std::int32_t uartTryGetCharToStatus(bool hasChar)
+    {
+        return hasChar ? msos::error::kOk : msos::error::kAgain;
+    }
 
     // RX interrupt callback type.
     // Called from ISR context when one or more bytes are available.

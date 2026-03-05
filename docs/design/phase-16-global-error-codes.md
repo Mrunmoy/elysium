@@ -29,8 +29,21 @@ Define one canonical error-code contract shared by kernel, HAL, and applications
   - `handleToStatus(...)`
 - Added tests in `test/kernel/ErrorCodeTest.cpp` so policy behavior is pinned.
 
+## Rollout Progress
+
+- Sync primitives:
+  - Added canonical status APIs for mutex and semaphore create/destroy/lock flows.
+  - Preserved existing bool/ID APIs as compatibility paths.
+- Scheduler:
+  - Added status wrappers for add/unblock operations.
+- Shell:
+  - Added `shellExecuteLine(...)` that returns canonical status for command dispatch.
+- Drivers:
+  - Added status mapping helpers in UART/SPI/DMA headers for non-blocking and request-state checks.
+  - I2C global status mapping remains in place via `i2cErrorToStatus(...)`.
+
 ## Rollout Plan
 
-1. Convert scheduler/sync/shell and driver-facing status returns to global `std::int32_t` status APIs.
-2. Keep compatibility wrappers for existing bool/ID call sites while migrating.
+1. Incrementally migrate call sites from legacy bool/ID paths to status-returning APIs.
+2. Keep compatibility wrappers while migration is in progress.
 3. Remove compatibility wrappers once all public APIs are status-based.

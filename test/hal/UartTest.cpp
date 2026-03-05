@@ -91,6 +91,12 @@ TEST_F(UartTest, TryGetCharReadsInOrder)
     EXPECT_FALSE(hal::uartTryGetChar(hal::UartId::Usart1, &c));
 }
 
+TEST_F(UartTest, TryGetCharStatusMapping_UsesGlobalCodes)
+{
+    EXPECT_EQ(hal::uartTryGetCharToStatus(true), msos::error::kOk);
+    EXPECT_EQ(hal::uartTryGetCharToStatus(false), msos::error::kAgain);
+}
+
 // ---- GetChar ----
 
 TEST_F(UartTest, GetCharReturnsBufferedData)
