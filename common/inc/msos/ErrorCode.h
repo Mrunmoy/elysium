@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 namespace msos
 {
@@ -33,6 +34,29 @@ namespace error
     constexpr bool isError(std::int32_t code)
     {
         return code < 0;
+    }
+
+    // Canonical status format across layers:
+    // - Success is exactly kOk (0)
+    // - Failures are negative values
+    constexpr bool isCanonicalStatus(std::int32_t code)
+    {
+        return code == kOk || code < 0;
+    }
+
+    // Adapter for legacy boolean APIs during migration to global status codes.
+    constexpr std::int32_t boolToStatus(bool ok, std::int32_t errorCode)
+    {
+        return ok ? kOk : errorCode;
+    }
+
+    // Adapter for legacy handle/id APIs that use an invalid sentinel.
+    template <typename T>
+    constexpr std::int32_t handleToStatus(T handle, T invalidHandle, std::int32_t errorCode)
+    {
+        static_assert(std::is_integral<T>::value || std::is_enum<T>::value,
+                      "handleToStatus expects integral or enum handle types");
+        return handle == invalidHandle ? errorCode : kOk;
     }
 }  // namespace error
 }  // namespace msos

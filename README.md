@@ -32,7 +32,7 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 14 | Board-to-board SPI1 integration test (slave echo + master test runner) | Complete |
 | 15 | Board-to-board I2C1 integration test (slave echo + master test runner + BME680) | Complete |
 
-**Test coverage:** 407 C++ host tests, 135 Python tests.
+**Test coverage:** 429 C++ host tests, 135 Python tests.
 
 ## Prerequisites
 
@@ -184,6 +184,19 @@ and process management. Written in C++17 with assembly where required.
 - **I2C** -- I2C master and slave (standard/fast mode), polled and async, interrupt-driven slave with RX/TX callbacks
 - **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
+
+### Global Error Codes
+
+Global error semantics are centralized in `common/inc/msos/ErrorCode.h`.
+
+- `0` means success (`msos::error::kOk`)
+- Negative values are failures (Linux `errno`-style)
+- Status-returning APIs should use `std::int32_t` and return these shared codes
+- Legacy bool/ID APIs use migration helpers:
+  - `msos::error::boolToStatus(...)`
+  - `msos::error::handleToStatus(...)`
+
+Design details and rollout plan: `docs/design/phase-16-global-error-codes.md`.
 
 ### Shell Commands
 

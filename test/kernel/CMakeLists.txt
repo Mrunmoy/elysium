@@ -1,4 +1,5 @@
 add_executable(kernel_tests
+    ErrorCodeTest.cpp
     ThreadTest.cpp
     SchedulerTest.cpp
     MutexTest.cpp

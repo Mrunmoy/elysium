@@ -7,7 +7,7 @@
 - [x] Migrate kernel IPC status constants to shared global codes.
 - [x] Add I2C-to-global-status mapping helper.
 - [x] Add baseline tests for IPC/global-code wiring and I2C mapping.
-- [ ] Define canonical code ownership/rules (which layer returns which codes).
+- [x] Define canonical code ownership/rules (which layer returns which codes).
 - [ ] Roll out global status usage to additional modules (scheduler, sync primitives, shell commands, drivers).
 - [ ] Add docs section in `README.md` describing global error semantics.
 
