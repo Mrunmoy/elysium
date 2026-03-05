@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Appendix A: Hardware Targets -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Appendix A -- Hardware Targets</span>
+    <div class="header-nav">
+      <a href="ch15-epilogue.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html" class="current">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <span class="nav-arrow disabled">Next &gt;</span>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html" class="current">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Appendix A</span>
+  Hardware Targets
+</h2>
+
+<table>
+<tr>
+  <th>Board</th>
+  <th>SoC</th>
+  <th>Core</th>
+  <th>Clock</th>
+  <th>Flash</th>
+  <th>RAM</th>
+</tr>
+<tr>
+  <td>Custom (F207)</td>
+  <td>STM32F207ZGT6</td>
+  <td>Cortex-M3</td>
+  <td>120 MHz</td>
+  <td>1 MB</td>
+  <td>128 KB SRAM</td>
+</tr>
+<tr>
+  <td>Custom (F407)</td>
+  <td>STM32F407ZGT6</td>
+  <td>Cortex-M4</td>
+  <td>168 MHz</td>
+  <td>1 MB</td>
+  <td>128 KB + 64 KB CCM</td>
+</tr>
+<tr>
+  <td>PYNQ-Z2</td>
+  <td>Zynq-7020</td>
+  <td>Dual Cortex-A9</td>
+  <td>650 MHz</td>
+  <td>(SD card)</td>
+  <td>512 MB DDR3</td>
+</tr>
+</table>
+
+<h3>Build Sizes (Threads App)</h3>
+
+<table>
+<tr><th>Target</th><th>.text</th><th>.data</th><th>.bss</th><th>Total</th></tr>
+<tr><td>STM32F207</td><td>8,240 B</td><td>12 B</td><td>35,840 B</td><td>44,092 B</td></tr>
+<tr><td>STM32F407</td><td>8,360 B</td><td>12 B</td><td>35,840 B</td><td>44,212 B</td></tr>
+<tr><td>PYNQ-Z2</td><td>10,740 B</td><td>8 B</td><td>54,272 B</td><td>65,020 B</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!--                    APPENDIX B                                -->
+<!-- ============================================================ -->
+
+<h2 class="chapter">
+  <span class="ch-num">Appendix B</span>
+  Project Timeline
+</h2>
+
+<div class="chapter-timeline">
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 0</div>
+    <div class="timeline-chapter-title">Foundation</div>
+    <div class="timeline-chapter-desc">Toolchain, HAL (GPIO, UART, RCC), startup assembly, dual build system, link-time mock testing. First LED blink and serial output on F207.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 1</div>
+    <div class="timeline-chapter-title">Kernel Core</div>
+    <div class="timeline-chapter-desc">Thread creation, PendSV context switch, SVC first-thread launch, SysTick tick handler, three-layer crash dump system. Hardware verified on F207 and F407.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 2</div>
+    <div class="timeline-chapter-title">Scheduling</div>
+    <div class="timeline-chapter-desc">32-priority bitmap scheduler, round-robin time slicing, mutex with mandatory priority inheritance, counting semaphore, sleep/yield, wait queues. 136 host tests passing.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 3</div>
+    <div class="timeline-chapter-title">Memory Management</div>
+    <div class="timeline-chapter-desc">Block pool (O(1) fixed-size), heap (first-fit + coalescing), MPU configuration (6 regions, per-thread stack protection), C++ operator new/delete overloads.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 4A</div>
+    <div class="timeline-chapter-title">PYNQ-Z2 Bringup</div>
+    <div class="timeline-chapter-desc">ARM mode startup, DDR linker script, Zynq UART/RCC/GPIO HAL, OpenOCD JTAG configuration. Cross-compilation for Cortex-A9.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 4B</div>
+    <div class="timeline-chapter-title">Cortex-A9 RTOS Port</div>
+    <div class="timeline-chapter-desc">Arch.h abstraction, GIC/private timer drivers, IRQ-based context switch with SRS/RFE, fault handlers, crash dump for A9.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 4</div>
+    <div class="timeline-chapter-title">Hardware Bringup &mdash; The Debugging Saga</div>
+    <div class="timeline-chapter-desc">Alignment fault (DFSR=0x801) diagnosed as MMU-disabled Strongly Ordered memory. Built flat 1:1 MMU with 16 KB L1 translation table. Fixed UART ID mapping (Usart1 to Uart0). Discovered L2 cache stale code problem on JTAG reload; solved with OpenOCD TCL cache invalidation script. Full RTOS verified running on PYNQ-Z2 via both JTAG and SD card boot.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 4</div>
+    <div class="timeline-chapter-title">The Register Ghost</div>
+    <div class="timeline-chapter-desc">Identified and fixed r4/r5 callee-saved register clobbering in the Cortex-A9 IRQ handler. The GIC base address (0xF8F00100) was being written to r4 before the context switch saved it, destroying interrupted threads' local variables. Added thread-safe UART with interrupt save/restore guards. All three threads verified correct on PYNQ-Z2 hardware.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 5</div>
+    <div class="timeline-chapter-title">IPC Message Passing</div>
+    <div class="timeline-chapter-desc">Minix-style synchronous send/receive/reply with 64-byte fixed messages, per-thread 4-slot mailboxes, async notifications (32-bit bitmask), Python IDL code generator (ipcgen), and Echo service demo app.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 6</div>
+    <div class="timeline-chapter-title">Syscall Interface</div>
+    <div class="timeline-chapter-desc">Unprivileged threads via ARM CONTROL register nPRIV bit. SVC dispatch with 23 syscall numbers covering the full kernel API. Handler-mode g_inSyscall flag to allow blocking inside SVC context.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 7</div>
+    <div class="timeline-chapter-title">Device Tree</div>
+    <div class="timeline-chapter-desc">Replaced custom YAML dtgen with standard FDT binary device tree. DTS v1 source files for all three boards, Python fdtlib DTB builder, dtb2cpp embedder, read-only kernel FDT parser. Shell dt command for runtime board config display.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 8</div>
+    <div class="timeline-chapter-title">Power Management</div>
+    <div class="timeline-chapter-desc">WFI in idle thread, sleep-on-exit (SLEEPONEXIT bit), deep sleep (SLEEPDEEP bit). Three-function arch API. Mock state tracking for host testing.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 9</div>
+    <div class="timeline-chapter-title">Interactive Shell</div>
+    <div class="timeline-chapter-desc">Character-driven CLI over UART with six commands: help, ps, mem, uptime, version, dt. Function-pointer I/O for host testability. Custom integer and hex formatters for freestanding environment.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 10</div>
+    <div class="timeline-chapter-title">Hardware Watchdog</div>
+    <div class="timeline-chapter-desc">Independent Watchdog (IWDG) register-level driver for STM32F2/F4. Integrated with kernel idle thread: if any high-priority thread starves the idle loop, the watchdog counter expires and resets the MCU. Shell "wdt" command for status reporting. 8 new HAL tests.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 11</div>
+    <div class="timeline-chapter-title">Dynamic Threads</div>
+    <div class="timeline-chapter-desc">TCB slot reuse via Inactive-state scanning. destroyThread() performs coordinated cleanup: scheduler removal, IPC mailbox reset, TCB zeroing. Thread IDs recycled after destruction. Idle thread protected from destruction. 13 new kernel tests.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 12</div>
+    <div class="timeline-chapter-title">SPI / I2C / DMA Drivers</div>
+    <div class="timeline-chapter-desc">Three new register-level HAL modules: DMA (dual controller, 8 streams each, interrupt callbacks), SPI (full-duplex master with polled and async transfers), and I2C (standard/fast mode with read/write/writeRead and async variants). Extended RCC with clock gating for all three peripherals. Zynq no-op stubs. SPI loopback demo app verified on STM32F407. 53 new host tests.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">CI</div>
+    <div class="timeline-chapter-title">CI &amp; GitHub Pages</div>
+    <div class="timeline-chapter-desc">GitHub Actions CI with 8 parallel jobs: 4 host-test matrix cells (GCC/Clang x Debug/Release), Python tests, and 3 cross-compilation targets. GitHub Pages deployment for project documentation. 374 C++ tests, 135 Python tests.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 13</div>
+    <div class="timeline-chapter-title">Board-to-Board UART Test</div>
+    <div class="timeline-chapter-desc">First board-to-board integration test. Two STM32F407ZGT6 boards with USART2 TX/RX cross-wired. Board 2 runs interrupt-driven echo server; Board 1 runs five-test harness. Added <code>--probe cmsis-dap</code> to build.py. 5/5 PASS on hardware. 389 C++ host tests.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 14</div>
+    <div class="timeline-chapter-title">Board-to-Board SPI Test</div>
+    <div class="timeline-chapter-desc">SPI slave mode support: interrupt-driven RX callback, TX pre-load, SPE deferral. Board 2 echo server on SPI1; Board 1 master test harness with 1-byte-offset echo protocol. Fixed DebugMon exception from stale FPB/DEMCR after OpenOCD reset. Documented CMSIS-DAP/SWD interaction limitation. 8 new SPI slave host tests. 397 C++ tests.</div>
+  </div>
+  <div class="timeline-item completed">
+    <div class="timeline-chapter-num">Phase 15</div>
+    <div class="timeline-chapter-title">Board-to-Board I2C Test</div>
+    <div class="timeline-chapter-desc">I2C slave mode: transaction-based callbacks, 256-byte RX/TX buffers, ISR state machine for ADDR/RXNE/TXE/STOPF. Board 2 echo server on I2C1 (address 0x44); Board 1 six-test harness including BME680 chip ID read (0x77). Added <code>--probe stlink</code> to build.py. 6/6 PASS on hardware. 407 C++ tests, 135 Python tests.</div>
+  </div>
+</div>
+
+<div style="text-align: center; margin-top: 4cm; color: #999; font-style: italic;">
+  &mdash; End &mdash;
+</div>
+  <div class="chapter-nav-footer">
+    <a href="ch15-epilogue.html">&lt; Epilogue: The Road Ahead</a>
+    <span class="disabled">Next &gt;</span>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 2: The Kernel Comes Alive -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 2 -- The Kernel Comes Alive</span>
+    <div class="header-nav">
+      <a href="ch01-foundation.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html" class="current">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch03-scheduling.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html" class="current">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 2</span>
+  The Kernel Comes Alive
+</h2>
+
+<h4>Phase 1: Threads, Context Switching, and Crash Dumps</h4>
+
+<p>
+With the foundation in place, it was time to build the kernel's core:
+the ability to run multiple threads of execution on a single CPU.
+This is the heart of any RTOS&mdash;the context switch.
+</p>
+
+<h3>The Thread Control Block</h3>
+
+<p>
+Every thread in ms-os is represented by a <strong>Thread Control Block (TCB)</strong>,
+a 44-byte structure that holds everything the kernel needs to manage a thread's life:
+</p>
+
+<table>
+<tr><th>Field</th><th>Size</th><th>Purpose</th></tr>
+<tr><td><code>stackPointer</code></td><td>4B</td><td>Current SP (offset 0 for assembly)</td></tr>
+<tr><td><code>state</code></td><td>1B</td><td>Inactive / Ready / Running / Blocked</td></tr>
+<tr><td><code>id</code></td><td>1B</td><td>Thread ID (0-7)</td></tr>
+<tr><td><code>basePriority</code></td><td>1B</td><td>Assigned priority (immutable)</td></tr>
+<tr><td><code>currentPriority</code></td><td>1B</td><td>Effective (may be boosted)</td></tr>
+<tr><td><code>name</code></td><td>4B</td><td>Debug name for crash dumps</td></tr>
+<tr><td><code>stackBase</code></td><td>4B</td><td>Bottom of stack</td></tr>
+<tr><td><code>stackSize</code></td><td>4B</td><td>Size in bytes</td></tr>
+<tr><td><code>mpuStackRbar</code></td><td>4B</td><td>Pre-computed MPU region (Phase 3)</td></tr>
+<tr><td><code>mpuStackRasr</code></td><td>4B</td><td>Pre-computed MPU config (Phase 3)</td></tr>
+</table>
+
+<p>
+The <code>stackPointer</code> field sits at offset 0 deliberately. This means
+the context switch assembly can load it with a single <code>ldr r0, [TCB, #0]</code>
+instruction&mdash;no offset calculation needed in the hottest path of the kernel.
+</p>
+
+<h3>The Context Switch</h3>
+
+<p>
+On Cortex-M, context switching uses the <strong>PendSV</strong> exception.
+PendSV runs at the lowest interrupt priority, guaranteeing it fires only after
+all other ISRs complete. This is the entire context switch, in 11 steps:
+</p>
+
+<div class="diagram">
+  <span class="label">PendSV_Handler</span> (Cortex-M)
+
+   1. cpsid i              <span class="comment">// Disable interrupts</span>
+   2. mrs r0, psp          <span class="comment">// Get thread's stack pointer</span>
+   3. stmdb r0!, {r4-r11}  <span class="comment">// Push callee-saved registers</span>
+   4. str r0, [currentTCB] <span class="comment">// Save SP in outgoing TCB</span>
+   5. currentTCB = nextTCB <span class="comment">// Switch the global pointer</span>
+   6. Load MPU RBAR/RASR   <span class="comment">// Update memory protection</span>
+   7. ldr r0, [nextTCB]    <span class="comment">// Load incoming SP</span>
+   8. ldmia r0!, {r4-r11}  <span class="comment">// Pop callee-saved registers</span>
+   9. msr psp, r0          <span class="comment">// Set new stack pointer</span>
+  10. cpsie i              <span class="comment">// Re-enable interrupts</span>
+  11. bx 0xFFFFFFFD        <span class="comment">// Return to thread mode</span>
+</div>
+
+<p>
+The magic number <code>0xFFFFFFFD</code> is the <strong>EXC_RETURN</strong>
+value that tells the Cortex-M hardware: "return to Thread mode using the
+Process Stack Pointer." The hardware automatically restores r0-r3, r12, LR,
+PC, and xPSR from the stack.
+</p>
+
+<div class="highlight">
+<strong>Performance:</strong> The entire context switch takes approximately
+<strong>50 nanoseconds</strong> at 120 MHz, including the MPU region update
+added in Phase 3. That's about 6 clock cycles for the software part.
+</div>
+
+<h3>The Initial Stack Frame</h3>
+
+<p>
+When a thread is created, we build a fake stack frame that looks exactly like
+the thread was interrupted mid-execution. When the context switch "restores"
+this frame, the CPU seamlessly begins executing the thread function:
+</p>
+
+<div class="diagram">
+  High address (top of stack):
+    +----------+
+    |   xPSR   |  Thumb bit set (0x01000000)
+    |    PC    |  --> thread entry function
+    |    LR    |  --> kernelThreadExit()
+    |   r12    |  0
+    |  r3..r0  |  r0 = thread argument
+    +----------+  <span class="comment">---- hardware restores above ----</span>
+    | r11..r4  |  all zero (software-saved)
+    +----------+
+         ^
+    stackPointer stored in TCB
+</div>
+
+<h3>When Things Go Wrong: Crash Dumps</h3>
+
+<p>
+An RTOS that silently hangs on a fault is useless. Phase 1 introduced a
+<strong>three-layer crash dump system</strong> that prints a detailed
+diagnostic over the serial port when a HardFault, MemManage, BusFault,
+or UsageFault occurs:
+</p>
+
+<div class="diagram">
+  <span class="label">Crash Dump Architecture</span>
+
+  +-------------------+
+  | FaultHandlers.s   |  Layer 1: Assembly
+  | (arch-specific)   |  Captures registers, calls C++
+  +-------------------+
+           |
+           v
+  +-------------------+
+  | CrashDumpArch.cpp |  Layer 2: Architecture decode
+  | (arch-specific)   |  Decodes fault registers (CFSR, etc.)
+  +-------------------+
+           |
+           v
+  +-------------------+
+  | CrashDump.cpp     |  Layer 3: Portable formatting
+  | (shared)          |  Prints register dump, stack trace
+  +-------------------+
+           |
+           v
+  +-------------------+
+  | CrashDumpBoard.cpp|  Board-specific UART output
+  | (board-specific)  |  Polled TX, no interrupts, no RTOS
+  +-------------------+
+</div>
+
+<p>
+The crash dump output is designed to be <em>self-contained</em>: it uses polled
+UART with no interrupts, no dynamic allocation, and no RTOS services. It can
+print from any fault context, even if the kernel itself is corrupted.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 3                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch01-foundation.html">&lt; Chapter 1: Laying the Foundation</a>
+    <a href="ch03-scheduling.html">Chapter 3: Teaching the OS to Multitask &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

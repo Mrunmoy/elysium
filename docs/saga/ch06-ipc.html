@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 6: Talking Between Threads -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 6 -- Talking Between Threads</span>
+    <div class="header-nav">
+      <a href="ch05-multi-target.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html" class="current">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch07-syscall.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html" class="current">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 6</span>
+  Talking Between Threads (Phase 5)
+</h2>
+
+<div class="epigraph">
+  "The art of programming is the art of organizing complexity."
+  <div class="attribution">&mdash; Edsger Dijkstra</div>
+</div>
+
+<p>
+A microkernel without IPC is a fortress without doors. We had built
+walls (privilege separation, MPU protection), we had built rooms (threads,
+stacks, priorities), we had built hallways (the scheduler, context
+switching). But the rooms could not talk to each other. Every thread was
+an island.
+</p>
+
+<p>
+The microkernel promise&mdash;that drivers and services live outside the
+kernel, communicating through well-defined channels instead of sharing
+global state&mdash;was still theoretical. We had the isolation, but we
+had no communication. Phase 5 was about building the doors.
+</p>
+
+<h3>The Design Space</h3>
+
+<p>
+Before writing a single line of code, we sat down with the three
+canonical IPC models and asked: which one fits a microkernel RTOS on a
+Cortex-M with 128 KB of SRAM?
+</p>
+
+<p>
+<strong>Shared memory</strong> is the fastest option. Two threads agree
+on a memory region and read/write directly. But who owns that memory? Who
+manages the locks? We had just spent Phase 3 building an MPU to
+<em>prevent</em> exactly this kind of Wild West memory access. Shared
+memory works beautifully when both sides are trusted and cooperative. In
+a microkernel where the entire point is isolation, it is the wrong
+abstraction.
+</p>
+
+<p>
+<strong>Pipes and channels</strong> are flexible. You can send arbitrary
+streams of bytes, buffer them, apply flow control. But pipes need kernel
+buffers. They need allocation. They need a whole subsystem to manage
+reader/writer state, EOF conditions, and partial reads. On a system where
+the total heap is 16 KB, a pipe subsystem felt like building a highway
+when we needed a footpath.
+</p>
+
+<p>
+<strong>Message passing</strong>&mdash;Minix-style send/receive/reply&mdash;was
+the clear winner. A client sends a fixed-size message to a server. The
+client blocks. The server receives the message, processes it, and replies.
+The client wakes with its answer. No shared state, no races, no ownership
+ambiguity. The protocol is synchronous by default: a client knows that
+when <code>messageSend()</code> returns, the server has already processed
+its request. This maps perfectly to the RPC pattern that user-space
+drivers need to service application requests.
+</p>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> Minix-style synchronous message passing.
+The client-server RPC pattern (send, block, receive, process, reply, wake)
+is the primary IPC primitive. No shared memory regions, no kernel pipe
+buffers, no variable-length allocations. Each message is a fixed-size
+struct that fits in a cache line.
+</div>
+
+<h3>The 64-Byte Constraint</h3>
+
+<p>
+The next question was: how big is a message? This is one of those
+decisions that sounds trivial but reverberates through the entire system.
+Too small, and you cannot pass enough data in a single call. Too large,
+and you waste memory in every mailbox slot. We did the napkin math.
+</p>
+
+<p>
+The header needs to carry enough information for the kernel to route the
+message and for the receiver to dispatch it. We settled on 16 bytes:
+</p>
+
+<div class="diagram">
+  <span class="label">Message Header (16 bytes)</span>
+
+  Offset  Size  Field
+  ------  ----  -----
+    0       4   sender       <span class="comment">-- ThreadId of the sending thread</span>
+    4       4   type         <span class="comment">-- cycleType (send, reply, notify)</span>
+    8       2   methodId     <span class="comment">-- which RPC method is being called</span>
+   10       2   serviceId    <span class="comment">-- which service (FNV-1a hash of name)</span>
+   12       2   status       <span class="comment">-- return code for replies</span>
+   14       2   payloadSize  <span class="comment">-- how many of the 48 payload bytes are used</span>
+</div>
+
+<p>
+That leaves 48 bytes of inline payload. Is 48 bytes enough? For the
+typical microkernel RPC&mdash;open a file, read a sensor, configure a
+peripheral&mdash;the arguments are a handful of integers, a short string,
+or a small struct. Forty-eight bytes covers the vast majority of cases.
+For the rare large transfer, the payload can carry a pointer to a shared
+buffer (negotiated at a higher protocol level).
+</p>
+
+<p>
+Why 64 bytes total? Because it fits in a single cache line on both
+Cortex-M (if the chip has a cache) and Cortex-A9. It avoids heap
+allocation entirely. And it keeps the mailbox small: each thread gets
+a 4-slot ring buffer, so the mailbox costs 4 x 64 = 256 bytes per
+thread. For 8 threads, that is 2,048 bytes&mdash;about 1.6% of our
+128 KB SRAM.
+</p>
+
+<p>
+But the real elegance was a trick we borrowed from the IDL code
+generator. For every RPC method, the generator emits a
+<code>static_assert</code> that the serialized arguments fit within 48
+bytes:
+</p>
+
+<pre>
+<span class="cmt">// Generated by ipcgen -- compile-time payload overflow check</span>
+<span class="kw">static_assert</span>(<span class="kw">sizeof</span>(EchoArgs) <= <span class="num">48</span>,
+    <span class="str">"Echo::echo payload exceeds 48-byte limit"</span>);
+</pre>
+
+<p>
+Payload overflow is a compile error, not a runtime crash. If a developer
+adds a field that pushes the argument struct past 48 bytes, the build
+fails with a clear message pointing at the exact method. No testing
+required&mdash;the type system catches it before a single byte hits the
+wire.
+</p>
+
+<h3>The Blocking Question</h3>
+
+<p>
+The hardest design question was deceptively simple: what happens when
+the mailbox is full?
+</p>
+
+<p>
+If <code>messageSend()</code> blocks when the target's mailbox has no
+free slots, you get clean RPC semantics. The client waits, the server
+processes one message and frees a slot, the client wakes and sends. It
+is simple and correct. But there is a dark side: if the server thread
+is dead or starved, the client blocks forever. In a hard real-time
+system, "forever" is not an acceptable timeout.
+</p>
+
+<p>
+If <code>messageSend()</code> returns an error immediately when the
+mailbox is full, you get ISR safety and bounded latency. But now the
+caller has to handle the error, retry, or drop the message. Every
+call site needs error handling. The simplicity of synchronous RPC
+dissolves into a puddle of retry loops.
+</p>
+
+<p>
+We chose both. <code>messageSend()</code> blocks. <code>messageTrySend()</code>
+returns <code>kIpcErrFull</code> immediately. Same dilemma on the
+receive side: <code>messageReceive()</code> blocks when the mailbox is
+empty (the server pattern&mdash;wait for work), and
+<code>messageTryReceive()</code> returns <code>kIpcErrEmpty</code>
+(the polling pattern&mdash;check for work, then do something else).
+Let the caller choose their poison.
+</p>
+
+<p>
+The blocking implementation reused the exact same pattern as mutex and
+semaphore from Phase 2: enter critical section, insert thread into a
+wait queue on the target mailbox, mark the thread as blocked, switch
+context, exit critical section, trigger context switch. When the
+server processes a message and frees a slot, it dequeues the first
+waiting sender and marks it ready. The scheduler does the rest.
+</p>
+
+<p>
+For interrupt-driven scenarios where even trying to block would be
+fatal, we added <strong>async notifications</strong>: a per-thread
+32-bit bitmask that can be atomically OR'd from any context, including
+ISRs. <code>messageNotify()</code> sets bits;
+<code>messageCheckNotify()</code> reads and clears them. No locks, no
+mailbox slots consumed, no possibility of blocking. A driver ISR can
+notify a service thread in constant time with zero allocation.
+</p>
+
+<h3>Building the Tool to Build the Tool</h3>
+
+<p>
+With the IPC primitives in place, we hand-wrote the echo service. The
+client packs a string into the 48-byte payload, sets the sizes, calls
+<code>messageSend()</code>, waits for the reply, unpacks the response.
+The server loops on <code>messageReceive()</code>, copies the payload
+into the reply, calls <code>messageReply()</code>. It worked. It was
+also tedious.
+</p>
+
+<p>
+Every service would need the same boilerplate: serialize arguments into
+the payload, deserialize on the other side, dispatch to the right method
+based on <code>methodId</code>, pack the return values. Hand-writing
+this for a dozen services would be error-prone and mind-numbing. What
+if we described the service in a file and generated all the boilerplate?
+</p>
+
+<p>
+We already had a lexer and parser from <strong>ms-ipc</strong>, the
+sibling IPC library we built for Linux user-space. The lexer tokenizes
+an IDL file. The parser builds an AST of services, methods, and types.
+All we needed was a new <em>emitter</em>&mdash;one that generates
+embedded-friendly C++ instead of the Linux shared-memory transport code
+that ms-ipc targets.
+</p>
+
+<p>
+The new <code>embedded_emitter.py</code> generates four files per
+service:
+</p>
+
+<pre>
+<span class="cmt">// EchoService.idl -- the service definition</span>
+service Echo {
+    method echo(data: bytes) -> (data: bytes);
+    notification overflow;
+}
+</pre>
+
+<pre>
+<span class="cmt">// Generated: EchoClient.h + EchoClient.cpp</span>
+<span class="cmt">//   - Typed RPC stub: Echo::echo(data) -> data</span>
+<span class="cmt">//   - Packs args into payload, calls messageSend, unpacks reply</span>
+<span class="cmt">//   - static_assert on every method's payload size</span>
+
+<span class="cmt">// Generated: EchoServer.h + EchoServer.cpp</span>
+<span class="cmt">//   - Dispatch loop: messageReceive -> switch(methodId) -> handleXxx</span>
+<span class="cmt">//   - Virtual methods for each IDL method (developer overrides)</span>
+<span class="cmt">//   - messageReply with return values packed into payload</span>
+</pre>
+
+<p>
+Service IDs are FNV-1a hashes of the service name, giving stable 32-bit
+identifiers without a central registry. Method IDs are sequential within
+each service. The generated code handles all serialization, dispatch,
+and reply plumbing. The developer writes one <code>.idl</code> file and
+overrides the handler methods. The tool built the tool that built the
+service.
+</p>
+
+<p>
+Notification methods in the IDL translate to two flavors: parameterless
+notifications use the lightweight <code>messageNotify()</code> bitmask
+path, while notifications with a payload use
+<code>messageTrySend()</code> since they originate from ISR-like
+contexts where blocking is not permitted.
+</p>
+
+<h3>First Message</h3>
+
+<p>
+The moment of truth. The echo server starts on thread 1, priority 10.
+The echo client starts on thread 2, priority 15. The client calls
+<code>messageSend(server=1, msg="hello")</code>. Here is what happens,
+step by step:
+</p>
+
+<div class="diagram">
+  <span class="label">IPC Round Trip: echo("hello")</span>
+
+  echo-cli (thread 2, pri 15)          echo-srv (thread 1, pri 10)
+  ----------------------------          ----------------------------
+  messageSend(dest=1, "hello")
+    |
+    +-> copy msg to server mailbox
+    +-> server has waiter? YES
+    |     -> wake echo-srv (Ready)
+    +-> client blocks (Blocked)
+    +-> context switch
+                                        messageReceive(&msg)
+                                          |
+                                          +-> msg.payload = "hello"
+                                          +-> process: reply = "hello"
+                                          |
+                                        messageReply(dest=2, "hello")
+                                          |
+                                          +-> copy reply to client mailbox
+                                          +-> wake echo-cli (Ready)
+                                          +-> context switch
+  messageSend returns!
+    |
+    +-> reply.payload = "hello"
+    +-> round trip complete
+</div>
+
+<p>
+We watched it happen on the serial console. The client printed the
+reply. Five characters, echoed back through two context switches, a
+mailbox enqueue, a dispatch loop, and a reply. The threads were talking.
+</p>
+
+<p>
+The IPC demo application launched all the pieces together: echo server,
+echo client, LED blinker, and the shell thread. Four threads,
+communicating through messages, scheduled by priority, all on a chip
+with 128 KB of RAM. We typed <code>ps</code> in the shell and watched
+the thread states change in real time as the echo client sent requests
+and blocked waiting for replies. It was the first time ms-os felt like
+a real operating system rather than a collection of kernel primitives.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 5:</strong> ms-os has kernel IPC with synchronous
+send/receive/reply, async notifications (32-bit bitmask), both blocking and
+non-blocking variants of every operation, a Python IDL code generator
+(ipcgen, 40 new tests), and a working echo service demo. Memory budget:
+~3.4 KB total (2.2 KB for 8 mailboxes + 1.2 KB code). Zero heap
+allocations in the IPC path.
+</div>
+
+<p>
+For the complete message struct layout and mailbox ring buffer design,
+see the <a href="../architecture/sec06-ipc.html">Architecture Guide</a>.
+</p>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 7                                -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch05-multi-target.html">&lt; Chapter 5: New Horizons: The PYNQ-Z2</a>
+    <a href="ch07-syscall.html">Chapter 7: Drawing the Line &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

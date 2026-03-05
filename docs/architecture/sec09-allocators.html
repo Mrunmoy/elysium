@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 9: Allocators -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 9 -- Allocators</span>
+    <div class="header-nav">
+      <a href="sec08-device-tree.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html" class="current">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec10-watchdog.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html" class="current">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 9</span>
+  Memory Allocators
+</h2>
+
+<div class="epigraph">
+  "In real-time systems, the allocator must be as predictable as the scheduler."
+  <div class="attribution">&mdash; Jack Ganssle</div>
+</div>
+
+<p>ms-os provides two allocators: a fixed-size <strong>Block Pool</strong> for deterministic O(1) allocation, and a variable-size <strong>Heap</strong> for general-purpose allocation in user application code.</p>
+
+<h3>Block Pool</h3>
+
+<p>The block pool uses an embedded free-list: each free block stores a pointer to the next free block in its first <code>sizeof(void*)</code> bytes. Allocation and deallocation are both O(1) -- pop from or push to the free-list head.</p>
+
+<div class="diagram">
+<span class="label">Block Pool Layout</span>
+
+  +-------+-------+-------+-------+-------+
+  | blk 0 | blk 1 | blk 2 | blk 3 | blk 4 |  (blockSize bytes each)
+  +-------+-------+-------+-------+-------+
+
+<span class="label">Free List</span> (embedded in block data)
+
+  freeHead --> [blk 2] --> [blk 0] --> [blk 4] --> nullptr
+               (next*)     (next*)     (next*)
+
+  alloc():  ptr = freeHead; freeHead = ptr->next;   <span class="comment">O(1)</span>
+  free(p):  p->next = freeHead; freeHead = p;       <span class="comment">O(1)</span>
+
+<span class="comment">Minimum blockSize = sizeof(void*) = 4 bytes (to hold the next pointer)</span>
+</div>
+
+<h3>Heap Allocator</h3>
+
+<p>The heap uses a first-fit free-list with immediate coalescing, based on the design from OSTEP Chapter 17. The free list is sorted by address to enable O(1) coalescing with adjacent free blocks during <code>heapFree()</code>.</p>
+
+<div class="diagram">
+<span class="label">Block Header</span>
+  +-----------------------------+
+  | size (31 bits) | alloc (1b) |   <span class="comment">Bit 0 of size word = allocated flag</span>
+  +-----------------------------+
+  | next (32 bits)              |   <span class="comment">Pointer to next free block (free only)</span>
+  +-----------------------------+
+  | user data...                |   <span class="comment">&lt;-- returned pointer (8-byte aligned)</span>
+  |                             |
+  +-----------------------------+
+
+<span class="label">Free List</span> (address-sorted, immediate coalescing)
+
+  freeHead --> [hdr|        free       ] --> [hdr|     free     ] --> sentinel
+               addr: 0x20004000               addr: 0x20004800
+               size: 0x400                    size: 0x200
+
+<span class="label">Allocation</span> (first-fit):
+  Walk free list, find first block where size >= requested + header
+  Split if remainder > min block size
+  Mark allocated (set bit 0 of size)
+
+<span class="label">Deallocation</span> (immediate coalescing):
+  Clear allocated bit
+  If prev block is free: merge (prev.size += this.size)
+  If next block is free: merge (this.size += next.size)
+  Sentinel end-block prevents boundary checks
+</div>
+
+<div class="highlight">
+  <strong>Thread safety:</strong> Both <code>heapAlloc()</code> and <code>heapFree()</code> are wrapped in <code>enterCritical()</code> / <code>exitCritical()</code> (interrupt disable/enable). This is sufficient for a single-core system but would need to be replaced with a spinlock for SMP.
+</div>
+
+<h3>Heap Statistics</h3>
+
+<table>
+  <tr><th>Field</th><th>Description</th></tr>
+  <tr><td><code>totalSize</code></td><td>Total heap region size (from linker)</td></tr>
+  <tr><td><code>usedSize</code></td><td>Currently allocated bytes (including headers)</td></tr>
+  <tr><td><code>freeSize</code></td><td>Currently free bytes</td></tr>
+  <tr><td><code>highWatermark</code></td><td>Maximum <code>usedSize</code> ever observed</td></tr>
+  <tr><td><code>allocCount</code></td><td>Number of active allocations</td></tr>
+  <tr><td><code>largestFreeBlock</code></td><td>Largest contiguous free block</td></tr>
+</table>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> <code>operator new</code> and <code>operator delete</code> in <code>HeapOperators.cpp</code> (cross-compile only) route through the kernel heap. A <code>_sbrk</code> stub is also provided to satisfy newlib requirements but always returns failure -- all allocation goes through the kernel heap.
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 10: WATCHDOG (IWDG)                                  -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec08-device-tree.html">&lt; Section 8: Device Tree</a>
+    <a href="sec10-watchdog.html">Section 10: Watchdog &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

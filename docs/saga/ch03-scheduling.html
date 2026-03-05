@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 3: Teaching the OS to Multitask -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 3 -- Teaching the OS to Multitask</span>
+    <div class="header-nav">
+      <a href="ch02-kernel-core.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html" class="current">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch04-memory.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html" class="current">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 3</span>
+  Teaching the OS to Multitask
+</h2>
+
+<h4>Phase 2: The Priority Scheduler, Mutexes, and Semaphores</h4>
+
+<p>
+A context switch is just the mechanism. Phase 2 added the <em>policy</em>:
+a preemptive priority-based scheduler that decides <em>which</em> thread
+runs and <em>when</em> it runs.
+</p>
+
+<h3>The Bitmap Scheduler</h3>
+
+<p>
+The scheduler supports <strong>32 priority levels</strong> (0 = highest,
+31 = lowest), with a per-priority FIFO queue. The key insight is a single
+32-bit bitmap:
+</p>
+
+<div class="diagram">
+  m_readyBitmap:
+
+  Bit:  31 30 29 28  ...  3  2  1  0
+        [0][0][1][0] ... [1][0][0][1]
+                ^          ^        ^
+                |          |        |
+           Priority 29  Prio 3   Prio 0
+           (1 thread)  (1 thread) (highest ready)
+
+  Highest ready = __builtin_ctz(bitmap) = 0
+  ARM instruction: RBIT + CLZ  -->  <span class="label">O(1)</span>
+</div>
+
+<p>
+Each set bit indicates that at least one thread is ready at that priority level.
+Finding the highest-priority ready thread is a single <code>__builtin_ctz</code>
+(Count Trailing Zeros), which maps directly to the ARM <code>RBIT + CLZ</code>
+instruction pair. <strong>O(1) scheduling, regardless of thread count.</strong>
+</p>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> 32 priorities with bitmap indexing. This matches
+the Cortex-M NVIC convention (lower number = higher priority) and provides
+constant-time scheduling. FreeRTOS uses a similar approach.
+</div>
+
+<h3>Time Slicing</h3>
+
+<p>
+Within the same priority level, threads share the CPU using <strong>round-robin
+time slicing</strong>. Each thread has a configurable time slice (in ticks).
+When a thread's slice expires, the scheduler moves it to the tail of its
+priority queue and runs the next thread at the same level:
+</p>
+
+<div class="diagram">
+  Priority 8 queue:    [Thread A] --> [Thread B] --> [Thread C]
+                           ^                            |
+                           |____________________________|
+                                (round-robin rotation)
+
+  SysTick fires every 1 ms.
+  Thread A's slice expires after 10 ticks.
+  A moves to tail, B runs next.
+</div>
+
+<h3>The Priority Inversion Problem</h3>
+
+<p>
+One of the most subtle bugs in RTOS design is <strong>priority inversion</strong>.
+Imagine three threads:
+</p>
+
+<div class="diagram">
+  Thread H (high priority)   -- needs Mutex M
+  Thread M (medium priority) -- CPU-bound, doesn't need M
+  Thread L (low priority)    -- holds Mutex M
+
+  Without priority inheritance:
+    1. L runs, acquires Mutex M
+    2. H wakes up, preempts L, tries to lock M --> blocked
+    3. M wakes up, preempts L (medium > low)
+    4. M runs indefinitely. H starves.
+       L can never finish to release M!
+
+  <span class="label">Result: High-priority thread blocked by medium-priority thread.</span>
+</div>
+
+<p>
+The solution is <strong>priority inheritance</strong>: when Thread H blocks on
+a mutex held by Thread L, the kernel <em>temporarily boosts</em> L's priority
+to match H's. This prevents Thread M from preempting L, allowing L to finish
+quickly and release the mutex.
+</p>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> Priority inheritance is mandatory on all mutexes.
+There is no option to create a non-inheriting mutex. This eliminates an entire
+class of bugs at the cost of slightly more complex mutex code.
+</div>
+
+<h3>Synchronization Primitives</h3>
+
+<p>
+Phase 2 delivered two synchronization primitives:
+</p>
+
+<table>
+<tr><th>Primitive</th><th>Properties</th><th>Use Case</th></tr>
+<tr>
+  <td><strong>Mutex</strong></td>
+  <td>Recursive, priority-inheriting, ownership-tracked</td>
+  <td>Protecting shared data structures</td>
+</tr>
+<tr>
+  <td><strong>Semaphore</strong></td>
+  <td>Counting (0..maxCount), no ownership, priority-sorted waiters</td>
+  <td>Producer-consumer, resource counting</td>
+</tr>
+</table>
+
+<p>
+Both use a shared <strong>priority-sorted wait queue</strong>: when multiple
+threads are waiting, the highest-priority one is woken first.
+</p>
+
+<h3>Sleep and the Tick</h3>
+
+<p>
+The <strong>SysTick</strong> timer fires every 1 millisecond. Each tick:
+</p>
+
+<ol>
+  <li>Increments the global tick counter</li>
+  <li>Checks sleeping threads (wake any whose timeout expired)</li>
+  <li>Calls <code>scheduler.tick()</code> to check preemption and time slices</li>
+  <li>If a context switch is needed, pends PendSV</li>
+</ol>
+
+<p>
+<code>sleep(1000)</code> blocks a thread for approximately one second.
+The wakeup is checked every tick, giving 1 ms resolution.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 4                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch02-kernel-core.html">&lt; Chapter 2: The Kernel Comes Alive</a>
+    <a href="ch04-memory.html">Chapter 4: Guarding Memory &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

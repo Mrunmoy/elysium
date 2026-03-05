@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 2: Boot Sequence -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 2 -- Boot Sequence</span>
+    <div class="header-nav">
+      <a href="sec01-memory-maps.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html" class="current">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec03-threads.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html" class="current">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 2</span>
+  Boot Sequence
+</h2>
+
+<div class="epigraph">
+  "When the power goes on, the processor knows nothing. The startup code teaches it who it is."
+  <div class="attribution">&mdash; Embedded systems folklore</div>
+</div>
+
+<h3>Cortex-M Startup Flow</h3>
+
+<p>On reset, the Cortex-M core reads the initial stack pointer from address <code>0x08000000</code> and the reset vector from <code>0x08000004</code>. Execution begins in <code>Reset_Handler</code>, written in assembly (<code>startup/stm32f207zgt6/Startup.s</code>).</p>
+
+<div class="diagram">
+<span class="label">Reset_Handler</span> (Startup.s)
+  |
+  |  1. Copy .data from FLASH to SRAM
+  |     <span class="comment">ldr r0, =_sidata    @ source (FLASH LMA)</span>
+  |     <span class="comment">ldr r1, =_sdata     @ dest   (SRAM VMA)</span>
+  |     <span class="comment">ldr r2, =_edata     @ end</span>
+  |
+  |  2. Zero .bss
+  |     <span class="comment">ldr r0, =_sbss</span>
+  |     <span class="comment">ldr r1, =_ebss</span>
+  |     <span class="comment">movs r2, #0</span>
+  |
+  |  3. __libc_init_array
+  |     <span class="comment">Calls C++ static constructors (.init_array)</span>
+  |
+  v
+<span class="label">SystemInit</span>() (SystemInit.cpp, extern "C")
+  |
+  |  4. Configure PLL (HSE -> PLLCLK)
+  |  5. Set Flash wait states + prefetch + I/D caches
+  |  6. Configure bus prescalers (APB1, APB2)
+  |  7. Set SystemCoreClock global
+  |
+  v
+<span class="label">main</span>()
+  |
+  |  8. Initialize HAL (GPIO, UART, etc.)
+  |  9. Initialize kernel (threads, scheduler, IPC)
+  | 10. Create application threads
+  | 11. Start scheduler (SVC #0 -- does not return)
+  |
+  v
+<span class="label">Scheduler running</span> (idle thread + application threads)
+</div>
+
+<h3>PLL Configuration</h3>
+
+<p>Both STM32 targets derive SYSCLK from the HSE oscillator through the PLL. The PLL formula is: <code>SYSCLK = (HSE / PLL_M) * PLL_N / PLL_P</code>.</p>
+
+<table>
+  <tr><th>Parameter</th><th>STM32F207</th><th>STM32F407</th></tr>
+  <tr><td>HSE</td><td>25 MHz</td><td>8 MHz</td></tr>
+  <tr><td>PLL_M</td><td>25</td><td>8</td></tr>
+  <tr><td>PLL_N</td><td>240</td><td>168</td></tr>
+  <tr><td>PLL_P</td><td>2</td><td>2</td></tr>
+  <tr><td>PLL_Q</td><td>5</td><td>7</td></tr>
+  <tr><td>SYSCLK</td><td>120 MHz</td><td>168 MHz</td></tr>
+  <tr><td>APB1 prescaler</td><td>/4 = 30 MHz</td><td>/4 = 42 MHz</td></tr>
+  <tr><td>APB2 prescaler</td><td>/2 = 60 MHz</td><td>/2 = 84 MHz</td></tr>
+  <tr><td>Flash wait states</td><td>3</td><td>5</td></tr>
+</table>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The F407 requires PWR VOS Scale 1 to be set before configuring the PLL at 168 MHz. The F207 (Cortex-M3) has no PWR voltage scaling register. This is handled by platform-specific <code>SystemInit()</code> implementations, not <code>#ifdef</code> guards.
+</div>
+
+<h3>Cortex-A9 Boot (PYNQ-Z2)</h3>
+
+<p>The Zynq boot path differs fundamentally from Cortex-M. During development, ms-os is loaded directly into DDR via JTAG (OpenOCD). The Zynq BootROM and FSBL initialize PLLs and DDR before we connect. ms-os assumes clocks are already configured and jumps straight into its startup sequence at <code>0x00100000</code>.</p>
+
+<div class="diagram">
+<span class="label">BootROM</span> -> <span class="label">FSBL</span> -> <span class="comment">(JTAG load via OpenOCD)</span> -> <span class="label">ms-os Startup.s</span>
+                                    |
+                                    |  PLLs already configured:
+                                    |    CPU_CLK  = 650 MHz
+                                    |    DDR_CLK  = 525 MHz
+                                    |    UART_REF = 100 MHz
+                                    |    PERIPHCLK = CPU_CLK/2 = 325 MHz
+                                    |
+                                    v
+                              Set mode stacks (SVC, IRQ, ABT, FIQ, UND, SYS)
+                                    |
+                                    v
+                              Zero .bss, copy .data
+                                    |
+                                    v
+                              Set SystemCoreClock globals
+                                    |
+                                    v
+                              Branch to main()
+</div>
+
+<div class="highlight">
+  <strong>CPU1 parking:</strong> On Zynq, CPU1 starts executing from the BootROM and enters a WFE loop. ms-os checks the MPIDR register (CP15 c0, c0, 5) to confirm it is running on CPU0 and leaves CPU1 parked.
+</div>
+
+<h3>UART Baud Rate Calculation (Zynq)</h3>
+
+<p>The Cadence UART on Zynq uses the formula: <code>Baud = uart_ref_clk / (CD * (BDIV + 1))</code>. With UART reference clock at 100 MHz and target baud of 115200:</p>
+
+<div class="diagram">
+BDIV = 4     (BDIV register value, divisor = BDIV + 1 = 5)
+CD   = 173   (clock divisor: 100000000 / (115200 * 5) = 173.6 ~ 173)
+
+Actual baud = 100000000 / (173 * 5) = 115607  <span class="comment">(0.35% error, within tolerance)</span>
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 3: THREAD MANAGEMENT                                 -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec01-memory-maps.html">&lt; Section 1: Memory Maps</a>
+    <a href="sec03-threads.html">Section 3: Threads &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

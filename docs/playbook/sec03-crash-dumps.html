@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 3: Crash Dump Interpretation -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 3 -- Crash Dump Interpretation</span>
+    <div class="header-nav">
+      <a href="sec02-gdb-cookbook.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html" class="current">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <a href="sec04-bug-hunts.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html" class="current">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 3</span>Crash Dump Interpretation</h2>
+
+<p>
+ms-os includes a built-in crash dump system. When a fault occurs, the fault
+handler captures the CPU state and prints a structured dump to the serial port.
+The crash dump system is split into three layers: <strong>arch-specific</strong>
+(fault register reading), <strong>board-specific</strong> (serial output), and
+<strong>common</strong> (formatting). This separation means the same crash dump
+format works on both Cortex-M and Cortex-A9.
+</p>
+
+<h3>3.1 Reading a Cortex-M Crash Dump</h3>
+
+<p>
+Here is a complete crash dump as it appears on the serial console, annotated
+with what each field means:
+</p>
+
+<div class="cmd-session"><span class="output">=== CRASH DUMP BEGIN ===
+Fault: HardFault                            </span><span class="prompt">&lt;-- fault type from xPSR IPSR field</span><span class="output">
+Thread: led (id=1)                          </span><span class="prompt">&lt;-- name and ID from TCB</span><span class="output">
+Registers:
+  PC  : 08000ABC                            </span><span class="prompt">&lt;-- instruction that faulted</span><span class="output">
+  LR  : 08000A34                            </span><span class="prompt">&lt;-- caller (return address)</span><span class="output">
+  SP  : 200007B8                            </span><span class="prompt">&lt;-- stack pointer at time of fault</span><span class="output">
+  R0  : 00000000
+  R1  : 00000001
+  R2  : E000ED00
+  R3  : 00000000
+  R12 : 00000000
+  xPSR: 61000003                            </span><span class="prompt">&lt;-- flags + exception number (3=HardFault)</span><span class="output">
+Fault Status:
+  CFSR : 00008200                           </span><span class="prompt">&lt;-- PRECISERR + BFARVALID</span><span class="output">
+  HFSR : 40000000                           </span><span class="prompt">&lt;-- FORCED (escalated from BusFault)</span><span class="output">
+  MMFAR: 00000000
+  BFAR : CCCCCCCC                           </span><span class="prompt">&lt;-- the bad address accessed</span><span class="output">
+Decoded:
+  -&gt; FORCED: Escalated to HardFault
+  -&gt; PRECISERR: Precise data bus error
+  -&gt; BFARVALID: BFAR = CCCCCCCC
+Stack: base=20000400 size=00000400
+EXC_RETURN: FFFFFFFD                        </span><span class="prompt">&lt;-- return to thread mode, PSP</span><span class="output">
+=== CRASH DUMP END ===</span></div>
+
+<p>
+Reading this dump: the <code>led</code> thread (thread 1) attempted to access
+address <code>0xCCCCCCCC</code>. The CFSR shows <code>PRECISERR</code> (precise
+bus error at a known address) with <code>BFARVALID</code> (the BFAR register
+holds the offending address). The HFSR shows <code>FORCED</code>, meaning the
+BusFault escalated to HardFault. The faulting instruction is at PC
+<code>0x08000ABC</code> -- run <code>addr2line</code> on that address to find
+the source line.
+</p>
+
+
+<h3>CFSR Bit Decoding Table</h3>
+
+<p>
+The Configurable Fault Status Register (CFSR) at <code>0xE000ED28</code> is a
+32-bit register composed of three sub-registers: MemManage FSR (bits 7:0),
+BusFault FSR (bits 15:8), and UsageFault FSR (bits 31:16).
+</p>
+
+<table>
+  <tr><th>Bit</th><th>Name</th><th>Description</th></tr>
+  <tr><td>[0]</td><td>IACCVIOL</td><td>Instruction access violation (MPU or Execute Never region)</td></tr>
+  <tr><td>[1]</td><td>DACCVIOL</td><td>Data access violation (MPU permission fault)</td></tr>
+  <tr><td>[3]</td><td>MUNSTKERR</td><td>MemManage fault on unstacking (return from exception)</td></tr>
+  <tr><td>[4]</td><td>MSTKERR</td><td>MemManage fault on stacking (exception entry)</td></tr>
+  <tr><td>[5]</td><td>MLSPERR</td><td>MemManage fault during lazy FP stacking (M4 only)</td></tr>
+  <tr><td>[7]</td><td>MMARVALID</td><td>MMFAR holds the valid faulting address</td></tr>
+  <tr><td>[8]</td><td>IBUSERR</td><td>Instruction bus error (fetch from invalid address)</td></tr>
+  <tr><td>[9]</td><td>PRECISERR</td><td>Precise data bus error (BFAR holds the address)</td></tr>
+  <tr><td>[10]</td><td>IMPRECISERR</td><td>Imprecise data bus error (BFAR may not be valid)</td></tr>
+  <tr><td>[11]</td><td>UNSTKERR</td><td>BusFault on unstacking (return from exception)</td></tr>
+  <tr><td>[12]</td><td>STKERR</td><td>BusFault on stacking (exception entry)</td></tr>
+  <tr><td>[15]</td><td>BFARVALID</td><td>BFAR holds the valid faulting address</td></tr>
+  <tr><td>[16]</td><td>UNDEFINSTR</td><td>Undefined instruction executed</td></tr>
+  <tr><td>[17]</td><td>INVSTATE</td><td>Invalid execution state (Thumb bit cleared on Thumb-only CPU)</td></tr>
+  <tr><td>[18]</td><td>INVPC</td><td>Invalid PC load (bad EXC_RETURN value)</td></tr>
+  <tr><td>[19]</td><td>NOCP</td><td>Coprocessor access (no FPU or FPU disabled)</td></tr>
+  <tr><td>[24]</td><td>UNALIGNED</td><td>Unaligned memory access (when UNALIGN_TRP enabled)</td></tr>
+  <tr><td>[25]</td><td>DIVBYZERO</td><td>Integer division by zero (when DIV_0_TRP enabled)</td></tr>
+</table>
+
+<div class="key-decision">
+<strong>Design note:</strong> ms-os enables both <code>DIV_0_TRP</code> and
+<code>UNALIGN_TRP</code> in the CCR during crash dump initialization
+(<code>archCrashDumpInit()</code>). This means division by zero and unaligned
+access will generate UsageFaults instead of silently returning zero or
+performing multiple aligned accesses.
+</div>
+
+
+<h3>HFSR Quick Reference</h3>
+
+<table>
+  <tr><th>Bit</th><th>Name</th><th>Description</th></tr>
+  <tr><td>[1]</td><td>VECTTBL</td><td>Vector table read error on exception entry</td></tr>
+  <tr><td>[30]</td><td>FORCED</td><td>Fault escalated to HardFault (original fault handler disabled or faulted)</td></tr>
+</table>
+
+<p>
+If HFSR shows <code>FORCED</code>, the real fault type is in the CFSR. HardFault
+is just the escalation mechanism. Check CFSR first.
+</p>
+
+
+<h3>3.2 Cortex-A9 Crash Dump</h3>
+
+<p>
+The Cortex-A9 uses a different fault model. There is no CFSR/HFSR; instead,
+faults are reported through Data Abort, Prefetch Abort, and Undefined Instruction
+exceptions. The ms-os fault handlers pass a type code in register r1 to
+distinguish them:
+</p>
+
+<table>
+  <tr><th>Type Code</th><th>Exception</th><th>Typical Cause</th></tr>
+  <tr><td>1</td><td>Data Abort</td><td>Invalid memory read/write, alignment, permission</td></tr>
+  <tr><td>2</td><td>Prefetch Abort</td><td>Invalid instruction fetch address</td></tr>
+  <tr><td>3</td><td>Undefined Instruction</td><td>Bad opcode, coprocessor access, UDF instruction</td></tr>
+</table>
+
+<p>
+The Cortex-A9 crash dump reads CP15 registers instead of SCB registers:
+</p>
+
+<table>
+  <tr><th>Register</th><th>CP15 Encoding</th><th>Description</th></tr>
+  <tr><td>DFSR</td><td>MRC p15, 0, Rd, c5, c0, 0</td><td>Data Fault Status Register</td></tr>
+  <tr><td>IFSR</td><td>MRC p15, 0, Rd, c5, c0, 1</td><td>Instruction Fault Status Register</td></tr>
+  <tr><td>DFAR</td><td>MRC p15, 0, Rd, c6, c0, 0</td><td>Data Fault Address Register</td></tr>
+  <tr><td>IFAR</td><td>MRC p15, 0, Rd, c6, c0, 2</td><td>Instruction Fault Address Register</td></tr>
+</table>
+
+<div class="highlight">
+<strong>Note:</strong> ARM Cortex-A9 does not trap integer divide-by-zero. The
+<code>UDIV</code> instruction returns zero instead of faulting. To test the crash
+dump system on A9, ms-os uses the <code>UDF #0</code> instruction to generate an
+Undefined Instruction exception.
+</div>
+
+
+<h3>3.3 Common Crash Patterns</h3>
+
+<p>
+After reading enough crash dumps, patterns emerge. Here are the most common ones
+in ms-os, ordered by how often they occur:
+</p>
+
+<h4>DACCVIOL at 0x20000xxx -- Unprivileged thread accessing kernel SRAM</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00000082 (DACCVIOL + MMARVALID), MMFAR = 0x200001xx
+<span class="label">Cause:</span>  Unprivileged thread reading/writing a global variable in .bss or .data
+<span class="label">Why:</span>    MPU Region 1 covers SRAM (0x20000000) as privileged-only (RW, no user)
+<span class="label">Fix:</span>    Pass data via thread argument or stack, not globals</div>
+
+<h4>DACCVIOL at 0x40000xxx -- Unprivileged thread accessing peripherals</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00000082 (DACCVIOL + MMARVALID), MMFAR = 0x400xxxxx
+<span class="label">Cause:</span>  Unprivileged thread directly accessing a peripheral register (GPIO, UART)
+<span class="label">Why:</span>    MPU Region 2 covers peripherals (0x40000000) as privileged-only
+<span class="label">Fix:</span>    Use syscalls (kernel::user:: namespace) to access peripherals via the kernel</div>
+
+<h4>PRECISERR with BFAR=0xCCCCCCCC -- Uninitialized pointer dereference</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00008200 (PRECISERR + BFARVALID), BFAR = 0xCCCCCCCC
+<span class="label">Cause:</span>  Stack memory filled with 0xCC (debug fill), pointer read before initialization
+<span class="label">Why:</span>    0xCCCCCCCC is not a valid memory address on any STM32 target
+<span class="label">Fix:</span>    Initialize all pointers; check for null before dereferencing</div>
+
+<h4>FORCED + IMPRECISERR -- Write to invalid address</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> HFSR = 0x40000000 (FORCED), CFSR = 0x00000400 (IMPRECISERR)
+<span class="label">Cause:</span>  Write to an unmapped address; imprecise because write buffer delays the fault
+<span class="label">Why:</span>    BFAR may NOT be valid (no BFARVALID bit) -- the write buffer decouples fault from PC
+<span class="label">Fix:</span>    Insert DSB before the suspect write to make it precise, then read BFAR</div>
+
+<h4>UNDEFINSTR -- Corrupted code or UDF test</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> CFSR = 0x00010000 (UNDEFINSTR)
+<span class="label">Cause:</span>  PC points to invalid instruction encoding, or deliberate UDF #0 / .short 0xDEFE
+<span class="label">Why:</span>    Stack overflow corrupted return address, or test fault triggered intentionally
+<span class="label">Fix:</span>    Check if PC is in valid FLASH range; check stack pointer against stack base</div>
+
+<h4>Stack overflow -- SP below thread stack base</h4>
+
+<div class="diagram"><span class="label">Pattern:</span> SP in crash dump is below the thread's stack base address
+<span class="label">Cause:</span>  Deep call chain, large local variables, or recursive function
+<span class="label">Why:</span>    Thread stacks in ms-os are statically allocated (typically 512B-4KB)
+<span class="label">Fix:</span>    Increase stack size in createThread() call, or reduce stack usage</div>
+
+<div class="lesson">
+<strong>Lesson:</strong> When you see a HardFault with FORCED set, always look at CFSR
+first. The HardFault is just the messenger -- the CFSR tells you the real story.
+</div>
+
+
+<!-- ============================================================ -->
+<!--                 SECTION 4: REAL BUG HUNTS                     -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec02-gdb-cookbook.html">&lt; Section 2: GDB Session Cookbook</a>
+    <a href="sec04-bug-hunts.html">Section 4: Real Bug Hunts &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

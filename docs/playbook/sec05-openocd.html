@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 5: OpenOCD TCL Scripts -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 5 -- OpenOCD TCL Scripts</span>
+    <div class="header-nav">
+      <a href="sec04-bug-hunts.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html" class="current">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <a href="sec06-serial.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html" class="current">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 5</span>OpenOCD TCL Scripts</h2>
+
+<p>
+The PYNQ-Z2 requires cache invalidation before loading new firmware via JTAG
+(see <a href="#l2-cache">Bug Hunt 4.3</a>). This TCL script automates the full
+load sequence.
+</p>
+
+<h3>JTAG Load Script with Cache Invalidation</h3>
+
+<pre><span class="cmt"># pynq_jtag_load.tcl</span>
+<span class="cmt"># Full JTAG load sequence for PYNQ-Z2 (Zynq-7020).</span>
+<span class="cmt"># Invalidates L2 + L1 caches before loading to prevent stale execution.</span>
+<span class="cmt">#</span>
+<span class="cmt"># Usage: openocd -f pynq-z2.cfg -c "source pynq_jtag_load.tcl"</span>
+
+<span class="cmt"># Step 1: Halt the CPU</span>
+<span class="fn">halt</span>
+
+<span class="cmt"># Step 2: Invalidate L2 cache (PL310 controller)</span>
+<span class="cmt">#</span>
+<span class="cmt"># The PL310 L2 cache controller is at 0xF8F02000.</span>
+<span class="cmt"># Register 0x77C = Invalidate by Way.</span>
+<span class="cmt"># Writing 0xFFFF invalidates all 16 ways.</span>
+<span class="cmt"># Bits clear to 0 when invalidation is complete.</span>
+<span class="fn">mww</span> <span class="num">0xF8F0277C</span> <span class="num">0xFFFF</span>
+
+<span class="cmt"># Step 3: Wait for L2 invalidation to complete</span>
+<span class="cmt"># Poll the Invalidate by Way register until all bits are zero.</span>
+<span class="kw">while</span> {[expr [<span class="fn">mrw</span> <span class="num">0xF8F0277C</span>] &amp; <span class="num">0xFFFF</span>]} { }
+
+<span class="cmt"># Step 4: Invalidate L1 instruction cache (CP15 ICIALLU)</span>
+<span class="cmt">#</span>
+<span class="cmt"># MCR p15, 0, Rd, c7, c5, 0  -- Invalidate all instruction caches</span>
+<span class="cmt"># The value of Rd is ignored (SBZ = Should Be Zero).</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 5 0</span>
+
+<span class="cmt"># Step 5: Clean and invalidate L1 data cache (CP15 DCCISW)</span>
+<span class="cmt">#</span>
+<span class="cmt"># MCR p15, 0, Rd, c7, c14, 0  -- Clean and Invalidate by Set/Way</span>
+<span class="cmt"># This is a simplified single-set invalidation. For a full D-cache</span>
+<span class="cmt"># clean, iterate over all sets and ways. For JTAG reload this is</span>
+<span class="cmt"># sufficient because we are about to overwrite the entire image.</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 14 0</span>
+
+<span class="cmt"># Step 6: Data Synchronization Barrier</span>
+<span class="cmt"># Ensure all cache maintenance operations complete before proceeding.</span>
+<span class="cmt"># DSB via CP15: MCR p15, 0, Rd, c7, c10, 4</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 10 4</span>
+
+<span class="cmt"># Step 7: Instruction Synchronization Barrier</span>
+<span class="cmt"># Flush the pipeline so the CPU fetches new instructions.</span>
+<span class="cmt"># ISB via CP15: MCR p15, 0, Rd, c7, c5, 4</span>
+<span class="fn">arm mrc</span> <span class="num">15 0 0 7 5 4</span>
+
+<span class="cmt"># Step 8: Load the new image at DDR offset (skip first 1MB)</span>
+<span class="fn">load_image</span> build/app/hello/hello <span class="num">0x00100000</span>
+
+<span class="cmt"># Step 9: Resume execution at the load address</span>
+<span class="fn">resume</span> <span class="num">0x00100000</span></pre>
+
+<h4>Using the script</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>openocd -f pynq-z2.cfg -c "source pynq_jtag_load.tcl"
+<span class="output">Open On-Chip Debugger 0.12.0
+...
+target halted in ARM state due to debug-request
+28672 bytes written at address 0x00100000
+Resuming at 0x00100000</span></div>
+
+<div class="highlight">
+<strong>Tip:</strong> The <code>build.py -f --target pynq-z2</code> command
+automates this entire sequence. Use the manual TCL script when you need to
+debug the load process itself or when developing new firmware that fails
+immediately on startup.
+</div>
+
+
+<!-- ============================================================ -->
+<!--            SECTION 6: SERIAL PORT DEBUGGING                   -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec04-bug-hunts.html">&lt; Section 4: Real Bug Hunts</a>
+    <a href="sec06-serial.html">Section 6: Serial Port Debugging &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

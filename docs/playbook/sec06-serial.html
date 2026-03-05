@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 6: Serial Port Debugging -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 6 -- Serial Port Debugging</span>
+    <div class="header-nav">
+      <a href="sec05-openocd.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html" class="current">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <a href="sec07-toolchain.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html" class="current">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 6</span>Serial Port Debugging</h2>
+
+<p>
+Serial output is the primary debugging channel for ms-os. All <code>printf</code>
+and <code>stdout</code> output is routed to a configurable UART. Crash dumps,
+shell commands, and application output all go through the same serial port.
+</p>
+
+<h3>6.1 pyserial Setup</h3>
+
+<p>
+Always use pyserial for serial communication. Never use <code>cat /dev/ttyUSB0</code>
+-- it does not configure baud rate, parity, stop bits, or flow control, and will
+produce garbage or hang.
+</p>
+
+<h4>Minimal serial monitor</h4>
+
+<pre><span class="kw">import</span> serial
+
+ser = serial.<span class="fn">Serial</span>(<span class="str">'/dev/ttyUSB0'</span>, <span class="num">115200</span>, timeout=<span class="num">1</span>)
+<span class="kw">while</span> <span class="kw">True</span>:
+    line = ser.<span class="fn">readline</span>().<span class="fn">decode</span>(<span class="str">'utf-8'</span>, errors=<span class="str">'replace'</span>).<span class="fn">strip</span>()
+    <span class="kw">if</span> line:
+        <span class="fn">print</span>(line)</pre>
+
+<h4>With timestamp and color</h4>
+
+<pre><span class="kw">import</span> serial
+<span class="kw">from</span> datetime <span class="kw">import</span> datetime
+
+ser = serial.<span class="fn">Serial</span>(<span class="str">'/dev/ttyUSB0'</span>, <span class="num">115200</span>, timeout=<span class="num">1</span>)
+<span class="kw">while</span> <span class="kw">True</span>:
+    line = ser.<span class="fn">readline</span>().<span class="fn">decode</span>(<span class="str">'utf-8'</span>, errors=<span class="str">'replace'</span>).<span class="fn">strip</span>()
+    <span class="kw">if</span> line:
+        ts = datetime.<span class="fn">now</span>().<span class="fn">strftime</span>(<span class="str">'%H:%M:%S.%f'</span>)[:<span class="num">-3</span>]
+        <span class="kw">if</span> <span class="str">'CRASH'</span> <span class="kw">in</span> line:
+            <span class="fn">print</span>(<span class="str">f'\033[91m[{ts}] {line}\033[0m'</span>)
+        <span class="kw">else</span>:
+            <span class="fn">print</span>(<span class="str">f'[{ts}] {line}'</span>)</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> Never use <code>cat /dev/ttyUSBx</code> for serial
+debugging. It does not set the baud rate and will either show garbage or block
+indefinitely. Always use pyserial or a proper serial terminal (minicom, picocom).
+</div>
+
+
+<h3>6.2 crash_monitor.py Usage</h3>
+
+<p>
+ms-os includes a crash monitor tool that watches the serial port for crash dump
+output and automatically translates addresses to source file and line number
+using <code>arm-none-eabi-addr2line</code>:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3 tools/crash_monitor.py --port /dev/ttyUSB0 --elf build/app/threads/threads
+<span class="output">[14:23:01.445] Monitoring /dev/ttyUSB0 at 115200 baud...
+[14:23:01.446] ELF: build/app/threads/threads
+[14:23:05.112] led: count=100
+[14:23:06.113] led: count=200
+[14:23:07.114] === CRASH DUMP BEGIN ===
+[14:23:07.115] Fault: HardFault
+[14:23:07.116] Thread: led (id=1)
+[14:23:07.117] Registers:
+[14:23:07.118]   PC  : 08000ABC
+[14:23:07.119]   LR  : 08000A34
+...
+[14:23:07.130] === CRASH DUMP END ===
+</span><span class="prompt">[14:23:07.131] -- addr2line --</span>
+<span class="output">[14:23:07.142]   PC  08000ABC -> ledThread(void*) at app/threads/main.cpp:42
+[14:23:07.143]   LR  08000A34 -> kernel::sleep(unsigned int) at kernel/src/core/Kernel.cpp:163</span></div>
+
+<p>
+The crash monitor detects the <code>=== CRASH DUMP BEGIN ===</code> /
+<code>=== CRASH DUMP END ===</code> delimiters, extracts PC and LR values
+using regex, and runs <code>arm-none-eabi-addr2line</code> to resolve them.
+</p>
+
+<h4>Options</h4>
+
+<table>
+  <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
+  <tr><td><code>--port</code></td><td>Serial port device</td><td>(required)</td></tr>
+  <tr><td><code>--elf</code></td><td>Path to ELF binary with debug symbols</td><td>(required)</td></tr>
+  <tr><td><code>--baud</code></td><td>Baud rate</td><td>115200</td></tr>
+</table>
+
+
+<h3>6.3 Webcam LED Verification</h3>
+
+<p>
+When debugging remotely or verifying blink patterns without physical access to
+the board, a USB webcam pointed at the board can capture LED state changes:
+</p>
+
+<h4>Capture a sequence of frames</h4>
+
+<pre><span class="kw">for</span> i <span class="kw">in</span> <span class="num">1 2 3 4 5 6 7 8</span>; <span class="kw">do</span>
+    ffmpeg -f v4l2 -framerate <span class="num">30</span> -video_size <span class="num">640x480</span> \
+        -i /dev/video1 -frames:v <span class="num">1</span> -y /tmp/snap_${i}.jpg <span class="num">2</span>&gt;/dev/null
+    sleep <span class="num">0.3</span>
+<span class="kw">done</span></pre>
+
+<h4>Analyze LED brightness with PIL</h4>
+
+<pre><span class="kw">from</span> PIL <span class="kw">import</span> Image
+
+<span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1</span>, <span class="num">9</span>):
+    img = Image.<span class="fn">open</span>(<span class="str">f'/tmp/snap_{i}.jpg'</span>)
+    led = img.<span class="fn">crop</span>((<span class="num">290</span>, <span class="num">155</span>, <span class="num">340</span>, <span class="num">200</span>))   <span class="cmt"># F407 LED region</span>
+    avg = <span class="fn">sum</span>(p[<span class="num">1</span>] <span class="kw">for</span> p <span class="kw">in</span> led.<span class="fn">getdata</span>()) / <span class="fn">len</span>(<span class="fn">list</span>(led.<span class="fn">getdata</span>()))
+    <span class="fn">print</span>(<span class="str">f'Frame {i}: green={avg:.0f} [{"ON" if avg > 75 else "OFF"}]'</span>)</pre>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3 analyze_leds.py
+<span class="output">Frame 1: green=142 [ON]
+Frame 2: green=31  [OFF]
+Frame 3: green=138 [ON]
+Frame 4: green=29  [OFF]
+Frame 5: green=141 [ON]
+Frame 6: green=30  [OFF]
+Frame 7: green=139 [ON]
+Frame 8: green=28  [OFF]</span></div>
+
+<p>
+A clean alternating pattern confirms the blink firmware is working. Adjust the
+crop coordinates for your camera position and LED location. The green channel
+(index 1 in RGB) works well for the green LED on the STM32F407 board (PC13).
+</p>
+
+
+<!-- ============================================================ -->
+<!--            SECTION 7: TOOLCHAIN QUICK REFERENCE               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec05-openocd.html">&lt; Section 5: OpenOCD TCL Scripts</a>
+    <a href="sec07-toolchain.html">Section 7: Toolchain Quick Reference &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

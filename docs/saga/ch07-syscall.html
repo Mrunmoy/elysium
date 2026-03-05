@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 7: Drawing the Line -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 7 -- Drawing the Line</span>
+    <div class="header-nav">
+      <a href="ch06-ipc.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html" class="current">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch08-device-tree.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html" class="current">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 7</span>
+  Drawing the Line (Phase 6)
+</h2>
+
+<div class="epigraph">
+  "Trust, but verify."
+  <div class="attribution">&mdash; Russian proverb (popularized by Ronald Reagan)</div>
+</div>
+
+<p>
+Every operating system eventually has to answer the question: what
+happens when code you do not fully trust wants to use the kernel? On
+Cortex-M, the answer lives in a single bit of the CONTROL register.
+Setting it was the easy part. Surviving the consequences was not.
+</p>
+
+<p>
+Until Phase 6, every thread in ms-os ran in privileged mode. Any thread
+could poke any peripheral register, disable interrupts globally, or
+overwrite the scheduler's data structures. The MPU existed, but it was
+a suggestion rather than a wall&mdash;privileged code can bypass it
+at will. For a microkernel that aspires to run untrusted user-space
+services, this was not just inelegant. It was dangerous.
+</p>
+
+<h3>The Privilege Boundary</h3>
+
+<p>
+On ARM Cortex-M, the distinction between privileged and unprivileged
+code comes down to one register and two bits:
+</p>
+
+<div class="diagram">
+  <span class="label">CONTROL Register (Cortex-M4)</span>
+
+  +------+--------+--------------------------------------------+
+  | Bit  | Field  | Description                                |
+  +------+--------+--------------------------------------------+
+  |  1   | SPSEL  | 0 = MSP (Main Stack), 1 = PSP (Process)   |
+  |  0   | nPRIV  | 0 = Privileged, 1 = Unprivileged           |
+  +------+--------+--------------------------------------------+
+
+  Privileged thread:    CONTROL = 0b10  (PSP, privileged)
+  Unprivileged thread:  CONTROL = 0b11  (PSP, unprivileged)
+</div>
+
+<p>
+We were already using SPSEL=1 to run threads on the Process Stack
+Pointer (PSP). The kernel and exception handlers use the Main Stack
+Pointer (MSP). That separation was established in Phase 1. Now we needed
+to flip one more bit: nPRIV.
+</p>
+
+<p>
+What changes when nPRIV=1? Everything that matters. The MPU is enforced
+strictly&mdash;unprivileged code cannot access any region marked as
+privileged-only. Peripheral registers (mapped in the 0x40000000 range on
+STM32) are behind the MPU's peripheral region, which is configured as
+privileged read/write only. An unprivileged thread that tries to toggle
+a GPIO pin gets a MemManage fault. An unprivileged thread that tries to
+disable interrupts with <code>cpsid i</code> gets a UsageFault. The
+hardware enforces what the kernel dictates.
+</p>
+
+<p>
+The TCB extension was minimal: one boolean field,
+<code>privileged</code>, at offset 44 (after <code>mpuStackRasr</code>
+at offset 40). During context switch, PendSV reads this field from the
+incoming thread's TCB and writes the appropriate CONTROL value:
+</p>
+
+<pre>
+<span class="cmt">// In PendSV_Handler (assembly)</span>
+ldr   r2, [r1, #<span class="num">44</span>]      <span class="cmt">// r2 = tcb->privileged</span>
+cmp   r2, #<span class="num">0</span>
+ite   ne
+movne r3, #<span class="num">0x02</span>          <span class="cmt">// privileged:   SPSEL=1, nPRIV=0</span>
+moveq r3, #<span class="num">0x03</span>          <span class="cmt">// unprivileged: SPSEL=1, nPRIV=1</span>
+msr   CONTROL, r3
+isb                        <span class="cmt">// flush pipeline after CONTROL write</span>
+</pre>
+
+<p>
+The ISB (Instruction Synchronization Barrier) after the MSR is critical.
+Without it, the pipeline might execute the next few instructions under
+the old privilege level before the CONTROL write takes effect. On
+Cortex-M4, this is a documented requirement&mdash;the Architecture
+Reference Manual is explicit about it. We had read enough ARM errata
+sheets by this point to take pipeline synchronization seriously.
+</p>
+
+<p>
+The <code>createThread()</code> API gained an optional parameter that
+defaults to <code>privileged=true</code>. Every existing thread
+continued to run exactly as before. Backward compatibility was
+non-negotiable&mdash;we could not break the echo server, the LED
+blinker, or the shell. Only threads explicitly created as unprivileged
+would get the nPRIV treatment.
+</p>
+
+<h3>The Syscall Table</h3>
+
+<p>
+An unprivileged thread cannot call kernel functions directly. The MPU
+would fault on the first access to a kernel data structure in SRAM
+(region configured as privileged read/write only). Instead, the thread
+executes an <code>SVC</code> (Supervisor Call) instruction, which traps
+synchronously into the SVC_Handler running in Handler mode&mdash;always
+privileged, always on the MSP, always able to touch kernel memory.
+</p>
+
+<p>
+Why SVC? On Cortex-M, it is the only synchronous trap instruction.
+<code>SVC #N</code> immediately enters the exception handler with the
+exception number baked into the instruction encoding. The result can be
+placed in r0 before returning. No round-trips, no polling, no
+asynchronous notification. The thread traps, the kernel does the work,
+the thread resumes with the answer.
+</p>
+
+<p>
+The SVC number extraction is a beautiful piece of ARM convention. The
+SVC_Handler reads the stacked PC (which points to the instruction
+<em>after</em> the SVC), subtracts 2 to find the SVC opcode itself,
+loads the halfword, and masks out the low byte&mdash;that is the
+immediate value N from <code>SVC #N</code>:
+</p>
+
+<pre>
+<span class="cmt">// SVC_Handler -- extract SVC number from faulting instruction</span>
+tst    lr, #<span class="num">4</span>           <span class="cmt">// which stack was active?</span>
+ite    eq
+mrseq  r0, MSP          <span class="cmt">// handler was using MSP</span>
+mrsne  r0, PSP          <span class="cmt">// thread was using PSP</span>
+ldr    r1, [r0, #<span class="num">24</span>]    <span class="cmt">// r1 = stacked PC</span>
+ldrb   r1, [r1, #-<span class="num">2</span>]    <span class="cmt">// r1 = SVC number (low byte of SVC opcode)</span>
+</pre>
+
+<p>
+We defined 24 system calls (SVC 0 through SVC 23). SVC 0 is special:
+it launches the first thread and never returns. SVC 1 through 23 cover
+the complete kernel API:
+</p>
+
+<table>
+<tr><th>SVC #</th><th>Function</th><th>SVC #</th><th>Function</th></tr>
+<tr><td>1</td><td>yield</td><td>13</td><td>semaphoreCreate</td></tr>
+<tr><td>2</td><td>sleep</td><td>14</td><td>messageSend</td></tr>
+<tr><td>3</td><td>tickCount</td><td>15</td><td>messageReceive</td></tr>
+<tr><td>4</td><td>mutexCreate</td><td>16</td><td>messageReply</td></tr>
+<tr><td>5</td><td>mutexDestroy</td><td>17</td><td>messageTrySend</td></tr>
+<tr><td>6</td><td>mutexLock</td><td>18</td><td>messageTryReceive</td></tr>
+<tr><td>7</td><td>mutexUnlock</td><td>19</td><td>messageNotify</td></tr>
+<tr><td>8</td><td>mutexTryLock</td><td>20</td><td>messageCheckNotify</td></tr>
+<tr><td>9</td><td>semaphoreWait</td><td>21</td><td>heapAlloc</td></tr>
+<tr><td>10</td><td>semaphoreSignal</td><td>22</td><td>heapFree</td></tr>
+<tr><td>11</td><td>semaphoreTryWait</td><td>23</td><td>heapAvailable</td></tr>
+<tr><td>12</td><td>semaphoreDestroy</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table>
+
+<p>
+The C++ dispatch function <code>svcDispatch()</code> receives the syscall
+number and a pointer to the exception frame, extracts arguments from the
+stacked r0-r3, calls the appropriate kernel function, and writes the
+return value back to the stacked r0 so the caller sees it when it
+resumes.
+</p>
+
+<p>
+On the caller side, the inline assembly wrappers are a thing of beauty.
+The register constraint syntax maps C++ arguments directly to ARM
+registers without any memory round-trip:
+</p>
+
+<pre>
+<span class="cmt">// kernel::user::sleep() -- SVC wrapper</span>
+<span class="kw">inline</span> <span class="kw">void</span> <span class="fn">sleep</span>(<span class="kw">uint32_t</span> ticks)
+{
+    <span class="kw">register</span> <span class="kw">uint32_t</span> r0 <span class="kw">__asm</span>(<span class="str">"r0"</span>) = ticks;
+    <span class="kw">__asm</span> <span class="kw">volatile</span>(<span class="str">"svc %1"</span> : <span class="str">"+r"</span>(r0) : <span class="str">"I"</span>(kSleep) : <span class="str">"memory"</span>);
+}
+</pre>
+
+<p>
+The <code>"I"</code> constraint means the SVC number is an immediate
+constant&mdash;it gets baked into the instruction encoding at compile
+time. No table lookup, no function pointer, no indirect call. On ARM,
+<code>kernel::user::sleep(100)</code> compiles to exactly two
+instructions: <code>mov r0, #100</code> and <code>svc #2</code>. On
+the host build (x86), the same header compiles to a direct call to
+<code>kernel::sleep(100)</code>&mdash;no SVC instruction exists on x86.
+Same source code, different backends, zero overhead on either platform.
+</p>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> Dual-mode syscall wrappers. On ARM,
+<code>kernel::user::foo()</code> compiles to an SVC trap. On x86,
+it compiles to a direct function call. Application code includes one
+header and works on both the target and the test host without any
+<code>#ifdef</code>.
+</div>
+
+<h3>First Flash</h3>
+
+<p>
+We created an unprivileged echo client thread. One line changed in the
+application code: <code>createThread("echo-cli", echoClientMain, arg,
+512, 15, false)</code>&mdash;the final <code>false</code> marking it
+as unprivileged. The client used <code>kernel::user::sleep()</code> and
+<code>kernel::user::messageSend()</code> instead of the direct kernel
+calls. Flash. Boot. The LED blinked. The server printed "Echo server
+started." The shell responded to keystrokes.
+</p>
+
+<p>
+And the echo client... did nothing.
+</p>
+
+<h3>The Silent Failure</h3>
+
+<p>
+No crash. No fault. No error message on the serial console. The echo
+client simply sat there, silent, as if it had never been created. The
+server thread waited patiently for messages that never arrived. The
+shell showed the client as "Ready"&mdash;it was running, it was being
+scheduled, it was consuming its time slice. But it was not communicating.
+</p>
+
+<p>
+This was the kind of bug that keeps you up at night. A crash is a gift.
+A crash gives you a fault address, a register dump, a stack trace, a
+thread ID. A crash points at the crime scene and says "look here." A
+silent failure gives you nothing. The system appears to work. The only
+evidence that something is wrong is the absence of something that should
+be present.
+</p>
+
+<h4>Adding Instrumentation</h4>
+
+<p>
+We added debug prints at every stage of the IPC path. The client calls
+<code>kernel::user::messageSend()</code>. The SVC trap fires. We land
+in <code>svcDispatch()</code>. The dispatch function identifies SVC #14
+as <code>messageSend</code>, extracts the arguments from the stacked
+registers, and calls <code>kernel::messageSend()</code>.
+</p>
+
+<p>
+And then <code>kernel::messageSend()</code> returns. Immediately.
+Return code: <code>kIpcErrInIsr</code>.
+</p>
+
+<p>
+"In an ISR? The client is a thread!"
+</p>
+
+<h4>The Logic Chain</h4>
+
+<p>
+We traced the logic chain, instruction by instruction, register by
+register, until we found the culprit. Here is the complete path from
+the echo client's perspective:
+</p>
+
+<div class="diagram">
+  <span class="label">The Silent Failure: IPC from Unprivileged Thread</span>
+
+  echo-cli (unprivileged, Thread mode)
+    |
+    kernel::user::messageSend(dest=1, msg)
+    |
+    svc #14                          <span class="comment">-- trap to Handler mode</span>
+    |
+    v
+  SVC_Handler (Handler mode, VECTACTIVE = 11)
+    |
+    svcDispatch(14, frame)
+      |
+      kernel::messageSend(dest=1, msg)
+        |
+        <span class="label">inIsrContext()</span>                <span class="comment">-- safety check: can we block?</span>
+          |
+          SCB->ICSR & 0x1FF          <span class="comment">-- read VECTACTIVE field</span>
+          = 11                        <span class="comment">-- SVCall exception number!</span>
+          return <span class="label">true</span>                <span class="comment">-- "I am in an ISR"</span>
+        |
+        "Cannot block in ISR context"
+        return kIpcErrInIsr           <span class="comment">-- silently refuses to send</span>
+    |
+    svcDispatch writes kIpcErrInIsr to stacked r0
+    |
+    v
+  echo-cli resumes
+    |
+    return code = kIpcErrInIsr        <span class="comment">-- but nobody checks it</span>
+    |
+    loop: try again... same result... forever
+</div>
+
+<p>
+There it was. The SVC handler IS an ISR. On Cortex-M, the SVC
+instruction traps into Handler mode. The ICSR register's VECTACTIVE
+field becomes nonzero&mdash;exception number 11, which is the SVCall
+exception. From the hardware's perspective, we are inside an exception
+handler. The CPU is in Handler mode. The stack pointer is the MSP.
+Every architectural marker says "this is an interrupt service routine."
+</p>
+
+<p>
+And every responsible kernel function in ms-os checks
+<code>inIsrContext()</code> and refuses to block when it returns true.
+We wrote those checks ourselves, in Phase 2, because blocking inside
+an ISR is one of the cardinal sins of embedded programming. It leads
+to deadlock, priority inversion, and system hangs. So
+<code>kernel::sleep()</code> returns immediately if called from ISR
+context. <code>kernel::messageSend()</code> returns
+<code>kIpcErrInIsr</code>. <code>kernel::mutexLock()</code> returns
+false. Every single blocking syscall politely declined to do its job.
+</p>
+
+<h4>The Philosophical Problem</h4>
+
+<p>
+This was not a simple coding bug. It was a <em>conceptual</em> conflict
+between two correct abstractions.
+</p>
+
+<p>
+The hardware says: "SVC_Handler is an exception handler. It runs in
+Handler mode. VECTACTIVE is nonzero. You are in an ISR."
+</p>
+
+<p>
+The kernel says: "You must never block inside an ISR. That way lies
+deadlock and priority inversion."
+</p>
+
+<p>
+Both are correct. But SVC dispatch is not <em>really</em> an ISR. It is
+the kernel acting on behalf of a thread. The thread wants to sleep. The
+thread wants to send a message. The SVC handler is just the
+<em>mechanism</em> by which an unprivileged thread asks the kernel to do
+these things. Semantically, we are in thread context&mdash;the operation
+was initiated by a thread, will return to a thread, and should have the
+blocking semantics of a thread. Mechanically, we are in Handler
+mode&mdash;the CPU's execution mode after taking an exception.
+</p>
+
+<p>
+The kernel's ISR guard was too aggressive. It could not distinguish
+between "we are in a timer ISR and must not block" and "we are in an
+SVC handler performing a syscall on behalf of a thread and blocking is
+exactly what the thread asked us to do."
+</p>
+
+<h4>The Fix</h4>
+
+<p>
+The solution was three lines of code and one global flag:
+</p>
+
+<pre>
+<span class="cmt">// Arch.cpp</span>
+<span class="kw">volatile</span> <span class="kw">bool</span> g_inSyscall = <span class="kw">false</span>;
+
+<span class="kw">bool</span> <span class="fn">inIsrContext</span>()
+{
+    <span class="kw">if</span> (g_inSyscall) <span class="kw">return</span> <span class="kw">false</span>;
+    <span class="kw">return</span> (reg(kScbIcsr) & <span class="num">0x1FF</span>u) != <span class="num">0</span>;
+}
+</pre>
+
+<p>
+<code>svcDispatch()</code> sets <code>g_inSyscall = true</code> before
+calling any kernel function, and clears it after. When
+<code>inIsrContext()</code> sees VECTACTIVE=11 (SVCall) but
+<code>g_inSyscall</code> is true, it returns false. "You are in Handler
+mode, but you are executing on behalf of a thread. Blocking is
+permitted."
+</p>
+
+<p>
+Three lines of change. One flag. The entire syscall interface came alive.
+</p>
+
+<p>
+The echo client sent its first message. The server received it. The
+reply came back. Five characters, round-tripped through an SVC trap, a
+privilege escalation, a mailbox enqueue, a context switch, a dispatch
+loop, a reply, and a privilege de-escalation. The unprivileged thread
+was talking to the kernel, through the kernel, to another thread.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> The hardest bugs are not crashes. Crashes leave
+evidence&mdash;fault addresses, register dumps, stack traces. The hardest
+bugs are silent failures where everything appears to work but nothing
+actually happens. The IPC call "succeeded" at every layer except the one
+that mattered. <code>messageSend()</code> returned an error code, but the
+echo client's retry loop just called it again, and again, and again. No
+crash. No fault. Just an unprivileged thread screaming into the void.
+</div>
+
+<h4>Testing the Fix</h4>
+
+<p>
+This bug was subtle enough that we wrote dedicated regression tests for
+it (commit <code>8a59988</code>). Five handler-mode tests that verify
+<code>g_inSyscall</code> behavior:
+</p>
+
+<p>
+<strong>Test 1:</strong> Call <code>kernel::sleep()</code> from within a
+simulated SVC dispatch (g_inSyscall=true). Assert that it actually
+blocks the thread instead of returning immediately.
+</p>
+
+<p>
+<strong>Test 2:</strong> Call <code>kernel::sleep()</code> from a real
+ISR context (g_inSyscall=false, simulated VECTACTIVE nonzero). Assert
+that it correctly refuses to block.
+</p>
+
+<p>
+<strong>Test 3:</strong> Call <code>kernel::mutexLock()</code> from SVC
+dispatch. Assert that it blocks when the mutex is held.
+</p>
+
+<p>
+<strong>Test 4:</strong> Call <code>kernel::semaphoreWait()</code> from
+SVC dispatch. Assert that it blocks when the count is zero.
+</p>
+
+<p>
+<strong>Test 5:</strong> Call <code>kernel::messageSend()</code> from SVC
+dispatch. Assert that it blocks when the target mailbox is full.
+</p>
+
+<p>
+The regression proof is simple: remove the <code>g_inSyscall</code>
+check from <code>inIsrContext()</code>, and three of these five tests
+fail instantly. The flag is load-bearing. The tests guarantee it stays.
+</p>
+
+<p>
+For the complete SVC dispatch flow diagram, see the
+<a href="../architecture/sec07-syscall.html">Architecture Guide</a>. For the
+exact GDB commands used to trace ISR-context bugs, see the
+<a href="../playbook/sec04-bug-hunts.html">Debugging Playbook</a>.
+</p>
+
+<h3>The MPU Wall</h3>
+
+<p>
+With the SVC silent-failure bug fixed, the unprivileged echo client
+should have been working. And it was&mdash;for about two hundred
+milliseconds. Then the board rebooted. Fast LED blink: the crash-reboot
+loop we knew all too well from Phase 4.
+</p>
+
+<h4>The Crash Dump</h4>
+
+<p>
+The crash dump system from Phase 1 earned its keep. We connected the
+serial terminal and caught the output before the reboot:
+</p>
+
+<pre>
+=== CRASH DUMP BEGIN ===
+Fault: MemManage
+Thread: echo-cli (id=2)
+MMFSR: 0x82
+Decoded:
+  -> DACCVIOL: Data access violation
+  -> MMARVALID: MMFAR = 0x20000104
+=== CRASH DUMP END ===
+</pre>
+
+<p>
+A data access violation. The faulting address: <code>0x20000104</code>.
+That address is in SRAM, in the <code>.bss</code> section. The MemManage
+fault fired because an unprivileged thread tried to read from a memory
+region that the MPU marks as privileged-only.
+</p>
+
+<h4>The Offending Code</h4>
+
+<p>
+We looked at the echo client's source code:
+</p>
+
+<pre>
+<span class="kw">static</span> kernel::ThreadId g_serverTid;  <span class="cmt">// .bss at 0x20000104</span>
+
+<span class="kw">void</span> <span class="fn">echoClientMain</span>(<span class="kw">void</span> *arg)
+{
+    kernel::ThreadId server = g_serverTid;  <span class="cmt">// BOOM -- MPU fault</span>
+    <span class="cmt">// ...</span>
+}
+</pre>
+
+<p>
+A global variable. Sitting innocently in <code>.bss</code>. In MPU
+Region 1, which covers all of SRAM as "Privileged RW, Unprivileged No
+Access." We had configured this in Phase 3 to protect kernel data
+structures from rogue threads. And now the protection was working
+exactly as designed&mdash;against our own echo client.
+</p>
+
+<p>
+The unprivileged thread could access its own stack (MPU Region 4,
+per-thread, configured during context switch) and the heap (MPU Region
+5, user RW). But it could not access <em>anything</em> in the general
+SRAM region: no globals, no static variables, no kernel data. The MPU
+does not care that <code>g_serverTid</code> is a simple integer that
+the client wrote before spawning the thread. It is in the forbidden
+zone. Access denied.
+</p>
+
+<h4>The Fix</h4>
+
+<p>
+The solution was to pass the server's thread ID through the thread
+argument pointer. The <code>createThread()</code> function accepts a
+<code>void *arg</code> that gets placed in the new thread's initial r0.
+It lives on the creating thread's stack at the moment of creation, then
+gets copied into the initial stack frame of the new thread&mdash;which
+is in the new thread's own MPU-accessible stack region.
+</p>
+
+<pre>
+<span class="cmt">// Application code -- pass server TID via thread argument</span>
+kernel::ThreadId serverTid = kernel::createThread(<span class="str">"echo-srv"</span>, ...);
+
+<span class="cmt">// Cast to void* for the thread arg (fits in 32 bits)</span>
+<span class="kw">void</span> *arg = <span class="kw">reinterpret_cast</span><<span class="kw">void</span> *>(serverTid);
+kernel::createThread(<span class="str">"echo-cli"</span>, echoClientMain, arg, <span class="num">512</span>, <span class="num">15</span>, <span class="kw">false</span>);
+
+<span class="kw">void</span> <span class="fn">echoClientMain</span>(<span class="kw">void</span> *arg)
+{
+    <span class="kw">auto</span> server = <span class="kw">reinterpret_cast</span>&lt;kernel::ThreadId&gt;(arg);  <span class="cmt">// from r0, safe</span>
+    <span class="cmt">// ...</span>
+}
+</pre>
+
+<p>
+No global. No static. The data flows through the thread creation
+mechanism itself, landing in a register that the thread can read from
+its own privilege domain.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> Unprivileged threads live in a small world:
+their stack and the heap. Everything else&mdash;globals, statics,
+peripherals, kernel data structures&mdash;is behind the MPU wall.
+Design your data flow accordingly. If an unprivileged thread needs a
+value, pass it through the thread argument, through a message, or
+through a heap-allocated buffer. Do not assume that a pointer to a
+global is valid from every execution context.
+</div>
+
+<h3>Testing the Boundary</h3>
+
+<p>
+With both bugs fixed&mdash;the silent SVC failure and the MPU
+global-access fault&mdash;the unprivileged echo client ran correctly.
+It sent messages via SVC, received replies via SVC, and slept via SVC.
+It could not access peripherals directly (no UART, no GPIO, no RCC). It
+could not disable interrupts. It could not corrupt kernel state. It was
+a well-behaved citizen of a well-guarded microkernel.
+</p>
+
+<p>
+The test suite grew to cover the new privilege boundary. The SVC dispatch
+tests (23 tests for each syscall number) verify that every kernel
+function is reachable through the trap interface. The handler-mode tests
+(5 tests) verify the <code>g_inSyscall</code> flag. The existing IPC
+tests still pass because privileged threads continue to call kernel
+functions directly&mdash;no SVC overhead, no behavior change.
+</p>
+
+<p>
+The total kernel overhead for the privilege system is remarkably small:
+</p>
+
+<div class="diagram">
+  <span class="label">Phase 6 Kernel Overhead</span>
+
+  Component               Size
+  ---------               ----
+  TCB extension            32 bytes  (1 bool + padding, per thread)
+  SVC_Handler asm          80 bytes  (number extraction + dispatch call)
+  PendSV CONTROL update    20 bytes  (load, compare, write, ISB)
+  svcDispatch() C++       500 bytes  (switch table, 23 cases)
+  g_inSyscall flag          4 bytes  (1 volatile bool + alignment)
+  ---------               ----
+  Total:                  ~650 bytes
+</div>
+
+<p>
+Six hundred and fifty bytes. That is the cost of a complete hardware-
+enforced privilege boundary with 24 system calls, dual-mode operation,
+and ISR-context disambiguation. On a chip with a megabyte of flash, it
+is invisible. On a chip with 64 KB, it would still be worth every byte.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 6:</strong> ms-os enforces a hardware privilege
+boundary. Unprivileged threads use SVC for all kernel services. The MPU
+prevents unauthorized access to kernel memory, peripherals, and other
+threads' stacks. 24 system calls cover the full kernel API. The
+<code>g_inSyscall</code> flag distinguishes SVC dispatch from true ISR
+context, enabling blocking syscalls to work correctly from Handler mode.
+297 host tests passing, all existing tests unmodified.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 8                                -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch06-ipc.html">&lt; Chapter 6: Talking Between Threads</a>
+    <a href="ch08-device-tree.html">Chapter 8: Describing the Hardware &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debugging Playbook -- ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Home</span>
+    <div class="header-nav">
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Sections</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html" class="current">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html" class="current">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+  <div class="landing-hero">
+    <h1 class="landing-title">Debugging Playbook</h1>
+    <p class="landing-subtitle">JTAG, GDB, crash dumps, and hard-won lessons from bare-metal debugging</p>
+  </div>
+
+  <div class="doc-areas">
+    <a href="../saga/index.html" class="doc-area-card">
+      <h3>The Story of ms-os</h3>
+      <p>The technical narrative from Phase 0 through board-to-board testing.</p>
+    </a>
+    <a href="../architecture/index.html" class="doc-area-card">
+      <h3>Architecture Guide</h3>
+      <p>Memory maps, boot sequence, threads, context switch, IPC, and register reference.</p>
+    </a>
+  </div>
+
+  <h2>Sections</h2>
+
+  <div class="chapter-timeline">
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 1</div>
+      <div class="timeline-chapter-title"><a href="sec01-jtag-setup.html">JTAG and Debug Setup</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 2</div>
+      <div class="timeline-chapter-title"><a href="sec02-gdb-cookbook.html">GDB Session Cookbook</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 3</div>
+      <div class="timeline-chapter-title"><a href="sec03-crash-dumps.html">Crash Dump Interpretation</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 4</div>
+      <div class="timeline-chapter-title"><a href="sec04-bug-hunts.html">Real Bug Hunts</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 5</div>
+      <div class="timeline-chapter-title"><a href="sec05-openocd.html">OpenOCD TCL Scripts</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 6</div>
+      <div class="timeline-chapter-title"><a href="sec06-serial.html">Serial Port Debugging</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 7</div>
+      <div class="timeline-chapter-title"><a href="sec07-toolchain.html">Toolchain Quick Reference</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

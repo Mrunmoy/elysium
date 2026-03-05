@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 6: IPC -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 6 -- IPC</span>
+    <div class="header-nav">
+      <a href="sec05-scheduler.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html" class="current">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec07-syscall.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html" class="current">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 6</span>
+  IPC Message Passing
+</h2>
+
+<div class="epigraph">
+  "In a microkernel, everything that is not the scheduler is a message."
+  <div class="attribution">&mdash; Andrew S. Tanenbaum, on Minix</div>
+</div>
+
+<p>ms-os implements a <strong>per-thread mailbox model</strong> inspired by Minix. Each thread has a statically allocated mailbox with a 4-slot ring buffer of 64-byte messages. No heap allocation is required for IPC.</p>
+
+<h3>Message Structure (64 bytes)</h3>
+
+<div class="diagram">
+<span class="label">kernel::Message</span>    sizeof = 64 bytes (static_assert enforced)
+
+Offset  Field          Size   Description
+------  -----------    -----  -----------------------------------
+  0     sender          1B    Source thread ID (filled by kernel)
+  1     type            1B    Request / Reply / Notify / OneWay
+  2     methodId        2B    Service method identifier
+  4     serviceId       4B    FNV-1a hash of service name
+  8     status          4B    Return code (for replies)
+ 12     payloadSize     2B    Bytes of payload used (0-48)
+ 14     reserved        2B    Padding for alignment
+ 16     payload[48]    48B    Inline data (no heap allocation)
+------
+ 64     (total)
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> 64 bytes per message was chosen to balance between fitting common RPC payloads inline (48 bytes of payload covers most small structs and arrays) and keeping the per-thread mailbox overhead manageable. With 4 slots per thread and 8 threads: 8 * 4 * 64 = 2048 bytes total mailbox memory.
+</div>
+
+<h3>Synchronous RPC Flow</h3>
+
+<p>The primary IPC pattern is synchronous send/receive/reply, identical to the Minix model. The client blocks until the server processes the request and sends a reply.</p>
+
+<div class="diagram">
+<span class="label">Client Thread</span>                            <span class="label">Server Thread</span>
+     |                                       |
+     |  messageSend(server, &amp;msg, &amp;reply)    |
+     |---- msg enqueued in server mailbox -->|
+     |  [client state = <span class="label">Blocked</span>]            |
+     |  [blockReason = Reply]                |
+     |                                  messageReceive(&amp;msg)
+     |                                       |-- dequeues msg
+     |                                       |-- processes request
+     |                                       |
+     |                                  messageReply(client, &amp;reply)
+     |<---- reply written to replySlot ------|
+     |  [client state = <span class="label">Ready</span>]              |
+     |  [client wakes, reads reply]          |
+     v                                       v
+</div>
+
+<h3>Non-Blocking Variants</h3>
+
+<table>
+  <tr><th>Function</th><th>Blocks?</th><th>Returns on failure</th></tr>
+  <tr><td><code>messageSend()</code></td><td>Yes (until reply)</td><td>N/A</td></tr>
+  <tr><td><code>messageReceive()</code></td><td>Yes (until message)</td><td>N/A</td></tr>
+  <tr><td><code>messageReply()</code></td><td>No</td><td><code>kIpcErrInvalid</code></td></tr>
+  <tr><td><code>messageTrySend()</code></td><td>No</td><td><code>kIpcErrFull</code></td></tr>
+  <tr><td><code>messageTryReceive()</code></td><td>No</td><td><code>kIpcErrEmpty</code></td></tr>
+</table>
+
+<h3>Async Notifications</h3>
+
+<p>Each thread has a 32-bit notification bitmask. <code>messageNotify()</code> performs an atomic OR on the destination's bitmask -- this is <strong>ISR-safe</strong> (no blocking, no memory allocation). <code>messageCheckNotify()</code> reads and clears the bitmask atomically.</p>
+
+<div class="diagram">
+<span class="label">Notification Bitmask</span> (32 bits per thread)
+
+ISR or Thread:   messageNotify(dest, 0x05)     <span class="comment">// set bits 0 and 2</span>
+                      |
+                      v
+  notifyBits:    ... 0 0 0 0 0 1 0 1           <span class="comment">// atomic OR</span>
+
+Dest Thread:     bits = messageCheckNotify()    <span class="comment">// returns 0x05</span>
+                      |
+                      v
+  notifyBits:    ... 0 0 0 0 0 0 0 0           <span class="comment">// cleared to zero</span>
+</div>
+
+<h3>Mailbox Structure</h3>
+
+<div class="diagram">
+<span class="label">ThreadMailbox</span> (per thread, statically allocated)
+
+  +---+---+---+---+
+  | 0 | 1 | 2 | 3 |   slots[4] -- ring buffer of Message (64B each)
+  +---+---+---+---+
+    ^           ^
+    head        tail       head = read index, tail = write index
+                           count = number of pending messages
+
+  notifyBits:       uint32_t    async notification bitmask
+  senderWaitHead:   ThreadId    list of threads blocked trying to send
+  receiverWaitHead: ThreadId    thread blocked on receive
+  blockReason:      IpcBlockReason   why owning thread is blocked
+  replySlot:        Message*    where to write reply for send
+
+<span class="comment">Memory budget: 8 mailboxes * (4 * 64B + overhead) = ~2.2 KB</span>
+<span class="comment">              + ~1.2 KB IPC code = ~3.4 KB total IPC overhead</span>
+</div>
+
+<h3>IDL Code Generator</h3>
+
+<p>The <code>ipcgen</code> tool generates typed client stubs and server dispatch loops from IDL interface definitions. Generated servers use a <code>messageReceive -> switch(methodId) -> handleXxx -> messageReply</code> pattern. Each method includes a <code>static_assert</code> to catch payload overflow at compile time.</p>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 7: SYSCALL INTERFACE                                 -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec05-scheduler.html">&lt; Section 5: Scheduler</a>
+    <a href="sec07-syscall.html">Section 7: Syscall &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

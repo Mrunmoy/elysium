@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 7: Syscall -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 7 -- Syscall</span>
+    <div class="header-nav">
+      <a href="sec06-ipc.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html" class="current">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec08-device-tree.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html" class="current">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 7</span>
+  Syscall Interface
+</h2>
+
+<div class="epigraph">
+  "The SVC instruction is the door between user space and the kernel."
+  <div class="attribution">&mdash; ARM Cortex-M Programming Guide</div>
+</div>
+
+<p>Unprivileged threads cannot call kernel APIs directly -- the MPU prevents access to kernel memory, and executing privileged instructions would trigger a UsageFault. Instead, they execute <code>SVC #N</code>, which traps to handler mode where the kernel has full access.</p>
+
+<h3>SVC Dispatch Flow (Cortex-M)</h3>
+
+<div class="diagram">
+<span class="label">Unprivileged Thread</span>
+  |
+  |  svc #N                       trap to handler mode
+  |
+  v
+<span class="label">SVC_Handler</span> (assembly, handler mode)
+  |
+  |  1. tst lr, #4                <span class="comment">which stack pointer? (MSP or PSP)</span>
+  |     ite eq
+  |     mrseq r0, msp
+  |     mrsne r0, psp             <span class="comment">r0 = exception frame pointer</span>
+  |
+  |  2. ldr r1, [r0, #24]         <span class="comment">stacked PC (return address)</span>
+  |     ldrb r1, [r1, #-2]        <span class="comment">extract SVC number from instruction</span>
+  |
+  |  3. cmp r1, #0                <span class="comment">SVC 0 = startFirstThread (special)</span>
+  |     beq startFirstThread
+  |
+  |  4. push {r0, lr}             <span class="comment">save frame pointer and EXC_RETURN</span>
+  |     bl svcDispatch             <span class="comment">C++ dispatch: svcDispatch(svcNum, r0-r3)</span>
+  |     pop {r1, lr}
+  |
+  |  5. str r0, [r1, #0]          <span class="comment">write return value to stacked r0</span>
+  |
+  |  6. bx lr                     <span class="comment">return to thread (EXC_RETURN)</span>
+  |
+  v
+<span class="label">Thread resumes</span> (return value in r0)
+</div>
+
+<h3>Syscall Number Table</h3>
+
+<table>
+  <tr><th>SVC#</th><th>Name</th><th>Args (r0-r3)</th><th>Returns</th></tr>
+  <tr><td>0</td><td>startFirstThread</td><td>--</td><td>(does not return)</td></tr>
+  <tr><td>1</td><td>yield</td><td>--</td><td>void</td></tr>
+  <tr><td>2</td><td>sleep</td><td>ticks</td><td>void</td></tr>
+  <tr><td>3</td><td>tickCount</td><td>--</td><td>uint32_t</td></tr>
+  <tr><td>4</td><td>mutexCreate</td><td>name_ptr</td><td>MutexId</td></tr>
+  <tr><td>5</td><td>mutexDestroy</td><td>id</td><td>void</td></tr>
+  <tr><td>6</td><td>mutexLock</td><td>id</td><td>bool</td></tr>
+  <tr><td>7</td><td>mutexTryLock</td><td>id</td><td>bool</td></tr>
+  <tr><td>8</td><td>mutexUnlock</td><td>id</td><td>bool</td></tr>
+  <tr><td>9</td><td>semaphoreCreate</td><td>init, max, name</td><td>SemaphoreId</td></tr>
+  <tr><td>10</td><td>semaphoreDestroy</td><td>id</td><td>void</td></tr>
+  <tr><td>11</td><td>semaphoreWait</td><td>id</td><td>bool</td></tr>
+  <tr><td>12</td><td>semaphoreTryWait</td><td>id</td><td>bool</td></tr>
+  <tr><td>13</td><td>semaphoreSignal</td><td>id</td><td>bool</td></tr>
+  <tr><td>14</td><td>messageSend</td><td>dest, msg_ptr, reply_ptr</td><td>int32_t</td></tr>
+  <tr><td>15</td><td>messageReceive</td><td>msg_ptr</td><td>int32_t</td></tr>
+  <tr><td>16</td><td>messageReply</td><td>dest, reply_ptr</td><td>int32_t</td></tr>
+  <tr><td>17</td><td>messageTrySend</td><td>dest, msg_ptr</td><td>int32_t</td></tr>
+  <tr><td>18</td><td>messageTryReceive</td><td>msg_ptr</td><td>int32_t</td></tr>
+  <tr><td>19</td><td>messageNotify</td><td>dest, bits</td><td>int32_t</td></tr>
+  <tr><td>20</td><td>messageCheckNotify</td><td>--</td><td>uint32_t</td></tr>
+  <tr><td>21</td><td>heapAlloc</td><td>size</td><td>void*</td></tr>
+  <tr><td>22</td><td>heapFree</td><td>ptr</td><td>void</td></tr>
+  <tr><td>23</td><td>heapGetStats</td><td>stats_ptr</td><td>void</td></tr>
+</table>
+
+<h3>CONTROL Register</h3>
+
+<p>The Cortex-M CONTROL register determines thread privilege level and stack pointer selection. PendSV updates CONTROL on every context switch based on the incoming thread's <code>privileged</code> flag.</p>
+
+<div class="diagram">
+<span class="label">CONTROL Register</span> (2 bits used)
+
+  Bit 1 (SPSEL):  0 = MSP,  1 = PSP
+  Bit 0 (nPRIV):  0 = Privileged,  1 = Unprivileged
+
+  <span class="label">Privileged thread:</span>    CONTROL = 0b10  (SPSEL=1, nPRIV=0)
+  <span class="label">Unprivileged thread:</span>  CONTROL = 0b11  (SPSEL=1, nPRIV=1)
+  <span class="label">Handler mode:</span>         Always privileged, always MSP
+</div>
+
+<h3>The g_inSyscall Flag</h3>
+
+<p>A subtle problem arises because kernel functions like <code>sleep()</code> and <code>messageSend()</code> check <code>inIsrContext()</code> and early-return if true -- they are designed to never block from an ISR. But the SVC handler <em>runs in handler mode</em>, so <code>VECTACTIVE != 0</code>, making <code>inIsrContext()</code> return true even though the caller is a thread that should be allowed to block.</p>
+
+<div class="key-decision">
+  <strong>Solution:</strong> <code>svcDispatch()</code> sets a global <code>g_inSyscall</code> flag to <code>true</code> before calling any kernel function, and clears it after. <code>inIsrContext()</code> checks this flag first: if <code>g_inSyscall</code> is true, it returns false (meaning "not in ISR, safe to block"), even though the hardware says otherwise.
+</div>
+
+<h3>User-Space Wrappers</h3>
+
+<p>The <code>kernel::user</code> namespace (<code>kernel/inc/kernel/Syscall.h</code>) provides inline wrappers that issue the SVC instruction with the correct syscall number and register constraints on ARM targets. On the host (x86, for testing), these same wrappers are <code>#else</code> implementations that call the kernel APIs directly.</p>
+
+<pre>
+<span class="cmt">// ARM target: inline SVC</span>
+<span class="kw">inline</span> <span class="kw">void</span> <span class="fn">sleep</span>(std::uint32_t ticks)
+{
+    <span class="kw">register</span> std::uint32_t r0 <span class="kw">__asm</span>(<span class="str">"r0"</span>) = ticks;
+    <span class="kw">__asm volatile</span>(<span class="str">"svc %1"</span> : <span class="str">"+r"</span>(r0) : <span class="str">"I"</span>(syscall::kSleep) : <span class="str">"memory"</span>);
+}
+
+<span class="cmt">// Host target: direct call</span>
+<span class="kw">inline</span> <span class="kw">void</span> <span class="fn">sleep</span>(std::uint32_t ticks) { kernel::<span class="fn">sleep</span>(ticks); }
+</pre>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 8: DEVICE TREE                                       -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec06-ipc.html">&lt; Section 6: IPC</a>
+    <a href="sec08-device-tree.html">Section 8: Device Tree &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

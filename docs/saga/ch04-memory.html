@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 4: Guarding Memory -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 4 -- Guarding Memory</span>
+    <div class="header-nav">
+      <a href="ch03-scheduling.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html" class="current">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch05-multi-target.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html" class="current">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 4</span>
+  Guarding Memory
+</h2>
+
+<h4>Phase 3: Block Pool, Heap, and the MPU</h4>
+
+<p>
+With scheduling working, the next challenge was memory management.
+An RTOS needs two things: fast, deterministic allocation for kernel objects,
+and flexible allocation for user applications. Phase 3 delivered both,
+plus hardware memory protection.
+</p>
+
+<h3>The Block Pool: O(1) Fixed-Size Allocation</h3>
+
+<p>
+For kernel-internal objects (TCBs, message buffers, timer blocks), we need
+allocation that is <strong>deterministic</strong> and <strong>ISR-safe</strong>.
+The Block Pool provides this through an embedded free-list:
+</p>
+
+<div class="diagram">
+  <span class="label">Block Pool (embedded free-list)</span>
+
+  freeHead
+     |
+     v
+  +------+    +------+    +------+    +------+
+  | next-+--->| next-+--->| next-+--->| NULL |
+  |      |    |      |    |      |    |      |
+  | 32B  |    | 32B  |    | 32B  |    | 32B  |
+  +------+    +------+    +------+    +------+
+
+  allocate(): pop head      <span class="comment">--> O(1)</span>
+  free(ptr):  push to head  <span class="comment">--> O(1)</span>
+
+  Each free block stores the "next" pointer in its own memory.
+  No separate metadata table needed.
+</div>
+
+<p>
+The minimum block size is <code>sizeof(void*)</code> (4 bytes on ARM), since
+each free block must hold the next pointer. The <code>free()</code> function
+validates bounds and alignment before accepting a pointer back.
+</p>
+
+<h3>The Heap: First-Fit with Coalescing</h3>
+
+<p>
+For user applications&mdash;<code>std::vector</code>, <code>std::unique_ptr</code>,
+<code>new</code>/<code>delete</code>&mdash;we built a variable-size heap allocator
+using the classic <strong>first-fit free-list with immediate coalescing</strong>:
+</p>
+
+<div class="diagram">
+  <span class="label">Heap Free List (address-sorted)</span>
+
+  sentinel                                          sentinel
+  (head)                                            (end)
+     |                                                 |
+     v                                                 v
+  +------+    +--------+    +--------+    +---------+  +------+
+  | sz=0 |    | sz=64  |    | sz=256 |    | sz=1024 |  | sz=0 |
+  | next-+--->| next  -+--->| next  -+--->| next   -+->| NULL |
+  +------+    | (free) |    | ALLOC  |    | (free)  |  +------+
+              +--------+    +--------+    +---------+
+              0x20001000    0x20001040    0x20001140
+
+  <span class="comment">Allocation: walk list, find first block >= size</span>
+  <span class="comment">Free: insert at correct address, merge with neighbors</span>
+</div>
+
+<p>
+The free list is kept <strong>sorted by address</strong>. This is the crucial
+insight: when freeing a block, we can check if the previous and next blocks
+in the list are physically adjacent. If so, we <strong>coalesce immediately</strong>,
+merging them into a single larger block. This prevents fragmentation from
+accumulating over time.
+</p>
+
+<div class="highlight">
+<strong>Block header:</strong> 8 bytes. Bit 0 of the size field doubles as the
+allocated/free flag. A sentinel block at the heap end (size=0, allocated)
+eliminates boundary checks during coalescing.
+</div>
+
+<h3>C++ Operator Overloads</h3>
+
+<p>
+To make the heap seamless for C++ applications, we override the global
+<code>operator new</code> and <code>operator delete</code> to route through
+our heap. A <code>_sbrk</code> stub prevents newlib's malloc from competing.
+This means standard C++ works naturally:
+</p>
+
+<pre>
+<span class="kw">auto</span> vec = <span class="kw">std::make_unique</span>&lt;std::vector&lt;<span class="kw">int</span>&gt;&gt;();
+vec-&gt;push_back(<span class="num">42</span>);  <span class="cmt">// Allocates from kernel heap</span>
+<span class="cmt">// vec automatically freed when unique_ptr goes out of scope</span>
+</pre>
+
+<h3>The MPU: Hardware-Enforced Boundaries</h3>
+
+<p>
+The ARMv7-M Memory Protection Unit provides hardware enforcement of memory
+access rules. We configure 6 of the 8 available regions:
+</p>
+
+<div class="diagram">
+  <span class="label">MPU Region Map</span>
+
+  Region 0: FLASH (0x08000000)      [Priv+Unpriv RO] [Execute OK]
+  Region 1: Kernel SRAM (0x20000000) [Priv RW only]   [No Execute]
+  Region 2: Peripherals (0x40000000) [Priv RW only]   [No Execute]
+  Region 3: System (0xE0000000)      [Priv RW only]   [No Execute]
+  Region 4: Thread Stack (dynamic)   [Full Access]    [No Execute]
+  Region 5: Heap (from linker)       [Full Access]    [No Execute]
+
+  Region 4 is updated on every context switch.
+  RBAR/RASR pre-computed in TCB for speed.
+</div>
+
+<div class="key-decision">
+<strong>Key Decision:</strong> <code>PRIVDEFENA = 1</code> (privileged default
+map enabled). All threads currently run in privileged mode with default
+memory access. The MPU primarily protects against wild pointer writes
+and code execution from data regions. Full unprivileged thread isolation
+is deferred to a future phase.
+</div>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 5                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch03-scheduling.html">&lt; Chapter 3: Teaching the OS to Multitask</a>
+    <a href="ch05-multi-target.html">Chapter 5: New Horizons: The PYNQ-Z2 &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

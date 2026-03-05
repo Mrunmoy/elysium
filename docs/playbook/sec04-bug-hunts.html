@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 4: Real Bug Hunts -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 4 -- Real Bug Hunts</span>
+    <div class="header-nav">
+      <a href="sec03-crash-dumps.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html" class="current">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <a href="sec05-openocd.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html" class="current">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 4</span>Real Bug Hunts</h2>
+
+<p>
+These are actual bugs encountered during ms-os development. Each is presented as
+a detective story: what we saw, what we tried, what we found, and what we learned.
+Every command shown was actually executed; every output is real.
+</p>
+
+
+<h3 id="register-ghost">4.1 The Register Ghost (Phase 4B)</h3>
+
+<p><strong>Symptom:</strong> The PYNQ-Z2 threads application appeared to work --
+LEDs toggled, UART printed. But the counter thread printed a counter value stuck
+at 4,176,478,465. The counter should have been incrementing from zero.</p>
+
+<h4>Investigation</h4>
+
+<p>
+A counter stuck at a specific large value is unusual. Counters overflow, get
+stuck at zero, or increment correctly. They do not normally jump to a precise
+large number. The first instinct was to check the hex representation:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3
+<span class="output">&gt;&gt;&gt;</span> <span class="prompt">hex(4176478465)</span>
+<span class="output">'0xf8f00101'</span></div>
+
+<div class="highlight">
+<strong>Key insight:</strong> <code>0xF8F00100</code> is the GIC CPU Interface base
+address on the Zynq-7020. The <code>01</code> at the end is the IAR (Interrupt
+Acknowledge Register) offset. The counter variable lived in register r4. Something
+was writing the GIC base address into r4 -- a register that belonged to the
+interrupted thread.
+</div>
+
+<p>
+The IRQ handler on Cortex-A9 needs to read the GIC CPU Interface to acknowledge
+the interrupt. The original code loaded the GIC base address into r4 and the
+interrupt ID into r5 -- both callee-saved registers -- <em>before</em> the
+context switch code saved {r4-r11} to the stack.
+</p>
+
+<div class="diagram"><span class="label">IRQ Handler (buggy version):</span>
+
+  sub   lr, lr, #4            <span class="comment">; adjust return address</span>
+  srsdb sp!, #0x12            <span class="comment">; save LR_irq + SPSR_irq to IRQ stack</span>
+  <span class="label">ldr   r4, =0xF8F00100</span>       <span class="comment">; &lt;-- OVERWRITES thread's r4!</span>
+  <span class="label">ldr   r5, [r4, #0xC]</span>        <span class="comment">; &lt;-- OVERWRITES thread's r5!</span>
+  ...                          <span class="comment">; context switch pushes {r4-r11} -- too late</span></div>
+
+<h4>Root Cause</h4>
+
+<p>
+On ARM, registers r4-r11 are callee-saved. The IRQ handler interrupts the current
+thread at an arbitrary point. Until the context switch saves {r4-r11} to the
+thread's stack, those registers belong to the interrupted thread. Writing to r4
+before the save destroys the thread's r4 value.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Use only r0-r3 (caller-saved / scratch registers) and the stack for GIC access
+in the IRQ handler, before the context switch saves r4-r11:
+</p>
+
+<pre><span class="cmt">; Read GIC IAR using only scratch registers</span>
+<span class="kw">ldr</span>   r0, =<span class="num">0xF8F00100</span>       <span class="cmt">; GIC CPU Interface base</span>
+<span class="kw">ldr</span>   r1, [r0, #<span class="num">0xC</span>]        <span class="cmt">; read IAR (interrupt ID)</span>
+<span class="kw">push</span>  {r0, r1}               <span class="cmt">; save to IRQ stack</span>
+<span class="cmt">; ... context switch saves {r4-r11} here ...</span>
+<span class="kw">pop</span>   {r0, r1}               <span class="cmt">; restore GIC base + interrupt ID</span></pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> In an interrupt handler, you do not own any callee-saved
+registers until you have saved them. On ARM, that means r4-r11 are off-limits
+until {r4-r11} has been pushed. Use r0-r3 and the stack. This applies to both
+Cortex-M (in PendSV/SysTick handlers) and Cortex-A (in IRQ/FIQ handlers).
+</div>
+
+
+<h3 id="uart-silence">4.2 The UART Silence (Phase 4A)</h3>
+
+<p><strong>Symptom:</strong> First PYNQ-Z2 bringup. Firmware loaded via JTAG.
+No serial output whatsoever. The terminal connected to <code>/dev/ttyUSB2</code>
+showed nothing.</p>
+
+<h4>Investigation</h4>
+
+<p>
+Step 1: Verify the hardware works. OpenOCD can write directly to UART registers.
+The Zynq PS UART0 TX FIFO is at <code>0xE0000030</code>:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>mww 0xE0000030 0x54
+<span class="output">(no output from OpenOCD -- but 'T' appeared on the serial terminal)</span></div>
+
+<p>
+The character appeared. Hardware works. The problem is in the driver.
+</p>
+
+<p>
+Step 2: Read back the UART control register. The Cadence UART Control Register
+is at <code>0xE0000000</code>:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>mdw 0xE0000000
+<span class="output">0xe0000000: 00000128</span></div>
+
+<p>
+Bit 8 (STARTBRK) was set. The STARTBRK bit forces a continuous break condition
+on the TX line -- the UART transmitter sends a steady low signal instead of
+data. No amount of writing to the TX FIFO will produce output while STARTBRK
+is active.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The UART driver's register bit definitions had STARTBRK at the wrong bit
+position. The initialization code thought it was setting a different bit but
+was actually asserting STARTBRK. The Cadence UART IP has a non-obvious
+register layout where bit positions differ from typical 16550-style UARTs.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Correct the register bit definitions. Clear STARTBRK and set STPBRK
+(Stop Break) during UART initialization. Verify each bit against the
+Zynq-7000 TRM (UG585), not by analogy with other UART IPs.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> When serial output is completely dead, test the hardware
+directly using the debugger. A single register write to the TX FIFO tells you
+instantly whether the problem is in hardware or software. This technique works
+on any UART: find the TX data register address and write an ASCII character.
+</div>
+
+
+<h3 id="l2-cache">4.3 The L2 Cache Catch-22 (Phase 4A)</h3>
+
+<p><strong>Symptom:</strong> After modifying the firmware and reloading via JTAG,
+the old code runs instead of the new code. Even <code>monitor reset halt</code>
+followed by a fresh <code>load_image</code> does not help. The board executes
+the previous binary.</p>
+
+<h4>Investigation</h4>
+
+<p>
+Step 1: Verify the load. Read back memory at the load address:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>halt
+<span class="prompt">&gt; </span>load_image build/app/hello/hello 0x00100000
+<span class="output">28672 bytes written at address 0x00100000</span>
+<span class="prompt">&gt; </span>mdw 0x00100000 4
+<span class="output">0x00100000: e3a00000 e3a01000 e3a02000 e3a03000</span></div>
+
+<p>
+The new binary is in DDR at the correct address. But when we resume, the
+CPU executes different instructions. The data in DDR is correct, but the CPU
+is not reading from DDR.
+</p>
+
+<p>
+Step 2: The Zynq-7020 has a PL310 L2 cache controller. After JTAG writes to DDR,
+the L2 cache still contains the old binary. The CPU reads from L2, not from DDR.
+</p>
+
+<div class="diagram"><span class="label">The problem:</span>
+
+  +-------+     +----------+     +-------+
+  | CPU   | --&gt; | L2 Cache | --&gt; |  DDR  |
+  +-------+     +----------+     +-------+
+                  old code         new code
+                  (cached)         (JTAG wrote)
+
+  CPU reads L2 = old code. JTAG writes DDR = new code.
+  They never see each other.</div>
+
+<h4>Root Cause</h4>
+
+<p>
+JTAG writes go directly to DDR, bypassing the cache hierarchy. The L2 cache
+(PL310 at <code>0xF8F02000</code>) retains stale data from the previous load.
+The CPU's instruction and data caches are also stale. A simple CPU reset does
+not invalidate the L2 cache.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Invalidate both L2 and L1 caches before loading new firmware. This requires
+a TCL script for OpenOCD (see <a href="#openocd-scripts">Section 5</a> for the
+full annotated script).
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> On cached systems (Cortex-A, Cortex-R), JTAG writes bypass
+the cache. You must invalidate caches before loading new code. This problem does
+not exist on Cortex-M because the STM32 FLASH interface does not have an L2 cache
+between it and the CPU (the ART Accelerator is invalidated on FLASH erase).
+</div>
+
+
+<h3 id="isr-early-return">4.4 The ISR Early-Return Bug (Phase 6)</h3>
+
+<p><strong>Symptom:</strong> The unprivileged echo-client thread sends IPC messages
+to the server thread via the SVC syscall interface. The <code>messageSend()</code>
+call returns <code>kIpcErrInIsr</code>. There is no crash, no fault, no crash dump.
+The echo-client simply receives an error code and falls silent.</p>
+
+<h4>Investigation, Step 1: What is the error?</h4>
+
+<p>
+The IPC error code <code>kIpcErrInIsr</code> means "cannot perform blocking IPC
+in ISR context." But the echo-client is a thread, not an ISR. Threads should be
+able to call blocking IPC. Something is confused about the execution context.
+</p>
+
+<h4>Investigation, Step 2: Trace the call chain</h4>
+
+<p>
+The echo-client is unprivileged, so it cannot call kernel functions directly.
+It uses an SVC instruction to trap into the kernel. Let us trace the full
+call chain:
+</p>
+
+<div class="diagram"><span class="label">echo-cli thread</span> (unprivileged, Thread mode, PSP)
+  |
+  <span class="label">svc #14</span>                        <span class="comment">// kMessageSend syscall</span>
+  |
+  v
+<span class="label">SVC_Handler</span> (Handler mode, MSP, VECTACTIVE = 11)
+  |
+  svcDispatch(14, frame)
+    |
+    kernel::messageSend(dest, msg, reply)
+      |
+      <span class="label">arch::inIsrContext()</span>
+        |
+        SCB-&gt;ICSR &amp; 0x1FF  =  <span class="label">11</span>  (SVCall exception number)
+        return <span class="label">true</span>              <span class="comment">// &lt;-- BUG</span>
+      |
+      "Cannot block in ISR context"
+      return kIpcErrInIsr</div>
+
+<p>
+There it is. <code>inIsrContext()</code> reads the ICSR register's VECTACTIVE
+field. When the SVC handler is running, VECTACTIVE is 11 (the SVCall exception
+number). The function sees a nonzero value and correctly concludes "we are in
+an exception handler." It returns <code>true</code>.
+</p>
+
+<p>
+But this is wrong. The SVC handler is technically an exception handler, but
+<em>semantically</em> it is the kernel acting on behalf of a thread. When a
+thread asks the kernel to send a message via SVC, the kernel should block the
+thread and switch to the receiver -- exactly as if the kernel function had been
+called directly. The "no blocking in ISR" rule exists to prevent deadlocks when
+a real hardware ISR (SysTick, UART, GPIO) tries to block. The SVC handler is
+not a real ISR in that sense.
+</p>
+
+<h4>Investigation, Step 3: Verify the theory</h4>
+
+<p>
+Add a debug print inside <code>inIsrContext()</code> (temporarily, for diagnosis):
+</p>
+
+<pre><span class="kw">bool</span> <span class="fn">inIsrContext</span>()
+{
+    <span class="kw">auto</span> vectactive = reg(kScbIcsr) &amp; <span class="num">0x1FF</span>u;
+    <span class="cmt">// Debug: print VECTACTIVE to serial</span>
+    <span class="kw">if</span> (vectactive != <span class="num">0</span>)
+    {
+        <span class="cmt">// Output: "VECTACTIVE=11" -- confirmed SVCall</span>
+    }
+    <span class="kw">return</span> vectactive != <span class="num">0</span>;
+}</pre>
+
+<p>
+Confirmed: every call to <code>kernel::messageSend()</code>,
+<code>kernel::sleep()</code>, <code>kernel::mutexLock()</code>, and
+<code>kernel::semaphoreWait()</code> from within <code>svcDispatch()</code>
+sees VECTACTIVE=11 and refuses to block.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The SVC handler runs in ARM handler mode. The ICSR VECTACTIVE field is nonzero
+(value 11) whenever any exception handler is active. All kernel blocking
+functions check <code>arch::inIsrContext()</code> as a safety guard against
+blocking inside a real ISR (which would deadlock the system). But the SVC
+handler is acting on behalf of a thread, not responding to a hardware event.
+The safety guard was too broad.
+</p>
+
+<h4>Fix (3 lines in Arch.cpp + 2 lines in SvcDispatch.cpp)</h4>
+
+<p>In <code>kernel/src/arch/cortex-m4/Arch.cpp</code>:</p>
+
+<pre><span class="cmt">// Syscall flag: set by svcDispatch to indicate that kernel functions</span>
+<span class="cmt">// (sleep, messageSend, etc.) should treat this as thread context, not ISR.</span>
+<span class="kw">volatile bool</span> g_inSyscall = <span class="kw">false</span>;
+
+<span class="kw">bool</span> <span class="fn">inIsrContext</span>()
+{
+    <span class="cmt">// During SVC dispatch, we are in handler mode but semantically acting</span>
+    <span class="cmt">// on behalf of a thread. Return false so kernel functions can block.</span>
+    <span class="kw">if</span> (g_inSyscall)
+    {
+        <span class="kw">return false</span>;
+    }
+
+    <span class="cmt">// ICSR bits 8:0 (VECTACTIVE) hold the active exception number.</span>
+    <span class="cmt">// Non-zero means we are in an exception handler.</span>
+    <span class="kw">return</span> (reg(kScbIcsr) &amp; <span class="num">0x1FF</span>u) != <span class="num">0</span>;
+}</pre>
+
+<p>In <code>kernel/src/core/SvcDispatch.cpp</code>:</p>
+
+<pre><span class="kw">extern</span> <span class="str">"C"</span> std::uint32_t <span class="fn">svcDispatch</span>(std::uint8_t svcNum, std::uint32_t *frame)
+{
+    kernel::g_inSyscall = <span class="kw">true</span>;     <span class="cmt">// &lt;-- allow blocking</span>
+
+    <span class="cmt">// ... dispatch switch statement ...</span>
+
+    kernel::g_inSyscall = <span class="kw">false</span>;    <span class="cmt">// &lt;-- restore</span>
+    <span class="kw">return</span> result;
+}</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> The SVC handler is technically an ISR. But semantically it
+is the kernel acting on behalf of a thread. The distinction matters because
+blocking operations are forbidden in ISR context (they would deadlock the
+system, since ISRs preempt everything and cannot be preempted themselves). But
+SVC dispatch is different: the thread that issued the SVC is already suspended
+on the exception stack frame. The kernel can safely block it, switch to another
+thread, and resume the caller later via PendSV. A single boolean flag bridges
+the gap between the hardware reality (handler mode) and the software semantics
+(thread context).
+</div>
+
+
+<h3 id="daccviol">4.5 The DACCVIOL Wall (Phase 6)</h3>
+
+<p><strong>Symptom:</strong> Crash dump on the serial console. The unprivileged
+echo-client thread triggers a MemManage fault.</p>
+
+<div class="cmd-session"><span class="output">=== CRASH DUMP BEGIN ===
+Fault: MemManage
+Thread: echo-cli (id=3)
+Registers:
+  PC  : 08002F10
+  LR  : 08002EE4
+  SP  : 20003FB0
+  R0  : 00000000
+  ...
+Fault Status:
+  CFSR : 00000082
+  HFSR : 00000000
+  MMFAR: 20000104
+  BFAR : 00000000
+Decoded:
+  -&gt; DACCVIOL: Data access violation
+  -&gt; MMARVALID: MMFAR = 20000104
+=== CRASH DUMP END ===</span></div>
+
+<h4>Investigation</h4>
+
+<p>
+CFSR = <code>0x00000082</code>: that is <code>DACCVIOL</code> (bit 1) +
+<code>MMARVALID</code> (bit 7). The faulting address is in MMFAR:
+<code>0x20000104</code>.
+</p>
+
+<p>
+Where is <code>0x20000104</code>? It is in SRAM, in the <code>.bss</code> section.
+Run <code>nm</code> to find what lives there:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-nm build/app/ipc-demo/ipc-demo | sort | grep -A1 "20000100"
+<span class="output">20000100 B g_tickCount
+20000104 B g_serverTid</span></div>
+
+<p>
+Address <code>0x20000104</code> is the global variable <code>g_serverTid</code> --
+a <code>kernel::ThreadId</code> stored in <code>.bss</code>. The echo-client
+thread was trying to read the server's thread ID from this global.
+</p>
+
+<p>
+Why did it fault? The MPU configuration in ms-os sets Region 1 (SRAM,
+<code>0x20000000</code>) as <strong>privileged read-write only</strong>. No
+unprivileged access. The echo-client thread was created with
+<code>privileged=false</code>, so the MPU blocked its access to SRAM globals.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The echo-client function accessed a global variable:
+</p>
+
+<pre><span class="cmt">// Before (crashes):</span>
+<span class="kw">static</span> kernel::ThreadId g_serverTid;   <span class="cmt">// in .bss (SRAM, priv-only)</span>
+
+<span class="kw">void</span> <span class="fn">echoClientFunc</span>(<span class="kw">void</span> *)
+{
+    kernel::user::messageSend(<span class="kw">g_serverTid</span>, msg, &amp;reply);  <span class="cmt">// DACCVIOL!</span>
+}</pre>
+
+<p>
+Unprivileged threads in ms-os can only access: their own stack (MPU Region 4,
+per-thread), and the heap (MPU Region 5). Everything else in SRAM --
+<code>.bss</code>, <code>.data</code>, kernel state -- is behind the MPU wall.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Pass the server thread ID via the thread argument, which lives on the caller's
+stack (privileged) and is copied into the thread's r0 on first context switch:
+</p>
+
+<pre><span class="cmt">// After (works):</span>
+<span class="kw">void</span> <span class="fn">echoClientFunc</span>(<span class="kw">void</span> *arg)
+{
+    <span class="kw">auto</span> serverTid = <span class="kw">static_cast</span>&lt;kernel::ThreadId&gt;(
+        <span class="kw">reinterpret_cast</span>&lt;std::uintptr_t&gt;(arg));
+    kernel::user::messageSend(serverTid, msg, &amp;reply);  <span class="cmt">// works</span>
+}</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> Unprivileged threads live in a small world: their stack and
+the heap. Everything else -- global variables, kernel state, peripheral registers
+-- is behind the MPU wall. When moving a thread from privileged to unprivileged,
+audit every global access. The MMFAR register in the crash dump tells you exactly
+which address was denied, and <code>nm</code> tells you what symbol lives there.
+</div>
+
+
+<!-- ============================================================ -->
+<!--             BUG HUNT 4.6: THE VOLATILE DISCARD                  -->
+<!-- ============================================================ -->
+<h3 id="volatile-discard">4.6 The Volatile Discard (Phase 12)</h3>
+
+<p><strong>Symptom:</strong> I2C driver fails to compile on ARM GCC 12 with
+<code>-Werror</code>. The error message reads: "conversion to void will not
+access object of type 'volatile uint32_t'". The offending lines are register
+reads that exist solely for their side effects (clearing the ADDR flag by
+reading SR1 then SR2).</p>
+
+<h4>Investigation</h4>
+
+<p>
+The I2C ADDR flag on STM32 is cleared by a two-step read sequence: read SR1,
+then read SR2. The result of neither read is needed -- only the side effect
+matters (the hardware clears the flag when SR2 is read after SR1). The natural
+pattern is:
+</p>
+
+<pre>
+(<span class="kw">void</span>)reg(base + kSr1);   <span class="cmt">// read and discard</span>
+(<span class="kw">void</span>)reg(base + kSr2);   <span class="cmt">// read and discard -- ADDR cleared</span>
+</pre>
+
+<p>
+ARM GCC 12 with <code>-Werror</code> treats the cast-to-void of a volatile
+read as suspicious. The compiler cannot guarantee that the load instruction
+will be generated if the result is immediately discarded. This is technically
+implementation-defined behavior in C++17: whether a volatile read through a
+cast-to-void constitutes an access is up to the compiler.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+The C++ standard says that accessing a volatile object is a side effect, but
+<code>(void)expr</code> may allow the compiler to optimize away the access
+if the result is unused. ARM GCC 12 warns about this ambiguity. The previous
+solution to this problem (Phase 10, watchdog SR reads) had been lost in the
+implementation -- the same gotcha hit again.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+A <code>readDiscard()</code> helper that reads the volatile register into a
+volatile local variable. The volatile local forces the compiler to generate
+the load instruction (it must store the result), and then the local is cast
+to void (which is safe because locals are not volatile objects in the same
+sense as memory-mapped registers):
+</p>
+
+<pre>
+<span class="kw">static void</span> <span class="fn">readDiscard</span>(std::uint32_t addr)
+{
+    <span class="kw">volatile</span> std::uint32_t tmp =
+        *<span class="kw">reinterpret_cast</span>&lt;<span class="kw">volatile</span> std::uint32_t *&gt;(addr);
+    (<span class="kw">void</span>)tmp;
+}
+</pre>
+
+<p>
+Applied to all 8 register read-and-discard sites in I2c.cpp (4 in write,
+2 in read, 2 in writeRead -- each clearing the ADDR flag).
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> <code>(void)volatile_read</code> is not guaranteed to
+generate a load instruction on all compilers. When you need to read a volatile
+register solely for its side effect (flag clearing, bus synchronization),
+assign the result to a volatile local variable first. This is the only
+portable way to guarantee the read actually happens. Document the pattern
+in the project gotchas file so it does not have to be rediscovered.
+</div>
+
+<!-- ============================================================ -->
+<!--             BUG HUNT 4.7: THE SERIAL TIMING TRAP                -->
+<!-- ============================================================ -->
+<h3 id="serial-timing">4.7 The Serial Timing Trap (Phase 12)</h3>
+
+<p><strong>Symptom:</strong> Flashing the spi-demo and blinky apps to the
+STM32F407 via J-Link produces no serial output. The board resets, the LED
+blinks (for blinky), but the serial terminal shows nothing. The ipc-demo,
+however, works fine.</p>
+
+<h4>Investigation</h4>
+
+<p>
+The difference between the apps: ipc-demo runs a continuous kernel with
+threads that periodically print output. spi-demo and blinky are one-shot
+applications that print their output immediately at startup, then enter a
+WFI loop or spin forever.
+</p>
+
+<p>
+The debug sequence was: J-Link flash, J-Link reset, then open serial port
+with pyserial. By the time pyserial connects, the board has already printed
+its one-shot messages. The UART has no flow control, no buffering, and no
+retransmission. The bytes are gone.
+</p>
+
+<h4>Root Cause</h4>
+
+<p>
+Race condition between the serial port open and the board reset. The J-Link
+reset command causes the board to immediately begin executing from the reset
+vector. By the time the host opens the serial port (even milliseconds later),
+the startup messages have already been transmitted and lost.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Open the serial port <em>before</em> issuing the J-Link reset command.
+pyserial's <code>Serial()</code> constructor opens the port and begins
+buffering received data immediately. When the board resets and starts
+transmitting, the bytes are captured in the OS receive buffer rather than
+being lost.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> For one-shot applications that print output at startup
+and then go silent, always open the serial port before resetting the target.
+Continuous applications (kernel with threads) mask this timing issue because
+they keep producing output. When debugging startup behavior, the serial port
+must be ready before the first byte leaves the UART.
+</div>
+
+<!-- ============================================================ -->
+<!--             BUG HUNT 4.8: THE SNPRINTF LINKER BOMB              -->
+<!-- ============================================================ -->
+<h3 id="snprintf-linker">4.8 The snprintf Linker Bomb (Phase 12)</h3>
+
+<p><strong>Symptom:</strong> spi-demo fails to link with undefined reference to
+<code>end</code> when using <code>std::snprintf</code> for formatting the test
+summary.</p>
+
+<h4>Root Cause</h4>
+
+<p>
+newlib's snprintf (via nano.specs) pulls in the printf formatting machinery,
+which calls <code>malloc</code> for internal buffering, which calls
+<code>_sbrk</code>, which references the <code>end</code> linker symbol
+marking the end of the BSS segment. ms-os linker scripts do not define
+<code>end</code> because the kernel manages its own heap through the Heap
+allocator, not through the C library sbrk interface.
+</p>
+
+<h4>Fix</h4>
+
+<p>
+Replaced snprintf with direct character arithmetic. The pass/total counts
+are single-digit numbers:
+</p>
+
+<pre>
+<span class="kw">char</span> passChar = <span class="str">'0'</span> + <span class="kw">static_cast</span>&lt;<span class="kw">char</span>&gt;(pass);
+</pre>
+
+<p>
+No <code>&lt;cstdio&gt;</code> include, no printf machinery, no linker symbol
+dependencies. This pattern should be used in all freestanding applications
+that do not link against the full C library.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> In freestanding embedded environments with custom heap
+management, any use of C library formatting functions (printf, snprintf,
+sprintf) can pull in the entire malloc/sbrk chain. Audit includes carefully
+and prefer manual formatting for simple numeric output. The
+<code>-Wl,--trace</code> linker flag can help identify which object file
+introduced the unwanted dependency.
+</div>
+
+
+<!-- ============================================================ -->
+<!--             SECTION 5: OPENOCD TCL SCRIPTS                    -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec03-crash-dumps.html">&lt; Section 3: Crash Dump Interpretation</a>
+    <a href="sec05-openocd.html">Section 5: OpenOCD TCL Scripts &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

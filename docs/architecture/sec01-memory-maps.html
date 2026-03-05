@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 1: Memory Maps -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 1 -- Memory Maps</span>
+    <div class="header-nav">
+      <span class="nav-arrow disabled">&lt; Prev</span>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html" class="current">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec02-boot-sequence.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html" class="current">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 1</span>
+  Memory Maps
+</h2>
+
+<div class="epigraph">
+  "The memory map is the contract between software and silicon."
+  <div class="attribution">&mdash; ARM Architecture Reference Manual</div>
+</div>
+
+<p>ms-os targets three hardware platforms, each with a distinct address space layout. Every address, region size, and section placement documented here is drawn directly from the linker scripts, startup code, and MPU configuration in the codebase.</p>
+
+<h3>STM32F207ZGT6 (Cortex-M3, 120 MHz)</h3>
+
+<p>The primary development target. 1 MB FLASH, 128 KB SRAM, no CCM. The linker script (<code>startup/stm32f207zgt6/Linker.ld</code>) places sections as follows:</p>
+
+<div class="diagram">
+<span class="label">FLASH (1024K)</span>                            <span class="label">SRAM (128K)</span>
+0x08000000 +------------------+         0x20000000 +------------------+
+           | .isr_vector      |                    | .data            |
+           | (vector table)   |                    | (copied from     |
+           +------------------+                    |  FLASH at boot)  |
+           | .text            |                    +------------------+
+           | (program code)   |                    | .bss             |
+           |                  |                    | (zeroed at boot) |
+           +------------------+                    +------------------+
+           | .rodata          |                    |                  |
+           | (const data)     |                    |  (gap -- unused) |
+           +------------------+                    |                  |
+           | .ARM.extab       |                    +------------------+
+           | .ARM.exidx       |                    | .heap  (16K)     | <span class="comment">&lt;-- aligned 16K</span>
+           | (exception idx)  |                    | (grows upward)   |
+           +------------------+                    +------------------+
+           | .preinit_array   |                    | ._stack (4K)     |
+           | .init_array      |                    | (grows downward) |
+           | .fini_array      |                    | _estack at top   |
+           +------------------+         0x20020000 +------------------+
+           | .data (LMA)      |
+           | (init values     |
+           |  for SRAM copy)  |
+0x08100000 +------------------+
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The heap section is aligned to 16K in the linker script. This satisfies the MPU power-of-two alignment requirement, allowing the heap to occupy a single MPU region without wasting protection granularity.
+</div>
+
+<h3>STM32F407ZGT6 (Cortex-M4, 168 MHz)</h3>
+
+<p>Second Cortex-M target with identical FLASH/SRAM sizes but an additional 64K CCM (Core Coupled Memory) region. The Cortex-M4 also includes an FPU and DSP instructions.</p>
+
+<div class="diagram">
+<span class="label">CCM (64K)</span>                                 <span class="label">FLASH (1024K)</span>
+0x10000000 +------------------+         0x08000000 +------------------+
+           | (available but   |                    | .isr_vector      |
+           |  not currently   |                    | .text            |
+           |  used by ms-os)  |                    | .rodata          |
+0x10010000 +------------------+                    | .ARM.exidx       |
+                                                   | .init_array      |
+<span class="label">SRAM (128K)</span>                                  | .data (LMA)      |
+0x20000000 +------------------+         0x08100000 +------------------+
+           | .data / .bss     |
+           | .heap (16K)      |
+           | ._stack (4K)     |
+0x20020000 +------------------+
+
+<span class="comment">Clock: HSE 8 MHz, SYSCLK 168 MHz, APB1 42 MHz, APB2 84 MHz</span>
+<span class="comment">PWR VOS Scale 1 required before PLL at 168 MHz</span>
+<span class="comment">Note: F207 is Cortex-M3 (no FPU, no CCM, no PWR VOS)</span>
+</div>
+
+<h3>PYNQ-Z2 / Zynq-7020 (Dual Cortex-A9, 650 MHz)</h3>
+
+<p>The Zynq SoC combines dual Cortex-A9 cores with FPGA programmable logic. ms-os runs on CPU0 only; CPU1 is parked in a WFE loop (checked via MPIDR register). During development, we load firmware via JTAG (OpenOCD) directly into DDR. The Zynq BootROM and FSBL handle initial PLL and DDR controller setup; ms-os assumes clocks are already configured and simply sets the global clock variables.</p>
+
+<div class="diagram">
+<span class="label">DDR3 (512 MB)</span>
+0x00000000 +------------------+
+           | BootROM reserved |  <span class="comment">&lt;-- first 1 MB skipped</span>
+0x00100000 +------------------+
+           | .text            |  <span class="comment">&lt;-- ms-os load address</span>
+           | .rodata          |
+           | .data / .bss     |
+           | .heap            |
+           | mode stacks:     |
+           |   IRQ  (1K)      |
+           |   ABT  (1K)      |
+           |   FIQ  (1K)      |
+           |   UND  (1K)      |
+           |   SVC  (2K)      |
+           |   SYS  (4K)      |
+           +------------------+
+           |                  |
+           | (free DDR)       |
+           |                  |
+0x20000000 +------------------+
+
+<span class="label">PS Peripherals</span>
+0xE0000000  PS UART0           <span class="comment">(Cadence UART IP, FTDI on PYNQ)</span>
+0xE0001000  PS UART1
+0xF8000000  SLCR               <span class="comment">(unlock key: 0xDF0D at offset 0x008)</span>
+0xF8F00100  GIC CPU Interface  <span class="comment">(ICCIAR, ICCEOIR)</span>
+0xF8F00600  SCU Private Timer  <span class="comment">(replaces SysTick, PERIPHCLK = CPU/2)</span>
+0xF8F01000  GIC Distributor    <span class="comment">(ICDDCR, ICDISER)</span>
+</div>
+
+<div class="highlight">
+  <strong>PYNQ-Z2 LEDs</strong> are on the PL (FPGA fabric), not PS GPIO. The GPIO HAL is a no-op stub on this target. UART serial is on <code>/dev/ttyUSB2</code> at 115200 baud; JTAG uses <code>/dev/ttyUSB1</code>.
+</div>
+
+<h3>MPU Region Configuration (Cortex-M)</h3>
+
+<p>Six of eight available MPU regions are configured. Regions 4 and 5 are updated during each context switch to match the incoming thread's stack and the shared heap.</p>
+
+<table>
+  <tr><th>Region</th><th>Name</th><th>Base Address</th><th>Size</th><th>Access</th><th>XN</th></tr>
+  <tr><td>0</td><td>Flash</td><td><code>0x08000000</code></td><td>1 MB</td><td>RO Priv+Unpriv</td><td>No</td></tr>
+  <tr><td>1</td><td>Kernel SRAM</td><td><code>0x20000000</code></td><td>128 KB</td><td>RW Priv only</td><td>Yes</td></tr>
+  <tr><td>2</td><td>Peripherals</td><td><code>0x40000000</code></td><td>512 MB</td><td>RW Priv only</td><td>Yes</td></tr>
+  <tr><td>3</td><td>System</td><td><code>0xE0000000</code></td><td>512 MB</td><td>RW Priv only</td><td>Yes</td></tr>
+  <tr><td>4</td><td>Thread Stack</td><td>per-thread</td><td>varies</td><td>RW Full access</td><td>Yes</td></tr>
+  <tr><td>5</td><td>Heap</td><td>from linker</td><td>16 KB</td><td>RW Full access</td><td>Yes</td></tr>
+</table>
+
+<div class="key-decision">
+  <strong>PRIVDEFENA=1</strong> &mdash; Privileged code has a default memory map even for regions not explicitly covered by the MPU. <strong>HFNMIENA=0</strong> &mdash; The MPU is disabled during HardFault and NMI handlers, ensuring fault handlers can always access memory for crash dump output.
+</div>
+
+<div class="lesson">
+  <strong>Gotcha:</strong> Unprivileged threads cannot access globals in <code>.bss</code> or <code>.data</code> because Region 1 (Kernel SRAM) is privileged-only. Data must be passed to unprivileged threads via the thread argument pointer or the thread's own stack.
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 2: BOOT SEQUENCE                                     -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <span class="disabled">&lt; Previous</span>
+    <a href="sec02-boot-sequence.html">Section 2: Boot Sequence &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

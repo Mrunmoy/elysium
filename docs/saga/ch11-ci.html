@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 11: The Safety Net -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 11 -- The Safety Net</span>
+    <div class="header-nav">
+      <a href="ch10-shell.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html" class="current">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch12-night-shift.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html" class="current">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 11</span>
+  The Safety Net (CI &amp; GitHub Pages)
+</h2>
+
+<div class="epigraph">
+  "Move fast and break things. Then add CI so you catch the breaks."
+  <div class="attribution">&mdash; Adapted</div>
+</div>
+
+<p>
+By this point ms-os had 297 C++ unit tests, 135 Python tests, three
+cross-compilation targets, and ten completed phases of development. All
+of it built and tested manually. Every merge was a <code>python3
+build.py -t</code> on one developer's machine with one compiler. The
+CLAUDE.md file had aspirationally mentioned "GitHub Actions with matrix
+testing (GCC + Clang, Debug + Release)" since Phase 0, but no workflow
+existed. Ten phases later, we finally built it.
+</p>
+
+<p>
+A bare-metal RTOS has a unique CI challenge: you cannot run the firmware
+in CI. There is no hardware in a GitHub Actions runner. You cannot flash
+a board, watch an LED, or read serial output. But you <em>can</em>
+verify everything that does not require silicon: host-compiled unit
+tests, Python code generator tests, and cross-compilation itself. If
+the ARM build fails in CI, you know immediately&mdash;not after flashing
+a board and wondering why the LED does not blink.
+</p>
+
+<h3>The Matrix</h3>
+
+<p>
+The CI workflow (<code>.github/workflows/ci.yml</code>) defines three
+jobs that run in parallel, totaling eight parallel execution cells:
+</p>
+
+<div class="diagram">
+  <span class="label">CI Matrix: 8 Parallel Jobs</span>
+
+  Host Tests (2x2 matrix):
+  +----------+----------+
+  |          | Debug    | Release  |
+  +----------+----------+----------+
+  | GCC      |  cell 1  |  cell 2  |
+  | Clang    |  cell 3  |  cell 4  |
+  +----------+----------+----------+
+
+  Python Tests:
+  +------------------------------+
+  | dtgen + ipcgen + dtb2cpp     |  cell 5
+  +------------------------------+
+
+  Cross-Compilation (3 targets):
+  +----------+----------+----------+
+  | F207     | F407     | PYNQ-Z2  |
+  | cell 6   | cell 7   | cell 8   |
+  +----------+----------+----------+
+
+  fail-fast: false
+  <span class="comment">-- We want to see ALL the breakage, not just the first failure.</span>
+</div>
+
+<p>
+Each host test cell checks out the repository with submodules (Google
+Test lives in <code>test/vendor/googletest</code>), configures CMake with
+the appropriate compiler and build type, builds the test executables, and
+runs <code>ctest --output-on-failure</code>. The
+<code>fail-fast: false</code> setting is critical: if the GCC Debug cell
+fails, we still want to see whether Clang Release also fails, and
+whether it fails for the same reason or a different one.
+</p>
+
+<p>
+Python tests run pytest across three test directories: the dtgen schema
+tests (67 tests), the ipcgen embedded emitter tests (40 tests), and the
+dtb2cpp round-trip tests (21 tests). These verify the code generation
+toolchain that produces C++ source from IDL files and device tree
+descriptions.
+</p>
+
+<p>
+Cross-compilation runs a 3-element matrix over the hardware targets:
+stm32f207zgt6, stm32f407zgt6, and pynq-z2. Each cell installs the ARM
+toolchain from Ubuntu's package repository, configures CMake with the
+cross-compilation toolchain file and the target variable, and builds the
+firmware. No flashing, no testing&mdash;just "does it compile?" This
+catches linker script errors, missing symbols, and architecture-specific
+build failures.
+</p>
+
+<h3>The Clang Surprise</h3>
+
+<p>
+The very first CI run revealed why running two compilers matters. GCC
+13.2.0 had been our only compiler for ten phases. Every warning flag was
+tuned to GCC. Every template edge case happened to work the way GCC
+expected. Clang had opinions.
+</p>
+
+<p>
+The first failure was the <code>g_inSyscall</code> declaration from
+Phase 6:
+</p>
+
+<pre>
+<span class="cmt">// Arch.cpp -- GCC accepted this silently</span>
+<span class="kw">extern</span> <span class="str">"C"</span> <span class="kw">volatile</span> <span class="kw">bool</span> g_inSyscall = <span class="kw">false</span>;
+</pre>
+
+<p>
+GCC compiled it without a whisper. Clang raised a warning: "variable
+'g_inSyscall' is both 'extern' and initialized." With
+<code>-Werror</code> enabled, that warning became a hard error. The fix
+was to drop the <code>extern</code> on the definition (keeping it only
+on the declaration in the header). Technically GCC was being too lenient&mdash;the
+C++ standard says a declaration with an initializer is a definition, and
+<code>extern</code> on a definition is at best redundant and at worst
+misleading.
+</p>
+
+<p>
+Clang also flagged different template instantiation order issues and
+stricter type conversion warnings. Each one was a legitimate code
+quality issue that GCC's warning heuristics happened to overlook.
+</p>
+
+<div class="lesson">
+<strong>Lesson:</strong> Running two compilers is like having two code
+reviewers with different personalities. GCC is your experienced colleague
+who lets minor style issues slide because the code works. Clang is the
+new hire who reads the standard literally and flags everything. You need
+both.
+</div>
+
+<h3>The Cross-Compilation Firewall</h3>
+
+<p>
+The three cross-compilation targets cannot run in CI&mdash;there is no
+F207, no F407, no PYNQ-Z2 plugged into a GitHub Actions runner. But
+compilation alone catches a surprising number of bugs:
+</p>
+
+<p>
+Missing <code>#include</code> directives that only one target needs (the
+PYNQ-Z2 startup requires different headers than STM32). Linker errors
+from symbols that exist in the Cortex-M HAL but not the A9 HAL.
+Architecture-specific compile flags that break when applied to the wrong
+target. Conditional compilation paths that are syntactically valid but
+semantically wrong on a different CPU.
+</p>
+
+<p>
+The CI cannot tell you if the LED blinks. But it can tell you if the
+binary that would blink the LED even compiles. On a project where
+flashing and testing requires physical hardware, that early warning is
+invaluable. A broken cross-compilation caught on push is a bug that
+never makes it to the bench.
+</p>
+
+<h3>The pyserial Ambush</h3>
+
+<p>
+The most entertaining CI failure was meta: a bug in our test
+infrastructure, caught by the test infrastructure.
+</p>
+
+<p>
+The <code>crash_monitor.py</code> script (a serial-port tool for
+capturing crash dumps from live hardware) imported <code>pyserial</code>
+at the top of the file and called <code>sys.exit(1)</code> if the import
+failed. Perfectly reasonable behavior for a command-line tool. But
+<code>crash_monitor_test.py</code> imports <code>crash_monitor.py</code>
+as a module for testing. When pytest collected the test file on a CI
+runner without pyserial installed, the import triggered
+<code>sys.exit(1)</code>, which raised <code>SystemExit</code>, which
+pytest caught during test collection and reported as a collection error.
+The entire Python test job exploded&mdash;not because a test failed,
+but because a test file could not even be loaded.
+</p>
+
+<p>
+The fix had two parts: defer the <code>sys.exit()</code> call to the
+<code>if __name__ == "__main__"</code> guard (so importing the module
+does not exit the process), and exclude hardware-dependent tests from
+the CI test suite. The CI was working as designed&mdash;it found a bug.
+Just not the kind of bug we expected.
+</p>
+
+<h3>The README Refresh</h3>
+
+<p>
+While setting up CI, we discovered that the README had fallen behind.
+Phase 6 was missing from the features table. The test count still said
+269 (it was 297). The Python test count said 135 (now 152 with the
+dtb2cpp additions). The story link pointed to a raw HTML file on GitHub,
+which GitHub renders as source code rather than a web page.
+</p>
+
+<p>
+All fixed in the same commit. A CI badge at the top of the README now
+shows build status at a glance&mdash;the project's heartbeat, green or
+red, updated on every push.
+</p>
+
+<h3>GitHub Pages</h3>
+
+<p>
+The project story&mdash;this very document&mdash;deserved better than
+being rendered as raw HTML source. A second workflow
+(<code>.github/workflows/pages.yml</code>) deploys the
+<code>docs/</code> directory to GitHub Pages whenever it changes. The
+workflow uses the modern <code>actions/deploy-pages</code> action with
+OIDC token authentication&mdash;no personal access tokens, no deploy
+keys. A concurrency group ensures only one deployment runs at a time,
+and <code>cancel-in-progress</code> kills stale deployments when a new
+push arrives.
+</p>
+
+<div class="key-decision">
+<strong>Post-push manual step:</strong> The repository owner must visit
+GitHub Settings > Pages and set Source to "GitHub Actions" (one-time).
+After that, the Pages workflow deploys automatically on every docs change.
+</div>
+
+<div class="highlight">
+<strong>Status after CI setup:</strong> Every push to main triggers 8
+parallel CI jobs: 4 host-test matrix cells (GCC/Clang x Debug/Release),
+1 Python test job, and 3 cross-compilation targets. 297 C++ tests, 135
+Python tests, 3 cross-compile targets, 2 compilers. The project story is
+served as a rendered web page via GitHub Pages. The README reflects
+current test counts and features.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 12                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch10-shell.html">&lt; Chapter 10: A Window Into the Kernel</a>
+    <a href="ch12-night-shift.html">Chapter 12: The Night Shift &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

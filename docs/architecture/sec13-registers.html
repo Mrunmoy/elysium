@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 13: Registers -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 13 -- Registers</span>
+    <div class="header-nav">
+      <a href="sec12-bus-drivers.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html" class="current">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <span class="nav-arrow disabled">Next &gt;</span>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html" class="current">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Appendix</span>
+  Register Quick Reference
+</h2>
+
+<h3>Cortex-M Fault Registers</h3>
+
+<table>
+  <tr><th>Register</th><th>Address</th><th>Description</th></tr>
+  <tr><td>CFSR</td><td><code>0xE000ED28</code></td><td>Configurable Fault Status (MemManage + BusFault + UsageFault)</td></tr>
+  <tr><td>HFSR</td><td><code>0xE000ED2C</code></td><td>HardFault Status Register</td></tr>
+  <tr><td>MMFAR</td><td><code>0xE000ED34</code></td><td>MemManage Fault Address Register</td></tr>
+  <tr><td>BFAR</td><td><code>0xE000ED38</code></td><td>BusFault Address Register</td></tr>
+  <tr><td>ICSR</td><td><code>0xE000ED04</code></td><td>Interrupt Control and State Register</td></tr>
+  <tr><td>SCB->SCR</td><td><code>0xE000ED10</code></td><td>System Control Register (SLEEPONEXIT, SLEEPDEEP)</td></tr>
+</table>
+
+<h3>Cortex-A9 CP15 Fault Registers</h3>
+
+<table>
+  <tr><th>Register</th><th>Access</th><th>Description</th></tr>
+  <tr><td>DFSR</td><td><code>MRC p15, 0, Rd, c5, c0, 0</code></td><td>Data Fault Status Register</td></tr>
+  <tr><td>IFSR</td><td><code>MRC p15, 0, Rd, c5, c0, 1</code></td><td>Instruction Fault Status Register</td></tr>
+  <tr><td>DFAR</td><td><code>MRC p15, 0, Rd, c6, c0, 0</code></td><td>Data Fault Address Register</td></tr>
+  <tr><td>IFAR</td><td><code>MRC p15, 0, Rd, c6, c0, 2</code></td><td>Instruction Fault Address Register</td></tr>
+</table>
+
+<h3>GIC Registers (Zynq-7020)</h3>
+
+<table>
+  <tr><th>Register</th><th>Address</th><th>Description</th></tr>
+  <tr><td>ICCIAR</td><td><code>0xF8F0010C</code></td><td>Interrupt Acknowledge (read: returns interrupt ID)</td></tr>
+  <tr><td>ICCEOIR</td><td><code>0xF8F00110</code></td><td>End of Interrupt (write: signals completion)</td></tr>
+  <tr><td>ICDDCR</td><td><code>0xF8F01000</code></td><td>Distributor Control Register</td></tr>
+  <tr><td>ICDISER</td><td><code>0xF8F01100</code></td><td>Interrupt Set-Enable Registers</td></tr>
+</table>
+
+<div class="highlight">
+  <strong>GIC IRQ IDs:</strong> Timer IRQ = 29 (SCU private timer), SGI context switch = 0 (Software Generated Interrupt for triggering PendSV-equivalent context switches).
+</div>
+
+<h3>Key Peripheral Addresses</h3>
+
+<table>
+  <tr><th>Peripheral</th><th>STM32F207/F407</th><th>Zynq-7020</th></tr>
+  <tr><td>GPIO</td><td><code>0x40020000</code>+ (GPIOA-GPIOI)</td><td>N/A (LEDs on PL fabric)</td></tr>
+  <tr><td>UART</td><td><code>0x40011000</code> (USART1)</td><td><code>0xE0000000</code> (PS UART0)</td></tr>
+  <tr><td>RCC / SLCR</td><td><code>0x40023800</code> (RCC)</td><td><code>0xF8000000</code> (SLCR)</td></tr>
+  <tr><td>SysTick / Timer</td><td><code>0xE000E010</code> (SysTick)</td><td><code>0xF8F00600</code> (SCU private timer)</td></tr>
+  <tr><td>NVIC / GIC</td><td><code>0xE000E100</code> (NVIC)</td><td><code>0xF8F01000</code> (GIC distributor)</td></tr>
+  <tr><td>SCB</td><td><code>0xE000ED00</code></td><td>N/A (CP15 coprocessor)</td></tr>
+  <tr><td>MPU</td><td><code>0xE000ED90</code></td><td>N/A (MMU via CP15)</td></tr>
+  <tr><td>PWR</td><td><code>0x40007000</code></td><td>N/A</td></tr>
+  <tr><td>IWDG</td><td><code>0x40003000</code></td><td>N/A</td></tr>
+</table>
+
+<h3>Crash Dump Output</h3>
+
+<p>On an unrecoverable fault, ms-os prints a crash dump to the serial console containing:</p>
+
+<table>
+  <tr><th>Field</th><th>Cortex-M Source</th><th>Cortex-A9 Source</th></tr>
+  <tr><td>Fault type</td><td>CFSR / HFSR decode</td><td>r1 passed by handler (1=DataAbort, 2=PrefetchAbort, 3=Undefined)</td></tr>
+  <tr><td>Faulting address</td><td>MMFAR or BFAR</td><td>DFAR or IFAR (CP15)</td></tr>
+  <tr><td>Register state</td><td>Exception frame on PSP</td><td>Stacked registers on SYS stack</td></tr>
+  <tr><td>Stack trace</td><td>Frame pointer walk</td><td>Frame pointer walk</td></tr>
+  <tr><td>Thread ID/name</td><td>g_currentTcb</td><td>g_currentTcb</td></tr>
+</table>
+
+<div class="lesson">
+  <strong>Gotcha:</strong> ARM Cortex-A does not trap integer divide-by-zero (the result is simply 0). To test fault handling on A9, use the <code>UDF #0</code> (permanently undefined) instruction instead.
+</div>
+  <div class="chapter-nav-footer">
+    <a href="sec12-bus-drivers.html">&lt; Section 12: Bus Drivers</a>
+    <span class="disabled">Next &gt;</span>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 10: A Window Into the Kernel -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 10 -- A Window Into the Kernel</span>
+    <div class="header-nav">
+      <a href="ch09-power.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html" class="current">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch11-ci.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html" class="current">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 10</span>
+  A Window Into the Kernel (Phase 9)
+</h2>
+
+<div class="epigraph">
+  "The purpose of computing is insight, not numbers."
+  <div class="attribution">&mdash; Richard Hamming</div>
+</div>
+
+<p>
+Until this moment, the only way to know what ms-os was thinking was to
+read crash dumps or litter the code with printf statements. The kernel
+was a black box with a serial port. We could flash firmware, watch LEDs
+blink, and catch fault output when things went wrong. But we had no way
+to ask the running kernel "what are you doing right now?" No way to peek
+at thread states without attaching a debugger. No way to check heap
+usage without adding temporary instrumentation and reflashing.
+</p>
+
+<p>
+Phase 9 gave the kernel a voice&mdash;and more importantly, it gave us
+ears.
+</p>
+
+<h3>The First Keypress</h3>
+
+<p>
+Connect a terminal to <code>/dev/ttyUSB0</code>, 115200 baud, 8N1.
+The shell thread starts at priority 20, polling
+<code>uartTryGetChar()</code> every 10 milliseconds. It is the
+lowest-priority interactive task in the system&mdash;below the echo
+server, below the LED blinker, above only the idle thread.
+</p>
+
+<p>
+Type 'h'. The character echoes on screen. Type 'e'. Echo. Type 'l', 'p',
+Enter.
+</p>
+
+<pre>
+ms-os> help
+Available commands:
+  help     - Show this help
+  ps       - List threads
+  mem      - Show heap statistics
+  uptime   - Show system uptime
+  version  - Show ms-os version
+  dt       - Show device tree
+ms-os>
+</pre>
+
+<p>
+We were talking to the kernel. Not through a debugger, not through a
+crash dump, not through a compile-time printf that required reflashing.
+A live conversation, character by character, with a running RTOS.
+</p>
+
+<h3>The ps Revelation</h3>
+
+<p>
+The <code>ps</code> command was the moment the kernel became transparent.
+Type three characters and Enter:
+</p>
+
+<pre>
+ms-os> ps
+TID  NAME         STATE    PRI  STACK
+  0  idle         Ready      31   256
+  1  echo-srv     Blocked    10  1024
+  2  echo-cli     Blocked    15   512
+  3  led          Sleeping    5   512
+  4  shell        Running    20   512
+ms-os>
+</pre>
+
+<p>
+For the first time, we could see the kernel's world from outside. Five
+threads. The echo server blocked, waiting for a message that would never
+come unless the client woke up. The echo client blocked, waiting for the
+reply to its last request. The LED thread sleeping between blinks&mdash;it
+called <code>sleep(500)</code> and would not wake for another 340
+milliseconds. The shell itself, running, processing our keystrokes, the
+only thread that needed the CPU right now.
+</p>
+
+<p>
+It was like X-ray vision for the kernel. We could watch scheduling
+decisions play out in real time. Send a burst of echo requests, and
+the client and server would flip between Blocked and Ready. Kill the
+LED blink interval by shortening the sleep, and the LED thread would
+appear as Running more often. Everything the scheduler was doing
+internally was now visible externally, one <code>ps</code> command at
+a time.
+</p>
+
+<h3>mem and uptime</h3>
+
+<p>
+<code>mem</code> provides a snapshot of heap health:
+</p>
+
+<pre>
+ms-os> mem
+Heap: 1024/16384 bytes used (6%)
+Free: 15360 bytes
+Peak: 1024 bytes
+Allocs: 4
+Largest free: 15360 bytes
+ms-os>
+</pre>
+
+<p>
+The "Largest free" metric is deceptively important. Total free bytes
+tells you how much memory is available in aggregate. Largest free block
+tells you the biggest single allocation that can succeed. If total free
+is 10 KB but the largest free block is 256 bytes, your heap is
+fragmented and a 1 KB allocation will fail even though "there is plenty
+of memory." This single number reveals fragmentation without needing
+a full heap walk command.
+</p>
+
+<p>
+<code>uptime</code> gives the simplest possible health indicator:
+</p>
+
+<pre>
+ms-os> uptime
+Uptime: 127 seconds (127000 ticks)
+ms-os>
+</pre>
+
+<p>
+If uptime keeps increasing, the system is alive. If it resets to zero,
+the board rebooted. Combined with the crash dump system, you can tell
+not just <em>that</em> a crash happened but <em>when</em>&mdash;the
+uptime before the crash dump tells you how long the system survived.
+</p>
+
+<p>
+<code>version</code> shows the ms-os version string.
+<code>dt</code> displays the parsed device tree: board name, MCU,
+architecture, clock frequencies, memory regions with base addresses
+and sizes, console UART configuration, and LED pin. Six commands, each
+one a window into a different aspect of the running system.
+</p>
+
+<h3>Character-Driven Design</h3>
+
+<p>
+The shell's architecture was a deliberate choice to avoid complexity.
+There is no UART receive interrupt handler. There is no DMA channel for
+input. There is no ring buffer of received characters managed by the
+kernel. The shell is <strong>passive</strong>: the application thread
+polls the UART with <code>uartTryGetChar()</code> and feeds each byte to
+<code>shellProcessChar()</code>. One character at a time.
+</p>
+
+<p>
+Why? Three reasons.
+</p>
+
+<p>
+First, <strong>testability</strong>. The shell output goes through a
+function pointer (<code>ShellWriteFn</code>), not a direct UART call.
+In tests, we provide a callback that appends to a
+<code>std::string</code>. We feed characters to
+<code>shellProcessChar()</code> and assert on the captured output string.
+No hardware, no mocks of serial peripherals, no simulated register
+state. Just strings in, strings out. It is the simplest possible test
+harness.
+</p>
+
+<p>
+Second, <strong>portability</strong>. The shell does not know or care
+what kind of UART it is connected to. It could be an STM32 USART with
+polled I/O, a Zynq PS UART with FIFO mode, a virtual UART over
+semihosting, or a TCP socket in a simulator. The function pointer
+abstraction means the shell works with any output backend that can write
+a string.
+</p>
+
+<p>
+Third, <strong>simplicity</strong>. A receive interrupt handler needs an
+ISR, a ring buffer, synchronization between the ISR and the consumer
+thread, and careful handling of buffer overflow. For a debug shell that
+processes human typing speeds (maybe 10 characters per second), that
+machinery is overkill. Polling at 10 ms intervals with
+<code>uartTryGetChar()</code> is more than fast enough and costs zero
+interrupt overhead.
+</p>
+
+<p>
+Line editing is minimal but functional: printable characters are echoed
+and appended to an 80-byte buffer. Backspace and DEL erase the last
+character. Enter dispatches the command. There is no cursor movement, no
+command history, no tab completion. Those are luxuries for a future
+phase. For now, the shell does exactly what a kernel debug console needs
+to do: accept commands and show results.
+</p>
+
+<h3>No sprintf, No Problem</h3>
+
+<p>
+The freestanding environment presented one last challenge: number
+formatting. The <code>ps</code> command needs to print thread IDs,
+priorities, and stack sizes as decimal numbers. The <code>mem</code>
+command prints byte counts and percentages. The <code>uptime</code>
+command prints seconds. But there is no <code>sprintf</code> in a
+freestanding kernel&mdash;pulling in the C standard library's formatter
+would add 50 KB or more to the binary.
+</p>
+
+<p>
+So we wrote our own. <code>uintToStr()</code> converts a
+<code>uint32_t</code> to a decimal string by repeatedly dividing by 10
+and collecting digits in reverse. <code>hexToStr()</code> does the same
+with shifts and masks. Column alignment for the <code>ps</code> table
+uses fixed-width string padding&mdash;right-align the TID in a 3-
+character field, left-align the name in a 12-character field.
+</p>
+
+<p>
+It is not pretty code. The digit-reversal loop, the manual padding,
+the character-by-character output&mdash;it reads like something from a
+1980s systems programming textbook. But it works without pulling in any
+external dependencies, it fits in a few hundred bytes, and it produces
+correctly formatted output that 24 tests verify exhaustively.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 9:</strong> ms-os has an interactive shell with
+six commands for runtime introspection: <code>help</code>,
+<code>ps</code>, <code>mem</code>, <code>uptime</code>,
+<code>version</code>, and <code>dt</code>. Character-driven design with
+function-pointer output for testability. Custom integer and hex formatters
+for the freestanding environment. 24 new ShellTest tests. Connect a
+terminal at 115200 baud and type <code>ps</code> to see your threads.
+</div>
+
+<p>
+For how to use the shell during hardware debugging sessions, see the
+<a href="../playbook/sec06-serial.html">Debugging Playbook</a>.
+</p>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 11                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch09-power.html">&lt; Chapter 9: Conserving Every Milliamp</a>
+    <a href="ch11-ci.html">Chapter 11: The Safety Net &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

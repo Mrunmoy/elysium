@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 5: Scheduler -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 5 -- Scheduler</span>
+    <div class="header-nav">
+      <a href="sec04-context-switch.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html" class="current">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec06-ipc.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html" class="current">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 5</span>
+  Scheduler
+</h2>
+
+<div class="epigraph">
+  "The best scheduler is the one you never notice."
+  <div class="attribution">&mdash; Anonymous kernel developer</div>
+</div>
+
+<h3>32-Level Priority Bitmap</h3>
+
+<p>The scheduler uses a bitmap-based priority scheme with 32 priority levels (0 = highest, 31 = lowest). This matches the Cortex-M NVIC convention where lower numeric values mean higher priority.</p>
+
+<div class="diagram">
+<span class="label">readyBitmap</span> (uint32_t)
+  Bit N set = at least one thread is ready at priority N
+
+  31 30 29 28 27 ... 5  4  3  2  1  0
+  [  1  0  0  0  ... 0  0  0  1  0  1 ]
+                                |     |
+                          prio 2 has  prio 0 has
+                          ready       ready
+                          threads     threads
+
+<span class="label">readyQueues[32]</span> -- singly-linked list per priority level
+  readyQueues[0]:  Thread2 -> Thread5 -> kInvalidThreadId
+  readyQueues[2]:  Thread3 -> kInvalidThreadId
+  readyQueues[31]: Thread0 (idle) -> kInvalidThreadId
+
+<span class="label">findHighestPriority()</span>:
+  idx = __builtin_ctz(readyBitmap)      <span class="comment">// count trailing zeros</span>
+  <span class="comment">// On ARM: compiles to RBIT + CLZ -> single cycle, O(1)</span>
+  return readyQueues[idx].head
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> <code>__builtin_ctz</code> maps to <code>RBIT + CLZ</code> on ARM, giving O(1) highest-priority lookup regardless of the number of threads or priority levels. Round-robin scheduling within the same priority level is achieved by moving the running thread to the tail of its priority queue when its time slice expires.
+</div>
+
+<h3>Time Slicing</h3>
+
+<p>Each thread has a configurable time slice (default: 10 ticks). The SysTick handler (or SCU timer on A9) decrements <code>timeSliceRemaining</code> each tick. When it reaches zero, the scheduler moves the current thread to the back of its priority queue and selects the next thread.</p>
+
+<h3>Priority Inheritance</h3>
+
+<p>When a high-priority thread blocks on a mutex held by a lower-priority thread, <strong>priority inheritance</strong> temporarily boosts the owner's <code>currentPriority</code> to prevent unbounded priority inversion. The owner's <code>basePriority</code> is unchanged; on unlock, <code>currentPriority</code> is restored to <code>basePriority</code>.</p>
+
+<div class="diagram">
+<span class="label">Priority Inversion Scenario</span>
+
+Time -->
+                                                        <span class="comment">Without inheritance:</span>
+Thread H (prio 0):  [RUN]----[BLOCKED on M]----------  <span class="comment">H starves waiting for L</span>
+Thread M (prio 15): .........[RUN]~~~~~~~~~~~~~~~~~~~~  <span class="comment">M preempts L indefinitely</span>
+Thread L (prio 20): ...[RUN, holds M]...[blocked].....  <span class="comment">L never unlocks M</span>
+
+                                                        <span class="comment">With inheritance:</span>
+Thread H (prio 0):  [RUN]----[BLOCKED on M]--[RUN]     <span class="comment">H runs after L unlocks</span>
+Thread M (prio 15): .........                 .[RUN]    <span class="comment">M runs at its own time</span>
+Thread L (prio 20): ...[RUN, holds M]--[boosted to 0]   <span class="comment">L boosted, runs, unlocks M</span>
+                                       ^                <span class="comment">L.currentPriority = 0</span>
+</div>
+
+<h3>Mutex Semantics</h3>
+
+<table>
+  <tr><th>Property</th><th>Value</th></tr>
+  <tr><td>Recursive locking</td><td>Yes (same thread can lock multiple times)</td></tr>
+  <tr><td>Priority inheritance</td><td>Mandatory (always active)</td></tr>
+  <tr><td>Wait queue ordering</td><td>Priority-sorted (highest priority first)</td></tr>
+  <tr><td>Try-lock</td><td>Non-blocking variant available</td></tr>
+</table>
+
+<h3>Semaphore Semantics</h3>
+
+<table>
+  <tr><th>Property</th><th>Value</th></tr>
+  <tr><td>Type</td><td>Counting semaphore</td></tr>
+  <tr><td>Wait queue ordering</td><td>Priority-sorted</td></tr>
+  <tr><td>Try-wait</td><td>Non-blocking variant available</td></tr>
+  <tr><td>ISR-safe signal</td><td>Yes (semaphoreSignal does not block)</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 6: IPC MESSAGE PASSING                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec04-context-switch.html">&lt; Section 4: Context Switch</a>
+    <a href="sec06-ipc.html">Section 6: IPC &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

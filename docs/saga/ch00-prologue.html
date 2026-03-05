@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prologue: Why Build an OS? -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Prologue -- Why Build an OS?</span>
+    <div class="header-nav">
+      <span class="nav-arrow disabled">&lt; Prev</span>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html" class="current">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch01-foundation.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html" class="current">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Prologue</span>
+  Why Build an OS?
+</h2>
+
+<div class="epigraph">
+  "What I cannot create, I do not understand."
+  <div class="attribution">&mdash; Richard Feynman</div>
+</div>
+
+<p>
+Every embedded engineer has, at some point, stared at a blinking LED and
+thought: <em>what if I built the entire software stack beneath this?</em>
+Not just the blink loop, not just the HAL, but the scheduler that decides
+when the LED thread runs, the memory allocator that gives it stack space,
+the fault handler that catches it when things go wrong.
+</p>
+
+<p>
+That question is the seed of <strong>ms-os</strong>.
+</p>
+
+<p>
+The goal was ambitious but clear: build a <strong>real-time operating system
+from scratch</strong>, in modern C++17, targeting real ARM hardware. A kernel
+that boots on silicon, switches contexts in microseconds, inherits priorities
+through mutexes, and prints a crash dump when the world falls apart.
+</p>
+
+<h3>Why Build One at All?</h3>
+
+<p>
+There is no shortage of excellent RTOSes in the world. FreeRTOS is battle-tested
+and runs on billions of devices. ThreadX powers Azure IoT. Zephyr has a
+thriving open-source community. We studied all three&mdash;their source code
+lives on our development machine as reference implementations&mdash;and we
+could have picked any of them and started writing applications immediately.
+</p>
+
+<p>
+But using an RTOS and <em>understanding</em> an RTOS are two very different
+things. We wanted to know what happens in the 50 nanoseconds between one
+thread stopping and another starting. We wanted to understand <em>why</em>
+PendSV runs at the lowest priority, not just that it does. We wanted to feel
+the difference between a bitmap scheduler and a linked-list walk, not just
+read about it in a textbook. The only way to truly learn these things is to
+build them yourself, debug them on real hardware, and watch them break in
+ways no tutorial ever warns you about.
+</p>
+
+<h3>Why Start Simple?</h3>
+
+<p>
+We chose an <strong>STM32F207ZGT6</strong> as the first target: a Cortex-M3
+running at 120 MHz with 1 MB of flash and 128 KB of SRAM. This was a
+deliberate choice. The Cortex-M3 is one of the simplest ARM cores that still
+has a real exception model, an NVIC, and hardware stack frame management on
+interrupt entry. There is no MMU, no cache hierarchy, no multi-core
+complexity. When something goes wrong, there are fewer places to look. The
+chip's reference manual is one document, not five.
+</p>
+
+<p>
+Starting simple meant we could focus on getting the fundamentals right:
+context switching, scheduling algorithms, synchronization primitives. Once
+those worked correctly on a predictable single-core machine, we could
+confidently port to more complex hardware&mdash;knowing that any new bugs
+came from the port, not from the core RTOS logic. Later, a Cortex-M4
+(STM32F407ZGT6) and a dual Cortex-A9 (Zynq-7020 on the PYNQ-Z2 board)
+would join the family, each adding architectural challenges of its own.
+</p>
+
+<h3>The Architecture</h3>
+
+<p>
+We chose a <strong>microkernel architecture</strong>&mdash;minimal kernel
+with user-space services&mdash;inspired by Minix and QNX. The kernel would
+handle only scheduling, synchronization, and memory protection. Everything
+else&mdash;drivers, IPC, process management&mdash;would live outside the
+kernel.
+</p>
+
+<p>
+This is the story of how we built it, one phase at a time.
+</p>
+
+<!-- ============================================================ -->
+<!--                      CHAPTER 1                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <span class="disabled">&lt; Previous</span>
+    <a href="ch01-foundation.html">Chapter 1: Laying the Foundation &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

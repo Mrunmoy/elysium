@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 1: JTAG and Debug Setup -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 1 -- JTAG and Debug Setup</span>
+    <div class="header-nav">
+      <span class="nav-arrow disabled">&lt; Prev</span>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html" class="current">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <a href="sec02-gdb-cookbook.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html" class="current">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 1</span>JTAG and Debug Setup</h2>
+
+<p>
+All debugging starts with a reliable connection between your host machine and
+the target board. ms-os targets three boards across two debug interfaces:
+<strong>J-Link SWD</strong> for the STM32 family and <strong>OpenOCD via FTDI</strong>
+for the PYNQ-Z2 (Zynq-7020).
+</p>
+
+<h3>1.1 J-Link SWD for STM32 (F207/F407)</h3>
+
+<p>
+The SEGGER J-Link connects to STM32 boards via the SWD (Serial Wire Debug)
+interface. Two-wire: SWDIO + SWCLK. Power the target separately; J-Link does
+not supply power by default.
+</p>
+
+<h4>Interactive session with JLinkExe</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>JLinkExe -device STM32F407ZG -if SWD -speed 4000
+<span class="output">SEGGER J-Link Commander V7.92
+Connecting to target via SWD
+Found SW-DP with ID 0x2BA01477
+Cortex-M4 identified.</span>
+
+<span class="prompt">J-Link&gt; </span>connect
+<span class="output">Target connection has been established.</span>
+
+<span class="prompt">J-Link&gt; </span>loadbin build/app/threads/threads.bin 0x08000000
+<span class="output">Downloading 28672 bytes @ address 0x08000000
+Comparing flash   [100%] Done.
+Erasing flash     [100%] Done.
+Programming flash [100%] Done.
+O.K.</span>
+
+<span class="prompt">J-Link&gt; </span>r
+<span class="output">Reset delay: 0 ms
+Reset type NORMAL: Resets core &amp; peripherals via SYSRESETREQ &amp; VECTRESET bit.</span>
+
+<span class="prompt">J-Link&gt; </span>g
+<span class="output">Running...</span></div>
+
+<p>
+For the STM32F207, replace <code>STM32F407ZG</code> with <code>STM32F207ZG</code>.
+Everything else remains the same -- both are Cortex-M, both use SWD, and both
+have FLASH at <code>0x08000000</code>.
+</p>
+
+<h4>Starting the GDB server</h4>
+
+<p>
+The GDB server runs alongside JLinkExe (or instead of it) and exposes a
+TCP port for GDB connections.
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>JLinkGDBServer -device STM32F407ZG -if SWD -speed 4000 -port 2331 -nogui &amp;
+<span class="output">[1] 48291
+SEGGER J-Link GDB Server V7.92
+Listening on TCP/IP port 2331
+Connecting to target...
+Connected to target</span></div>
+
+<div class="highlight">
+<strong>Tip:</strong> Run the GDB server in the background (with <code>&amp;</code>) so you
+can use the same terminal for GDB. Kill it with <code>kill %1</code> when done.
+</div>
+
+
+<h3>1.2 OpenOCD for PYNQ-Z2</h3>
+
+<p>
+The PYNQ-Z2 board exposes JTAG through its on-board FTDI FT2232 USB-to-serial
+converter. The FT2232 provides two channels: channel 0 for JTAG and channel 1
+for UART serial output. The USB VID:PID is <code>0403:6010</code>.
+</p>
+
+<h4>Configuration file</h4>
+
+<pre><span class="cmt"># pynq-z2.cfg</span>
+adapter driver ftdi
+ftdi vid_pid <span class="num">0x0403</span> <span class="num">0x6010</span>
+ftdi channel <span class="num">0</span>
+ftdi layout_init <span class="num">0x0038</span> <span class="num">0x003b</span>
+transport select jtag
+source [find target/zynq_7000.cfg]</pre>
+
+<h4>Starting OpenOCD</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>openocd -f pynq-z2.cfg
+<span class="output">Open On-Chip Debugger 0.12.0
+Info : FTDI SWD/JTAG adapter
+Info : clock speed 1000 kHz
+Info : JTAG tap: zynq.dap tap/device found: 0x4ba00477
+Info : zynq.cpu.0: hardware has 6 breakpoints, 4 watchpoints</span></div>
+
+<p>
+OpenOCD stays in the foreground. Open a second terminal for Telnet or GDB
+connections:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>telnet localhost 4444
+<span class="output">Open On-Chip Debugger</span>
+<span class="prompt">&gt; </span>halt
+<span class="output">target halted in ARM state due to debug-request</span>
+<span class="prompt">&gt; </span>load_image build/app/hello/hello 0x00100000
+<span class="output">28672 bytes written at address 0x00100000</span>
+<span class="prompt">&gt; </span>resume 0x00100000</div>
+
+
+<h3>1.3 USB Device Mapping</h3>
+
+<p>
+USB serial devices shift when OpenOCD claims the JTAG channel. This table
+shows the mapping for a setup with both J-Link and PYNQ-Z2 connected:
+</p>
+
+<table>
+  <tr>
+    <th>Device</th>
+    <th>Without OpenOCD</th>
+    <th>With OpenOCD</th>
+  </tr>
+  <tr>
+    <td>J-Link SWD (STM32)</td>
+    <td><code>/dev/ttyUSB0</code></td>
+    <td><code>/dev/ttyUSB0</code></td>
+  </tr>
+  <tr>
+    <td>PYNQ JTAG (FT2232 Ch.0)</td>
+    <td><code>/dev/ttyUSB1</code></td>
+    <td>(claimed by OpenOCD)</td>
+  </tr>
+  <tr>
+    <td>PYNQ UART (FT2232 Ch.1)</td>
+    <td><code>/dev/ttyUSB2</code></td>
+    <td><code>/dev/ttyUSB1</code></td>
+  </tr>
+</table>
+
+<p>
+When OpenOCD claims the JTAG channel, the UART device shifts from
+<code>/dev/ttyUSB2</code> to <code>/dev/ttyUSB1</code>. Use <code>dmesg</code>
+or <code>ls /dev/serial/by-id/</code> to verify which device is which:
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>ls -la /dev/serial/by-id/
+<span class="output">usb-SEGGER_J-Link_000760012345-if00 -&gt; ../../ttyUSB0
+usb-Digilent_PYNQ-Z2_123456-if01-port0 -&gt; ../../ttyUSB1</span></div>
+
+<div class="lesson">
+<strong>Lesson:</strong> If your serial monitor shows garbage or nothing at all, the
+first thing to check is whether the USB device index has shifted. This happens
+every time OpenOCD is started or stopped. Build the habit of running
+<code>ls /dev/serial/by-id/</code> before connecting.
+</div>
+
+
+<!-- ============================================================ -->
+<!--              SECTION 2: GDB SESSION COOKBOOK                   -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <span class="disabled">&lt; Previous</span>
+    <a href="sec02-gdb-cookbook.html">Section 2: GDB Session Cookbook &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

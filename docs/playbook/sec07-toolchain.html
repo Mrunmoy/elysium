@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 7: Toolchain Quick Reference -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 7 -- Toolchain Quick Reference</span>
+    <div class="header-nav">
+      <a href="sec06-serial.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html" class="current">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <span class="nav-arrow disabled">Next &gt;</span>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html" class="current">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 7</span>Toolchain Quick Reference</h2>
+
+<h3>build.py Commands</h3>
+
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td><code>python3 build.py</code></td><td>Cross-compile for default target (STM32F207ZGT6)</td></tr>
+  <tr><td><code>python3 build.py --target stm32f407zgt6</code></td><td>Cross-compile for STM32F407</td></tr>
+  <tr><td><code>python3 build.py --target pynq-z2</code></td><td>Cross-compile for PYNQ-Z2 (Zynq-7020)</td></tr>
+  <tr><td><code>python3 build.py -t</code></td><td>Build and run host unit tests (x86)</td></tr>
+  <tr><td><code>python3 build.py -c</code></td><td>Clean both build directories</td></tr>
+  <tr><td><code>python3 build.py -f</code></td><td>Flash firmware via J-Link (STM32)</td></tr>
+  <tr><td><code>python3 build.py -f --target pynq-z2</code></td><td>Flash firmware via OpenOCD (PYNQ-Z2)</td></tr>
+  <tr><td><code>python3 build.py -f --app blinky</code></td><td>Flash the blinky application</td></tr>
+  <tr><td><code>python3 build.py -e</code></td><td>Build example applications</td></tr>
+</table>
+
+
+<h3>Common ARM GCC Flags</h3>
+
+<table>
+  <tr><th>Flag</th><th>Purpose</th></tr>
+  <tr><td><code>-mcpu=cortex-m3</code></td><td>Target Cortex-M3 (F207)</td></tr>
+  <tr><td><code>-mcpu=cortex-m4</code></td><td>Target Cortex-M4 (F407)</td></tr>
+  <tr><td><code>-mcpu=cortex-a9</code></td><td>Target Cortex-A9 (PYNQ-Z2)</td></tr>
+  <tr><td><code>-mthumb</code></td><td>Thumb-2 instruction set (Cortex-M only)</td></tr>
+  <tr><td><code>-marm</code></td><td>ARM instruction set (Cortex-A9)</td></tr>
+  <tr><td><code>-mfloat-abi=soft</code></td><td>Software floating point (no FPU)</td></tr>
+  <tr><td><code>-mfloat-abi=softfp</code></td><td>Software FP ABI, hardware FPU (A9 with VFPv3)</td></tr>
+  <tr><td><code>-mfpu=vfpv3-d16</code></td><td>VFPv3 with 16 double-precision registers (A9)</td></tr>
+  <tr><td><code>-fno-exceptions</code></td><td>No C++ exceptions (kernel code)</td></tr>
+  <tr><td><code>-fno-rtti</code></td><td>No runtime type information (kernel code)</td></tr>
+  <tr><td><code>-fno-unwind-tables</code></td><td>No unwind tables (kernel code)</td></tr>
+  <tr><td><code>-nostartfiles</code></td><td>Do not link default startup files</td></tr>
+  <tr><td><code>-T Linker.ld</code></td><td>Use custom linker script</td></tr>
+  <tr><td><code>-Wl,--gc-sections</code></td><td>Remove unused sections (smaller binary)</td></tr>
+  <tr><td><code>-ffunction-sections</code></td><td>Place each function in its own section</td></tr>
+  <tr><td><code>-fdata-sections</code></td><td>Place each data item in its own section</td></tr>
+</table>
+
+
+<h3>Running Host Tests</h3>
+
+<p>
+Host tests run on x86 with mock HAL implementations substituted at link time.
+The test binary uses Google Test v1.14.0.
+</p>
+
+<div class="cmd-session"><span class="prompt">$ </span>python3 build.py -t
+<span class="output">-- Configuring host test build
+-- Found GTest: /usr/lib/libgtest.a
+-- Build files written to: build-test
+[1/47] Building CXX object test/hal/CMakeFiles/hal_tests.dir/GpioTest.cpp.o
+...
+[47/47] Linking CXX executable test/kernel/kernel_tests
+100% tests passed, 0 tests failed out of 297</span></div>
+
+<h4>Running a specific test</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>./build-test/test/hal/hal_tests --gtest_filter='*Toggle*'
+<span class="output">[==========] Running 1 test from 1 test suite.
+[----------] 1 test from GpioToggleTest
+[ RUN      ] GpioToggleTest.ToggleSetsODR
+[       OK ] GpioToggleTest.ToggleSetsODR (0 ms)
+[----------] 1 test from GpioToggleTest (0 ms total)
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.</span></div>
+
+<h4>Running via CTest</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>ctest --test-dir build-test --output-on-failure
+<span class="output">Test project /home/user/ms-os/build-test
+      Start  1: GpioTest.EnableClock
+      ...
+100% tests passed, 0 tests failed out of 297
+Total Test time (real) =   0.42 sec</span></div>
+
+<div class="key-decision">
+<strong>Host test caveat:</strong> Host tests must run outside the Nix dev shell
+if you encounter glibc version mismatches. The Nix shell provides the ARM
+cross-compiler but may conflict with the host GCC's runtime libraries. If tests
+segfault on startup, exit Nix and rebuild:
+<code>cd build-test &amp;&amp; cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug .. &amp;&amp; ninja &amp;&amp; ctest</code>
+</div>
+
+
+<h3>Memory Map Reference</h3>
+
+<h4>STM32F207/F407</h4>
+
+<div class="diagram"><span class="label">FLASH</span>  0x08000000 - 0x080FFFFF  (1024 KB)
+  .isr_vector    Vector table (Reset, NMI, HardFault, ...)
+  .text          Code
+  .rodata        Read-only data, string literals
+  .ARM.exidx     Exception unwind index
+
+<span class="label">SRAM</span>   0x20000000 - 0x2001FFFF  (128 KB)
+  .data          Initialized globals (copied from FLASH by startup)
+  .bss           Zero-initialized globals (zeroed by startup)
+  .heap          Dynamic allocation region (16 KB, aligned for MPU)
+  ._stack        Main stack (4 KB at top of SRAM)
+
+<span class="label">Periph</span> 0x40000000 - 0x5FFFFFFF
+  GPIO, UART, SPI, I2C, timers, DMA, ...
+
+<span class="label">SCB</span>    0xE000ED00 - 0xE000ED3F  System Control Block
+  +0x00  CPUID    +0x04  ICSR     +0x08  VTOR
+  +0x10  SCR      +0x14  CCR      +0x1C  SHPR2
+  +0x20  SHPR3    +0x24  SHCSR    +0x28  CFSR
+  +0x2C  HFSR     +0x34  MMFAR    +0x38  BFAR</div>
+
+<h4>PYNQ-Z2 (Zynq-7020)</h4>
+
+<div class="diagram"><span class="label">DDR</span>    0x00000000 - 0x1FFFFFFF  (512 MB)
+  0x00000000 - 0x000FFFFF  Reserved (BootROM)
+  0x00100000 - ...         Firmware load address
+
+<span class="label">UART0</span>  0xE0000000  PS UART0 (Cadence IP)
+  +0x00  CR       +0x04  MR       +0x08  IER
+  +0x18  BAUDGEN  +0x20  RXTOUT   +0x24  RXWM
+  +0x2C  SR       +0x30  TX_FIFO  +0x34  BAUDIV
+
+<span class="label">GIC</span>    CPU Interface: 0xF8F00100
+         Distributor:  0xF8F01000
+
+<span class="label">Timer</span>  SCU Private Timer: 0xF8F00600
+
+<span class="label">L2C</span>    PL310: 0xF8F02000
+  +0x77C  INV_WAY  (write 0xFFFF to invalidate all ways)</div>
+
+<h3>EXC_RETURN Values (Cortex-M)</h3>
+
+<table>
+  <tr><th>Value</th><th>Return To</th><th>Stack</th><th>Frame</th></tr>
+  <tr><td><code>0xFFFFFFF1</code></td><td>Handler mode</td><td>MSP</td><td>Basic</td></tr>
+  <tr><td><code>0xFFFFFFF9</code></td><td>Thread mode</td><td>MSP</td><td>Basic</td></tr>
+  <tr><td><code>0xFFFFFFFD</code></td><td>Thread mode</td><td>PSP</td><td>Basic</td></tr>
+  <tr><td><code>0xFFFFFFE1</code></td><td>Handler mode</td><td>MSP</td><td>Extended (FPU)</td></tr>
+  <tr><td><code>0xFFFFFFE9</code></td><td>Thread mode</td><td>MSP</td><td>Extended (FPU)</td></tr>
+  <tr><td><code>0xFFFFFFED</code></td><td>Thread mode</td><td>PSP</td><td>Extended (FPU)</td></tr>
+</table>
+
+<p>
+ms-os threads use PSP (Process Stack Pointer) and return with
+<code>0xFFFFFFFD</code>. The EXC_RETURN value in the crash dump confirms
+which stack and mode the faulting code was using.
+</p>
+
+
+<!-- ============================================================ -->
+<!--         BOARD-TO-BOARD UART TESTING                          -->
+<!-- ============================================================ -->
+
+<h2 class="section-title">Board-to-Board UART Testing</h2>
+
+<p>
+Phase 13 introduced dual-board testing. Two STM32F407 boards with USART2
+cross-wired (TX-to-RX, RX-to-TX). Common issues and resolutions:
+</p>
+
+<h3>Wiring</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>TX-TX / RX-RX (not crossed)</td>
+    <td>Timeout on every test, no echo</td>
+    <td>Cross the wires: Board1 TX (PA2) to Board2 RX (PA3) and vice versa</td>
+  </tr>
+  <tr>
+    <td>Missing common ground</td>
+    <td>Garbled data, random byte values</td>
+    <td>Connect GND between both boards</td>
+  </tr>
+  <tr>
+    <td>Long wires / noise</td>
+    <td>Occasional bit errors, especially at higher baud rates</td>
+    <td>Use short jumper wires (< 20cm), reduce baud rate if needed</td>
+  </tr>
+</table>
+
+<h3>Timing</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>Echo server not ready</td>
+    <td>First test times out, rest pass</td>
+    <td>Test runner waits 500ms after boot before starting tests</td>
+  </tr>
+  <tr>
+    <td>Ring buffer overflow on burst</td>
+    <td>Lost bytes in stress test</td>
+    <td>Echo server must poll fast enough; consider reducing burst size or adding inter-byte delay</td>
+  </tr>
+</table>
+
+<h3>Dual-Probe Flashing</h3>
+<p>
+Board 1 (J-Link): <code>python3 build.py -f --target stm32f407zgt6 --app uart2-test</code><br>
+Board 2 (CMSIS-DAP): <code>python3 build.py -f --target stm32f407zgt6 --app uart2-echo --probe cmsis-dap</code>
+</p>
+<p>
+If OpenOCD fails to connect to CMSIS-DAP, check <code>lsusb</code> for VID:PID
+<code>0xc251:0xf001</code>. If the device uses a different VID/PID, update the
+<code>cmsis_dap_vid_pid</code> command in <code>build.py</code>.
+</p>
+
+<h3>Console Monitoring</h3>
+<p>
+Board 1 console: <code>/dev/ttyUSB0</code> (CP2102, 115200 baud)<br>
+Board 2 console: <code>/dev/ttyACM0</code> (CMSIS-DAP UART bridge, 115200 baud)<br>
+Use <code>minicom -D /dev/ttyUSB0 -b 115200</code> or
+<code>screen /dev/ttyACM0 115200</code> to monitor.
+</p>
+
+
+<h2>SPI Board-to-Board (Phase 14)</h2>
+
+<h3>SPI Wiring</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>MOSI/MISO swapped</td>
+    <td>Master reads 0x00 or 0xFF on every transfer</td>
+    <td>Wire master MOSI to slave MOSI, master MISO to slave MISO (not crossed like UART)</td>
+  </tr>
+  <tr>
+    <td>Missing SCK connection</td>
+    <td>RXNE never fires on slave, master TXE/RXNE hang</td>
+    <td>SCK must be connected between both boards (master drives SCK)</td>
+  </tr>
+  <tr>
+    <td>Missing common ground</td>
+    <td>Garbled data, random byte values</td>
+    <td>Connect GND between both boards</td>
+  </tr>
+</table>
+
+<h3>SPI Slave Mode Gotchas</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>SSI=1 in slave mode</td>
+    <td>Slave ignores all bus traffic, RXNE never fires</td>
+    <td>Set SSI=0 when softwareNss=true and master=false; SSI=1 is only for master (prevents MODF)</td>
+  </tr>
+  <tr>
+    <td>DR written before SPE=1</td>
+    <td>First slave response is 0x00 instead of pre-loaded value</td>
+    <td>Enable SPE (via spiSlaveRxInterruptEnable) before writing DR (via spiSlaveSetTxByte)</td>
+  </tr>
+  <tr>
+    <td>SPI overrun (OVR)</td>
+    <td>Slave echoes wrong bytes, SR bit 6 set</td>
+    <td>Slave ISR must read DR before next byte arrives; avoid slow operations (UART prints) in ISR</td>
+  </tr>
+  <tr>
+    <td>Master too fast for slave</td>
+    <td>First few bytes correct, then data corruption</td>
+    <td>Use slower prescaler (Div256 = 328 kHz at 84 MHz APB2) or add inter-byte delay on master</td>
+  </tr>
+</table>
+
+<h3>DebugMon Exception After OpenOCD</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>FPB hardware breakpoints persist across reset</td>
+    <td>CPU hangs on boot (DebugMon vectors to Default_Handler infinite loop)</td>
+    <td>Clear FPB in SystemInit: <code>*(0xE0002000) = (1 &lt;&lt; 1)</code> (KEY=1, ENABLE=0)</td>
+  </tr>
+  <tr>
+    <td>DEMCR.MON_EN persists across reset</td>
+    <td>Any FPB match triggers DebugMon even with C_DEBUGEN=0</td>
+    <td>Clear MON_EN in SystemInit: <code>*(0xE000EDFC) &amp;= ~(1 &lt;&lt; 16)</code></td>
+  </tr>
+  <tr>
+    <td>OpenOCD connect/disconnect breaks SPI</td>
+    <td>SPI RXNE never fires after <code>openocd -c "init; shutdown"</code>, all registers read correct</td>
+    <td>Known limitation. Reflash the board. Do not connect OpenOCD to slave after flashing.</td>
+  </tr>
+</table>
+
+<h3>Dual-Probe SPI Flashing</h3>
+<p>
+Board 2 (slave, CMSIS-DAP): <code>python3 build.py -f --target stm32f407zgt6 --app spi2-slave --probe cmsis-dap</code><br>
+Board 1 (master, J-Link): <code>python3 build.py -f --target stm32f407zgt6 --app spi2-test</code>
+</p>
+<p>
+Flash the slave first, then the master. The master waits 500ms for the slave to
+initialize before starting tests.
+</p>
+
+<h3>I2C Slave Mode</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>STOPF clearing sequence</td>
+    <td>Slave stops responding after first transaction</td>
+    <td>Clear STOPF by reading SR1 then writing CR1 with PE=1 (RM0090 requirement)</td>
+  </tr>
+  <tr>
+    <td>AF (NACK) in slave TX mode</td>
+    <td>Error ISR fires after every master read</td>
+    <td>AF is normal in slave TX (master NACK = done reading). Check slave active flag, clear AF, return.</td>
+  </tr>
+  <tr>
+    <td>OAR1 bit 14</td>
+    <td>Slave never responds to address</td>
+    <td>Bit 14 of OAR1 must be set to 1 for 7-bit addressing (RM0090 requirement)</td>
+  </tr>
+  <tr>
+    <td>I2C bus lockup (SDA stuck low)</td>
+    <td>I2C hangs, START condition cannot be generated</td>
+    <td>Toggle SCL 9 times via GPIO before configuring AF mode. Or power-cycle boards.</td>
+  </tr>
+  <tr>
+    <td>Internal pull-ups too weak</td>
+    <td>I2C errors at higher speeds or longer wires</td>
+    <td>Add 4.7K external pull-ups. Internal pull-ups (~40K) work for short wires at 100 kHz.</td>
+  </tr>
+</table>
+
+<h3>Dual-Probe I2C Flashing</h3>
+<p>
+Board 2 (slave, ST-Link V2): <code>python3 build.py -f --target stm32f407zgt6 --app i2c-slave --probe stlink</code><br>
+Board 1 (master, J-Link): <code>python3 build.py -f --target stm32f407zgt6 --app i2c-test</code>
+</p>
+<p>
+Flash the slave first, then the master. The master waits 500ms for the slave to
+initialize before starting tests. BME680 sensor at address 0x77 can coexist on
+the same I2C1 bus -- Test 6 reads chip ID register 0xD0 (expected 0x61).
+</p>
+
+<div class="epigraph" style="margin-top: 4em;">
+  "The most effective debugging tool is still careful thought,<br>
+  coupled with judiciously placed print statements."
+  <div class="attribution">-- Brian Kernighan (again)</div>
+</div>
+  <div class="chapter-nav-footer">
+    <a href="sec06-serial.html">&lt; Section 6: Serial Port Debugging</a>
+    <span class="disabled">Next &gt;</span>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

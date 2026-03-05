@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Epilogue: The Road Ahead -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Epilogue -- The Road Ahead</span>
+    <div class="header-nav">
+      <a href="ch14-uart-test.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html" class="current">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="appendix.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html" class="current">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Epilogue</span>
+  The Road Ahead
+</h2>
+
+<div class="epigraph">
+  "The best way to predict the future is to implement it."
+  <div class="attribution">&mdash; Alan Kay</div>
+</div>
+
+<p>
+As of March 2026, ms-os has completed thirteen phases of development. It runs
+on three hardware targets spanning two ARM architecture families, with
+389 C++ unit tests and 135 Python tests verified by GitHub Actions CI on
+every push. The kernel schedules 8 threads across 32 priority levels,
+enforces a hardware privilege boundary with SVC syscalls and MPU protection,
+communicates through Minix-style IPC, parses standard FDT device trees at
+runtime, conserves power via WFI and sleep modes, drives SPI/I2C/DMA
+peripherals at the register level, and provides an interactive shell for
+runtime introspection. All of it cross-compiles for Cortex-M3, Cortex-M4,
+and Cortex-A9 from the same source tree. And now, for the first time, two
+boards talk to each other.
+</p>
+
+<p>
+The journey from a blinking LED to a microkernel with IPC, device trees, and
+CI has been one of accumulation. Each phase built on the infrastructure of
+the last. The dual build system from Phase 0 made every subsequent phase
+testable on the host. The architecture abstraction from Phase 4 made every
+subsequent feature portable across three targets. The SVC dispatch from
+Phase 6 made the IPC from Phase 5 available to unprivileged threads. Phase
+13 proved that the HAL drivers work not just in isolation but across physical
+wires between real devices. None of these phases exist in isolation; they
+form a stack where each layer depends on the ones below.
+</p>
+
+<p>
+But the journey is far from over. The roadmap includes:
+</p>
+
+<ul>
+  <li><strong>User-space drivers</strong> &mdash; Move device drivers out
+      of the kernel into user-space services communicating via IPC</li>
+  <li><strong>SMP support</strong> &mdash; Utilize the PYNQ-Z2's second
+      Cortex-A9 core with per-core scheduling and cross-core IPC</li>
+  <li><strong>Filesystem</strong> &mdash; A minimal filesystem for
+      configuration storage and logging</li>
+  <li><strong>Custom bootloader</strong> &mdash; Replace u-boot with our own,
+      using <code>ps7_init</code> for standalone Zynq PS initialization</li>
+  <li><strong>Networking</strong> &mdash; A lightweight TCP/IP stack for
+      the STM32 Ethernet peripheral</li>
+  <li><strong>Board-to-board SPI and I2C</strong> &mdash; Extend the
+      cross-board test infrastructure to SPI master/slave and I2C</li>
+</ul>
+
+<p>
+Each phase builds on the last. Each line of assembly teaches something that
+no textbook can. Every bug is a lesson&mdash;and every fix is a celebration.
+Somewhere in the intersection of silicon and software, an operating system
+continues to grow.
+</p>
+
+<!-- ============================================================ -->
+<!--                    APPENDIX A                                -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch14-uart-test.html">&lt; Chapter 13: The Wire Between Two Worlds</a>
+    <a href="appendix.html">Appendix A: Hardware Targets &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

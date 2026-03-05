@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Guide -- ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Home</span>
+    <div class="header-nav">
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Sections</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html" class="current">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html" class="current">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+  <div class="landing-hero">
+    <h1 class="landing-title">Architecture Guide</h1>
+    <p class="landing-subtitle">Internals of the ms-os microkernel RTOS</p>
+  </div>
+
+  <div class="doc-areas">
+    <a href="../saga/index.html" class="doc-area-card">
+      <h3>The Story of ms-os</h3>
+      <p>The technical narrative from Phase 0 through board-to-board testing.</p>
+    </a>
+    <a href="../playbook/index.html" class="doc-area-card">
+      <h3>Debugging Playbook</h3>
+      <p>JTAG setup, GDB recipes, crash dumps, real bug hunts, and toolchain tips.</p>
+    </a>
+  </div>
+
+  <h2>Sections</h2>
+
+  <div class="chapter-timeline">
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 1</div>
+      <div class="timeline-chapter-title"><a href="sec01-memory-maps.html">Memory Maps</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 2</div>
+      <div class="timeline-chapter-title"><a href="sec02-boot-sequence.html">Boot Sequence</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 3</div>
+      <div class="timeline-chapter-title"><a href="sec03-threads.html">Threads</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 4</div>
+      <div class="timeline-chapter-title"><a href="sec04-context-switch.html">Context Switch</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 5</div>
+      <div class="timeline-chapter-title"><a href="sec05-scheduler.html">Scheduler</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 6</div>
+      <div class="timeline-chapter-title"><a href="sec06-ipc.html">IPC</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 7</div>
+      <div class="timeline-chapter-title"><a href="sec07-syscall.html">Syscall</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 8</div>
+      <div class="timeline-chapter-title"><a href="sec08-device-tree.html">Device Tree</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 9</div>
+      <div class="timeline-chapter-title"><a href="sec09-allocators.html">Allocators</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 10</div>
+      <div class="timeline-chapter-title"><a href="sec10-watchdog.html">Watchdog</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 11</div>
+      <div class="timeline-chapter-title"><a href="sec11-dynamic-threads.html">Dynamic Threads</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 12</div>
+      <div class="timeline-chapter-title"><a href="sec12-bus-drivers.html">Bus Drivers</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Section 13</div>
+      <div class="timeline-chapter-title"><a href="sec13-registers.html">Registers</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

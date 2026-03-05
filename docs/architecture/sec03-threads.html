@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 3: Threads -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 3 -- Threads</span>
+    <div class="header-nav">
+      <a href="sec02-boot-sequence.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html" class="current">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec04-context-switch.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html" class="current">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 3</span>
+  Thread Management
+</h2>
+
+<div class="epigraph">
+  "A thread is nothing more than a saved register set and a stack."
+  <div class="attribution">&mdash; Operating Systems: Three Easy Pieces</div>
+</div>
+
+<p>ms-os supports up to <strong>8 threads</strong> (including the idle thread at ID 0). Thread 0 is always the idle thread, running at priority 31 (lowest). Thread Control Blocks are statically allocated in a fixed-size array. Dynamic thread creation and destruction (slot recycling) is covered in <a href="#dynamic-threads">Section 11</a>.</p>
+
+<h3>Thread Control Block (TCB) Layout</h3>
+
+<p>The TCB structure is defined in <code>kernel/inc/kernel/Thread.h</code>. Assembly code in the context switch routines accesses fields at fixed offsets, making the layout ABI-critical.</p>
+
+<div class="diagram">
+<span class="label">ThreadControlBlock</span>    (sizeof = 48 bytes on ARM 32-bit)
+
+Offset  Field                Type          Description
+------  -------------------  ----------    --------------------------------
+  0     stackPointer         uint32_t*     Current SP (PSP on M, SYS on A9)
+  4     state                ThreadState   Ready / Running / Blocked
+  5     id                   uint8_t       Thread ID (0-7)
+  6     basePriority         uint8_t       Assigned priority (0=highest)
+  7     currentPriority      uint8_t       Effective (may be boosted)
+  8     name                 const char*   Pointer to name string
+ 12     stackBase            uint32_t*     Bottom of stack allocation
+ 16     stackSize            uint32_t      Stack size in bytes
+ 20     timeSliceRemaining   uint32_t      Ticks remaining in time slice
+ 24     timeSlice            uint32_t      Full time slice (ticks)
+ 28     nextReady            ThreadId      Next in per-priority ready list
+ 29     nextWait             ThreadId      Next in mutex/semaphore wait queue
+ 30     (padding)            2 bytes
+ 32     wakeupTick           uint32_t      Tick count for sleep wakeup
+ 36     mpuStackRbar         uint32_t      MPU RBAR for thread stack region
+ 40     mpuStackRasr         uint32_t      MPU RASR for thread stack region
+ 44     privileged           bool          true=privileged, false=unprivileged
+</div>
+
+<div class="lesson">
+  <strong>ABI constraint:</strong> The <code>stackPointer</code> field must remain at offset 0 because the context switch assembly loads and stores it with <code>ldr r0, [tcb_ptr]</code> / <code>str r0, [tcb_ptr]</code>. Similarly, the assembly reads <code>privileged</code> at offset 44 and <code>mpuStackRbar</code>/<code>mpuStackRasr</code> at offsets 36/40. Moving any of these fields requires updating the assembly.
+</div>
+
+<h3>Thread States</h3>
+
+<div class="diagram">
+                  threadCreate()
+                       |
+                       v
+              +--------+--------+
+              |     <span class="label">Ready</span>       |<-----------------------+
+              +---------+-------+                        |
+                        |                                |
+              scheduler selects                  wakeup / unblock
+              (highest priority)                  (tick, unlock,
+                        |                          IPC reply)
+                        v                                |
+              +---------+-------+                +-------+--------+
+              |    <span class="label">Running</span>      |                |    <span class="label">Blocked</span>      |
+              |  (exactly one)  +--------------->|  (sleep, mutex, |
+              +--------+-------+   sleep() /     |   semaphore,   |
+                       |           mutex lock /   |   IPC send/    |
+                       |           IPC receive    |   receive)     |
+                       v                          +----------------+
+              yield() or preempt
+              (returns to Ready)
+</div>
+
+<p><strong>ThreadState::Inactive</strong> (value 0) marks unused TCB slots. Only threads in the <strong>Ready</strong> state appear in the scheduler's ready queues. The <strong>Running</strong> state is always held by exactly one thread -- the one currently executing on the CPU.</p>
+
+<h3>Initial Stack Frame</h3>
+
+<p>When a thread is created, its stack is pre-populated with a 16-word (64-byte) frame that mimics what the hardware would push on an exception entry, plus the software-saved registers. When the scheduler first context-switches to this thread, the <code>ldmia</code> + <code>bx lr</code> (EXC_RETURN) sequence pops this frame, landing execution at the thread's entry function.</p>
+
+<div class="diagram">
+<span class="label">Initial Stack Frame</span> (16 words = 64 bytes, descending from stack top)
+
+SP+60  [15]  xPSR / CPSR       <span class="comment">0x01000000 (Cortex-M: Thumb bit)</span>
+SP+56  [14]  PC                 <span class="comment">Thread entry function address</span>
+SP+52  [13]  LR                 <span class="comment">kernelThreadExit (cleanup on return)</span>
+SP+48  [12]  r12                <span class="comment">0</span>
+SP+44  [11]  r3                 <span class="comment">0</span>
+SP+40  [10]  r2                 <span class="comment">0</span>
+SP+36  [ 9]  r1                 <span class="comment">0</span>
+SP+32  [ 8]  r0                 <span class="comment">Thread argument (void* arg)</span>
+-------- <span class="label">hardware / software boundary</span> --------
+SP+28  [ 7]  r11                <span class="comment">0  (software-saved)</span>
+SP+24  [ 6]  r10                <span class="comment">0</span>
+SP+20  [ 5]  r9                 <span class="comment">0</span>
+SP+16  [ 4]  r8                 <span class="comment">0</span>
+SP+12  [ 3]  r7                 <span class="comment">0</span>
+SP+ 8  [ 2]  r6                 <span class="comment">0</span>
+SP+ 4  [ 1]  r5                 <span class="comment">0</span>
+SP+ 0  [ 0]  r4                 <span class="comment">0  &lt;-- stackPointer in TCB points here</span>
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> Both Cortex-M and Cortex-A9 use the same 16-word stack frame layout. On Cortex-M, the hardware pushes r0-r3, r12, LR, PC, xPSR automatically on exception entry. On Cortex-A9, the IRQ handler performs this push in software using SRS/STMFD. The identical layout means the same <code>threadCreate()</code> code works for both architectures.
+</div>
+
+<h3>Thread Configuration</h3>
+
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+  <tr><td>priority</td><td>16</td><td>0 = highest, 31 = lowest</td></tr>
+  <tr><td>timeSlice</td><td>10 ticks</td><td>Round-robin quantum at same priority</td></tr>
+  <tr><td>stackSize</td><td>512 bytes</td><td>Must be power-of-two for MPU alignment</td></tr>
+  <tr><td>privileged</td><td>true</td><td>false = runs with CONTROL.nPRIV=1</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 4: CONTEXT SWITCH                                    -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec02-boot-sequence.html">&lt; Section 2: Boot Sequence</a>
+    <a href="sec04-context-switch.html">Section 4: Context Switch &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

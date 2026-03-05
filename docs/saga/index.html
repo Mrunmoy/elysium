@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Home</span>
+    <div class="header-nav">
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html" class="current">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html" class="current">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+  <div class="landing-hero">
+    <h1 class="landing-title">The Story of ms-os</h1>
+    <p class="landing-subtitle">Building a Real-Time Operating System from Scratch</p>
+  </div>
+
+  <div class="landing-intro">
+    <p>
+      This is the technical narrative of ms-os, a microkernel RTOS written in C++17 for
+      ARM Cortex-M and Cortex-A processors. Each chapter covers one phase of development,
+      from the first blinking LED to board-to-board communication over SPI and I2C.
+    </p>
+  </div>
+
+  <div class="hw-card">
+    <div class="hw-card-title">Hardware Targets</div>
+    <div class="hw-card-grid">
+      <div class="hw-card-row"><span class="hw-label">Primary:</span> <span class="hw-value">STM32F207ZGT6 (Cortex-M3, 120 MHz)</span></div>
+      <div class="hw-card-row"><span class="hw-label">Secondary:</span> <span class="hw-value">STM32F407ZGT6 (Cortex-M4, 168 MHz)</span></div>
+      <div class="hw-card-row"><span class="hw-label">Tertiary:</span> <span class="hw-value">PYNQ-Z2 Zynq-7020 (Cortex-A9, 650 MHz)</span></div>
+      <div class="hw-card-row"><span class="hw-label">Language:</span> <span class="hw-value">C++17 + Assembly</span></div>
+      <div class="hw-card-row"><span class="hw-label">Tests:</span> <span class="hw-value">407 C++ + 135 Python</span></div>
+      <div class="hw-card-row"><span class="hw-label">Architecture:</span> <span class="hw-value">Microkernel</span></div>
+    </div>
+  </div>
+
+  <div class="doc-areas">
+    <a href="../playbook/index.html" class="doc-area-card">
+      <h3>Debugging Playbook</h3>
+      <p>JTAG setup, GDB recipes, crash dumps, real bug hunts, and toolchain tips.</p>
+    </a>
+    <a href="../architecture/index.html" class="doc-area-card">
+      <h3>Architecture Guide</h3>
+      <p>Memory maps, boot sequence, threads, context switch, IPC, and register reference.</p>
+    </a>
+  </div>
+
+  <h2>Chapters</h2>
+
+  <div class="chapter-timeline">
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Prologue</div>
+      <div class="timeline-chapter-title"><a href="ch00-prologue.html">Why Build an OS?</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 1</div>
+      <div class="timeline-chapter-title"><a href="ch01-foundation.html">Laying the Foundation</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 2</div>
+      <div class="timeline-chapter-title"><a href="ch02-kernel-core.html">The Kernel Comes Alive</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 3</div>
+      <div class="timeline-chapter-title"><a href="ch03-scheduling.html">Teaching the OS to Multitask</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 4</div>
+      <div class="timeline-chapter-title"><a href="ch04-memory.html">Guarding Memory</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 5</div>
+      <div class="timeline-chapter-title"><a href="ch05-multi-target.html">New Horizons: The PYNQ-Z2</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 6</div>
+      <div class="timeline-chapter-title"><a href="ch06-ipc.html">Talking Between Threads</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 7</div>
+      <div class="timeline-chapter-title"><a href="ch07-syscall.html">Drawing the Line</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 8</div>
+      <div class="timeline-chapter-title"><a href="ch08-device-tree.html">Describing the Hardware</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 9</div>
+      <div class="timeline-chapter-title"><a href="ch09-power.html">Conserving Every Milliamp</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 10</div>
+      <div class="timeline-chapter-title"><a href="ch10-shell.html">A Window Into the Kernel</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 11</div>
+      <div class="timeline-chapter-title"><a href="ch11-ci.html">The Safety Net</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 12</div>
+      <div class="timeline-chapter-title"><a href="ch12-night-shift.html">The Night Shift</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 12</div>
+      <div class="timeline-chapter-title"><a href="ch13-bus-drivers.html">The Bus Drivers</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 13</div>
+      <div class="timeline-chapter-title"><a href="ch14-uart-test.html">The Wire Between Two Worlds</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Epilogue</div>
+      <div class="timeline-chapter-title"><a href="ch15-epilogue.html">The Road Ahead</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Appendix A</div>
+      <div class="timeline-chapter-title"><a href="appendix.html">Hardware Targets</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

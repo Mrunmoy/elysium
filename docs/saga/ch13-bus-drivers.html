@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 12: The Bus Drivers -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 12 -- The Bus Drivers</span>
+    <div class="header-nav">
+      <a href="ch12-night-shift.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html" class="current">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch14-uart-test.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html" class="current">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 12</span>
+  The Bus Drivers
+</h2>
+
+<div class="epigraph">
+  "The only way to test a peripheral driver is to talk to real silicon."
+  <div class="attribution">&mdash; Embedded systems folklore</div>
+</div>
+
+<p>
+Three new bus protocols. Three register maps. Three state machines.
+Phase 12 brought DMA, SPI, and I2C into the HAL, each one a register-level
+driver that talks directly to STM32 silicon without wrapping the vendor
+library. The implementation order was deliberate: DMA first because future
+DMA-backed SPI and I2C transfers would need it, SPI second because its
+full-duplex protocol is simpler, and I2C last because its START/ADDR/STOP
+state machine with ACK/NACK timing is the most complex of the three.
+</p>
+
+<h3>DMA: The Data Mover</h3>
+
+<p>
+The STM32 has two DMA controllers, each with 8 streams and 8 channel
+selectors per stream. At the register level, each stream is a block of 6
+registers at base + 0x10 + stream * 0x18: configuration, transfer count,
+peripheral address, memory address, secondary memory address (for
+double-buffering), and FIFO control. The status registers split streams
+0-3 into LISR and 4-7 into HISR, with 5 flag bits per stream at irregular
+offsets.
+</p>
+
+<p>
+The DMA driver stores per-stream callback state in a static array:
+<code>s_state[2][8]</code>&mdash;two controllers, eight streams each. When a
+transfer completes, the ISR reads the status register, identifies which
+flags are set (transfer complete or transfer error), clears them via the
+flag clear register, and invokes the stored callback with the appropriate
+flag bits. Sixteen ISR handlers in total, one per stream.
+</p>
+
+<h3>SPI: Full Duplex</h3>
+
+<p>
+SPI is conceptually simple: master generates a clock, data shifts out on
+MOSI and in on MISO simultaneously. One byte out, one byte in. The polled
+transfer loop is four lines: wait for TXE (transmit empty), write DR, wait
+for RXNE (receive not empty), read DR. Repeat for each byte.
+</p>
+
+<p>
+The async transfer uses the same byte-at-a-time approach but driven by
+interrupts. Per-instance state tracks the tx/rx buffers, their lengths,
+and current indices. The ISR checks RXNE first (read the received byte),
+then TXE (write the next byte). When the last byte is received, the ISR
+disables interrupts and invokes the completion callback.
+</p>
+
+<p>
+The SPI loopback demo was the on-target verification vehicle. Wire PA7
+(MOSI) to PA6 (MISO), and every byte the master sends comes right back.
+Four tests: a single 0xA5 byte, a 4-byte pattern, a full 0x00-0xFF sweep,
+and an async interrupt-driven transfer. Without the loopback wire, all
+transfers complete (the driver does not hang) but the received data is
+floating noise&mdash;FAIL is expected. With the wire, all four pass.
+</p>
+
+<h3>I2C: The State Machine</h3>
+
+<p>
+I2C is the most complex of the three. The STM32 I2C peripheral is
+notoriously finicky&mdash;the write sequence requires START, wait for SB,
+write address, wait for ADDR, clear ADDR by reading SR1 then SR2, then
+for each byte wait for TXE, write DR, then wait for BTF before generating
+STOP. The read sequence is even more involved: the number of bytes to
+receive determines when to clear ACK and when to set STOP, with special
+cases for 1-byte and 2-byte reads.
+</p>
+
+<p>
+The ADDR flag clearing deserves mention. The STM32 I2C peripheral requires
+reading SR1 followed by SR2 to clear the ADDR flag. The natural pattern is
+<code>(void)reg(SR1); (void)reg(SR2);</code>&mdash;read and discard. But
+ARM GCC 12 with <code>-Werror</code> warns that casting a volatile read to
+void may allow the compiler to optimize away the access. The fix was a
+<code>readDiscard()</code> helper that reads into a volatile local variable:
+</p>
+
+<pre>
+<span class="kw">static void</span> <span class="fn">readDiscard</span>(std::uint32_t addr)
+{
+    <span class="kw">volatile</span> std::uint32_t tmp = *<span class="kw">reinterpret_cast</span>&lt;<span class="kw">volatile</span> std::uint32_t *&gt;(addr);
+    (<span class="kw">void</span>)tmp;
+}
+</pre>
+
+<p>
+This guarantees the compiler generates the load instruction while silencing
+the warning. The same pattern had been discovered in Phase 10 (watchdog SR
+reads) and documented in the gotchas file.
+</p>
+
+<h3>RCC: Clock Gating</h3>
+
+<p>
+Each new peripheral needs its clock enabled before register access. Six new
+functions in the RCC module: enable and disable for SPI (APB2ENR bit 12 for
+SPI1, APB1ENR bits 14-15 for SPI2/3), I2C (APB1ENR bits 21-23), and DMA
+(AHB1ENR bits 21-22). The Zynq stubs are no-ops, as always.
+</p>
+
+<h3>The snprintf Trap</h3>
+
+<p>
+The SPI demo originally used <code>std::snprintf</code> to format the test
+summary. Cross-compilation blew up with an undefined <code>end</code>
+symbol. The problem: snprintf in newlib (nano.specs) pulls in malloc, which
+calls <code>_sbrk</code>, which references the linker symbol <code>end</code>
+marking the end of the BSS segment. Our linker scripts do not define
+<code>end</code>&mdash;the kernel manages its own heap via the Heap
+allocator, not through the C library sbrk interface.
+</p>
+
+<p>
+The fix was simple: do not use snprintf. The pass/total counts are
+single-digit numbers; <code>'0' + pass</code> produces the ASCII digit
+directly. No format strings, no printf machinery, no linker surprises.
+</p>
+
+<h3>53 New Tests</h3>
+
+<p>
+The mock-and-test pattern scaled cleanly. MockDma.cpp, MockSpi.cpp,
+MockI2c.cpp, and MockRcc.cpp each record their function calls into global
+vectors. The test files assert on those recorded calls. 8 RCC tests, 13
+DMA tests, 14 SPI tests, 18 I2C tests. Every API function has at least one
+test verifying its parameters are recorded correctly, and every injectable
+return value (busy flag, remaining count, error code, receive data) has
+a test verifying it propagates to the caller.
+</p>
+
+<p>
+Host tests: 374 passing (up from 321). Cross-compilation: clean on all
+three targets. Flash to F407: SPI demo runs, all transfers complete,
+serial output confirmed. ipc-demo regression: still fully functional.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 12:</strong> Three new HAL modules (DMA, SPI, I2C)
+with register-level STM32 drivers, Zynq stubs, and 53 new host tests.
+SPI loopback demo app verified on STM32F407. Total test count: 374 C++
+tests, 135 Python tests. The bus drivers are ready for sensors, displays,
+and external memory.
+</div>
+
+
+<!-- ============================================================ -->
+<!--   CHAPTER 13: BOARD-TO-BOARD USART2 INTEGRATION TEST         -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch12-night-shift.html">&lt; Chapter 12: The Night Shift</a>
+    <a href="ch14-uart-test.html">Chapter 13: The Wire Between Two Worlds &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

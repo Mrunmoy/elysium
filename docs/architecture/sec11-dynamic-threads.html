@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 11: Dynamic Threads -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 11 -- Dynamic Threads</span>
+    <div class="header-nav">
+      <a href="sec10-watchdog.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html" class="current">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec12-bus-drivers.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html" class="current">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 11</span>
+  Dynamic Thread Lifecycle
+</h2>
+
+<div class="epigraph">
+  "Threads should be born, do their work, and die cleanly."
+  <div class="attribution">&mdash; POSIX threading philosophy</div>
+</div>
+
+<p>Earlier versions of ms-os used static thread allocation only -- threads were created at startup and ran forever. Dynamic thread lifecycle adds the ability to <strong>create threads into recycled slots</strong> and <strong>destroy threads at runtime</strong>, enabling patterns like worker threads, one-shot tasks, and dynamic service management.</p>
+
+<h3>TCB Slot Scanning</h3>
+
+<p>Thread creation scans the TCB array for any slot in the <code>Inactive</code> state. There is no monotonic thread ID counter -- a destroyed slot's ID is immediately available for reuse by the next <code>threadCreate()</code> call.</p>
+
+<div class="diagram">
+<span class="label">TCB Array</span> (MAX_THREADS = 8)
+
+  [0]  Idle    (Running)     <span class="comment">-- always occupied, cannot be destroyed</span>
+  [1]  Server  (Ready)       <span class="comment">-- active application thread</span>
+  [2]  Client  (Blocked)     <span class="comment">-- blocked on IPC receive</span>
+  [3]  Worker  (<span class="label">Inactive</span>)    <span class="comment">-- previously destroyed, slot available</span>
+  [4]  (empty) (<span class="label">Inactive</span>)    <span class="comment">-- never used, slot available</span>
+  [5]  Shell   (Ready)       <span class="comment">-- active application thread</span>
+  [6]  (empty) (Inactive)
+  [7]  (empty) (Inactive)
+
+<span class="label">threadCreate()</span> scans for first Inactive slot:
+  -> finds slot [3], creates new thread with ID = 3
+  -> state transitions: Inactive -> Ready
+  -> thread enters scheduler ready queue
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> Thread IDs are recycled, not monotonically increasing. This means a thread ID that previously belonged to a destroyed thread can be reused by a newly created thread. Code that caches thread IDs across destruction boundaries must be aware of this. The simplicity of slot reuse was preferred over generation counters or epoch-based IDs, given the small thread count (max 8).
+</div>
+
+<h3>Thread Destruction Sequence</h3>
+
+<p>Destroying a thread requires coordinated cleanup across multiple kernel subsystems. The <code>destroyThread()</code> function performs the following steps in order:</p>
+
+<div class="diagram">
+<span class="label">destroyThread(threadId)</span>
+
+  1. <span class="label">Validate</span>
+     |  Is threadId valid? (0 <= id < MAX_THREADS)
+     |  Is thread not already Inactive?
+     |  Is thread not the idle thread?  <span class="comment">-- idle thread is protected</span>
+     |
+  2. <span class="label">Remove from scheduler</span>
+     |  scheduler.removeThread(threadId)
+     |  Removes from ready queue or wait queue
+     |  Clears bitmap bit if priority queue is now empty
+     |
+  3. <span class="label">Reset IPC mailbox</span>
+     |  ipcResetMailbox(threadId)
+     |  Drains pending messages
+     |  Unblocks any threads waiting to send to this thread
+     |  Clears notification bits
+     |
+  4. <span class="label">Destroy TCB</span>
+     |  threadDestroy(threadId)
+     |  Sets state = Inactive
+     |  Clears stackPointer, name, priorities
+     |  Slot is now available for reuse
+     |
+  5. <span class="label">Context switch</span> (if destroying current thread)
+     |  Select next thread and trigger switch
+     v
+</div>
+
+<div class="lesson">
+  <strong>Ordering matters:</strong> The scheduler must be updated <em>before</em> the TCB is cleared. If the TCB were cleared first, the scheduler might attempt to access stale pointers in the ready queue or wait queue. Similarly, the IPC mailbox must be drained before the thread disappears, to unblock any senders waiting on this thread's full mailbox.
+</div>
+
+<h3>Self-Termination</h3>
+
+<p>A thread can terminate itself by returning from its entry function. The initial stack frame sets the LR register to <code>kernelThreadExit()</code>, so a normal function return lands in the cleanup handler.</p>
+
+<div class="diagram">
+<span class="label">Thread Entry / Exit Flow</span>
+
+  threadEntryFunction(void *arg)
+  {
+      <span class="comment">// ... thread work ...</span>
+      return;  <span class="comment">// pops LR = kernelThreadExit</span>
+  }
+       |
+       v
+  <span class="label">kernelThreadExit()</span>
+       |
+       |  1. Get current thread ID
+       |  2. scheduler.removeThread(id)
+       |  3. ipcResetMailbox(id)
+       |  4. threadDestroy(id)
+       |  5. Select next ready thread
+       |  6. Trigger context switch
+       |     <span class="comment">// never returns -- thread no longer exists</span>
+       v
+  (thread slot is now Inactive)
+</div>
+
+<div class="highlight">
+  <strong>Stack safety:</strong> After <code>kernelThreadExit()</code> marks the thread as Inactive and triggers a context switch, the destroyed thread's stack memory is no longer referenced. However, the stack memory itself is statically allocated (<code>alignas</code> arrays) and remains valid for reuse if a new thread is created in the same slot with compatible stack requirements.
+</div>
+
+<h3>Idle Thread Protection</h3>
+
+<p>The idle thread (thread ID 0, priority 31) is registered with the scheduler as a special thread that must always exist. Attempting to destroy the idle thread is rejected:</p>
+
+<div class="diagram">
+<span class="label">Idle Thread Guard</span>
+
+  destroyThread(0)  ->  returns error (cannot destroy idle thread)
+
+  <span class="comment">The idle thread serves two critical roles:</span>
+  <span class="comment">  1. Ensures the scheduler always has at least one runnable thread</span>
+  <span class="comment">  2. Feeds the watchdog (if enabled) to prevent MCU reset</span>
+
+  <span class="comment">Destroying it would leave the system with no thread to run</span>
+  <span class="comment">when all other threads are blocked, causing undefined behavior.</span>
+</div>
+
+<h3>Thread State Transitions (Updated)</h3>
+
+<p>With dynamic lifecycle support, the state diagram gains the <code>Inactive</code> state as both start and end:</p>
+
+<div class="diagram">
+                 threadCreate()                   destroyThread()
+                      |                           or kernelThreadExit()
+                      v                                ^
+             +--------+--------+                       |
+  <span class="label">Inactive</span>-->|     <span class="label">Ready</span>       |----> ... ----> <span class="label">Inactive</span>
+             +---------+-------+
+                       |                        (full cleanup:
+             scheduler selects                   remove from scheduler,
+                       |                         reset IPC mailbox,
+                       v                         clear TCB)
+             +---------+-------+
+             |    <span class="label">Running</span>      |
+             |  (exactly one)  +--------> <span class="label">Blocked</span>
+             +--------+-------+            (sleep, mutex,
+                      |                     semaphore, IPC)
+                      v
+             yield() or preempt
+             (returns to Ready)
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> A thread can be destroyed from any state (Ready, Running, or Blocked). If the thread is blocked on a mutex wait queue, <code>scheduler.removeThread()</code> removes it from that queue. If the thread is the current running thread (self-termination via <code>kernelThreadExit()</code>), a context switch is triggered immediately after cleanup.
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 12: SPI / I2C / DMA DRIVERS                           -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec10-watchdog.html">&lt; Section 10: Watchdog</a>
+    <a href="sec12-bus-drivers.html">Section 12: Bus Drivers &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

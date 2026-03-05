@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 8: Device Tree -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 8 -- Device Tree</span>
+    <div class="header-nav">
+      <a href="sec07-syscall.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html" class="current">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec09-allocators.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html" class="current">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 8</span>
+  Device Tree
+</h2>
+
+<div class="epigraph">
+  "Describe the hardware, don't hard-code it."
+  <div class="attribution">&mdash; Device Tree specification, Linaro</div>
+</div>
+
+<p>ms-os uses a two-stage device tree pipeline. Board descriptions are written in YAML (human-readable, easy to maintain), then compiled through an FDT (Flattened Device Tree) binary for runtime parsing.</p>
+
+<h3>Pipeline Overview</h3>
+
+<div class="diagram">
+<span class="label">Build-Time Pipeline</span>
+
+  boards/stm32f207.yaml          <span class="comment">Human-readable board description</span>
+         |
+         v
+  <span class="label">dtgen</span> (Python)                  <span class="comment">YAML -> constexpr BoardConfig.h</span>
+         |                         <span class="comment">(compile-time board constants)</span>
+         v
+  board_config/BoardConfig.h     <span class="comment">Generated header, per-target</span>
+
+
+<span class="label">Runtime Pipeline</span>
+
+  board.dts                      <span class="comment">Device Tree Source (standard format)</span>
+         |
+         v
+  <span class="label">dtc</span> (Device Tree Compiler)       <span class="comment">Standard toolchain utility</span>
+         |
+         v
+  board.dtb                      <span class="comment">FDT binary blob (magic: 0xD00DFEED)</span>
+         |
+         v
+  <span class="label">dtb2cpp</span> (Python)                 <span class="comment">DTB -> C++ byte array</span>
+         |
+         v
+  board_dtb.cpp                  <span class="comment">Linked into firmware image</span>
+         |
+         v
+  <span class="label">fdt::parse()</span> at runtime          <span class="comment">Zero-allocation FDT parser</span>
+</div>
+
+<h3>FDT Binary Format</h3>
+
+<div class="diagram">
+<span class="label">FDT Header</span>
+  +0x00  magic          0xD00DFEED
+  +0x04  totalsize      Total size of DTB
+  +0x08  off_dt_struct   Offset to structure block
+  +0x0C  off_dt_strings  Offset to strings block
+  +0x10  off_mem_rsvmap  Offset to memory reservation map
+  +0x14  version        17 (standard)
+  +0x18  last_comp_version  16
+
+<span class="label">Structure Block Tokens</span>
+  0x00000001  FDT_BEGIN_NODE   (followed by node name)
+  0x00000002  FDT_END_NODE
+  0x00000003  FDT_PROP         (followed by len, nameoff, data)
+  0x00000009  FDT_END
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> The runtime FDT parser is zero-allocation -- it walks the binary blob in-place, returning pointers into the DTB data. This makes it safe to use from kernel code where dynamic allocation is forbidden.
+</div>
+
+<h3>Compile-Time Board Configuration</h3>
+
+<p>The <code>dtgen</code> tool reads YAML board descriptions and generates a <code>BoardConfig.h</code> header with <code>constexpr</code> values. Application code uses <code>if constexpr (board::kHasLed)</code> for compile-time optional feature selection, ensuring zero runtime overhead for absent peripherals.</p>
+
+<table>
+  <tr><th>Artifact</th><th>Tool</th><th>Tests</th></tr>
+  <tr><td>BoardConfig.h</td><td>dtgen (Python)</td><td>74 pytest tests</td></tr>
+  <tr><td>IPC client/server stubs</td><td>ipcgen (Python)</td><td>40 pytest tests</td></tr>
+  <tr><td>board_dtb.cpp</td><td>dtb2cpp (Python)</td><td>21 pytest tests</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 9: MEMORY ALLOCATORS                                 -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec07-syscall.html">&lt; Section 7: Syscall</a>
+    <a href="sec09-allocators.html">Section 9: Allocators &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

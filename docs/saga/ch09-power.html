@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 9: Conserving Every Milliamp -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 9 -- Conserving Every Milliamp</span>
+    <div class="header-nav">
+      <a href="ch08-device-tree.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html" class="current">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch10-shell.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html" class="current">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 9</span>
+  Conserving Every Milliamp (Phase 8)
+</h2>
+
+<div class="epigraph">
+  "Perfection is achieved not when there is nothing more to add, but
+  when there is nothing left to take away."
+  <div class="attribution">&mdash; Antoine de Saint-Exupery</div>
+</div>
+
+<h3>The Spinning Idle Thread</h3>
+
+<p>
+The idle thread used to spin. An infinite loop doing nothing, burning
+every cycle the CPU had to offer, generating heat for no purpose.
+</p>
+
+<pre>
+<span class="cmt">// The old idle thread -- a monument to waste</span>
+<span class="kw">void</span> <span class="fn">idleMain</span>(<span class="kw">void</span> *)
+{
+    <span class="kw">while</span> (<span class="kw">true</span>)
+    {
+        <span class="cmt">// do nothing, but do it at 120 MHz</span>
+    }
+}
+</pre>
+
+<p>
+On a wall-powered development board, nobody notices. The F207 draws
+maybe 80 mA whether the idle thread spins or not&mdash;the difference is
+lost in the noise of the power LED and the JTAG interface. But on a
+battery-powered sensor node, that idle loop is the difference between
+lasting a week and lasting a day. An idle CPU burning 50 mA continuously
+drains a 500 mAh coin cell in ten hours. The same CPU sleeping at 2 mA
+stretches that to ten days.
+</p>
+
+<p>
+Phase 8 was about teaching the kernel to rest.
+</p>
+
+<h3>The Instruction That Changes Everything</h3>
+
+<p>
+WFI. Wait For Interrupt. Three letters, one instruction, and the single
+most power-efficient line of code in the entire kernel.
+</p>
+
+<pre>
+<span class="cmt">// The new idle thread</span>
+<span class="kw">void</span> <span class="fn">idleMain</span>(<span class="kw">void</span> *)
+{
+    <span class="kw">while</span> (<span class="kw">true</span>)
+    {
+        arch::waitForInterrupt();  <span class="cmt">// WFI -- CPU sleeps until next IRQ</span>
+    }
+}
+</pre>
+
+<p>
+When the CPU executes WFI, it halts its pipeline, stops its internal
+clocks, and enters a low-power state. Current drops from tens of
+milliamps to microamps. The chip is not off&mdash;SRAM retains its
+contents, the NVIC watches for interrupts, the SysTick timer keeps
+counting. But the core itself is dormant. When the next interrupt
+fires&mdash;SysTick, a peripheral IRQ, an external event&mdash;the CPU
+wakes in nanoseconds, handles the interrupt, runs the scheduler, and
+either dispatches a ready thread or drops back into the idle loop and
+sleeps again.
+</p>
+
+<p>
+The most power-efficient code is the code that does not run.
+</p>
+
+<h3>The Levels of Sleep</h3>
+
+<p>
+ARM provides a spectrum of low-power states, and we exposed three of
+them through the architecture abstraction layer:
+</p>
+
+<p>
+<strong>Level 1: WFI (light sleep).</strong> The core sleeps, peripherals
+keep running, wake on any interrupt. Latency: nanoseconds. This is the
+default idle behavior, suitable for any workload. The idle thread calls
+<code>arch::waitForInterrupt()</code> in its main loop.
+</p>
+
+<p>
+<strong>Level 2: SLEEPONEXIT.</strong> When this bit is set in the
+Cortex-M System Control Register (SCR), the CPU automatically enters WFI
+when returning from any ISR to Thread mode, instead of resuming the idle
+thread just to execute WFI again. This eliminates one unnecessary context
+switch per interrupt&mdash;the CPU goes directly from "handle interrupt"
+to "sleep" without waking the idle thread in between.
+</p>
+
+<p>
+<strong>Level 3: SLEEPDEEP.</strong> Setting the SLEEPDEEP bit changes
+WFI from light sleep to Stop mode. The PLLs shut down. The oscillators
+stop. The flash enters standby. Power consumption drops by an order of
+magnitude, but wake latency increases&mdash;the PLLs need to relock,
+the flash needs to stabilize. This mode is opt-in for applications
+that can tolerate longer interrupt response times.
+</p>
+
+<p>
+The Cortex-A9 on the PYNQ-Z2 gets WFI but not SLEEPONEXIT or SLEEPDEEP.
+The Zynq's power management is handled by the Processing System (PS)
+power controller, which lives in the FPGA fabric and requires an entirely
+different programming model. The architecture abstraction layer provides
+the functions on A9 but they are no-ops&mdash;the WFI instruction still
+works, and that alone is a significant improvement over spinning.
+</p>
+
+<h3>Clock Gating</h3>
+
+<p>
+Beyond sleeping the CPU, we added functions to disable peripheral clocks
+when they are not in use: <code>rccDisableGpioClock()</code> and
+<code>rccDisableUartClock()</code>. Every peripheral on an STM32 draws
+current from its bus clock even when idle. Turning off the clock to a
+GPIO port you are not using saves a few hundred microamps. It adds up.
+</p>
+
+<p>
+The API mirrors the existing <code>rccEnableGpioClock()</code> functions
+from Phase 0. Symmetric enable/disable, same port/peripheral identifiers,
+same register-level implementation. The application decides when to gate
+clocks based on its usage pattern. The kernel does not make assumptions
+about which peripherals are needed.
+</p>
+
+<h3>Testing the Untestable</h3>
+
+<p>
+You cannot test WFI on x86. There is no equivalent instruction, no way
+to measure current draw, no way to verify that the CPU actually entered
+a low-power state. The mock architecture layer does the only thing it
+can: track state in global variables.
+</p>
+
+<pre>
+<span class="cmt">// MockArch.cpp -- power management mocks</span>
+<span class="kw">uint32_t</span> g_wfiCount = <span class="num">0</span>;
+<span class="kw">bool</span> g_deepSleep = <span class="kw">false</span>;
+<span class="kw">bool</span> g_sleepOnExit = <span class="kw">false</span>;
+
+<span class="kw">void</span> <span class="fn">waitForInterrupt</span>() { g_wfiCount++; }
+<span class="kw">void</span> <span class="fn">enableDeepSleep</span>() { g_deepSleep = <span class="kw">true</span>; }
+<span class="kw">void</span> <span class="fn">enableSleepOnExit</span>() { g_sleepOnExit = <span class="kw">true</span>; }
+</pre>
+
+<p>
+Ten new tests assert the flags: "after calling
+<code>waitForInterrupt()</code> three times, <code>g_wfiCount</code>
+should be 3." "After calling <code>enableDeepSleep()</code>, the flag
+should be true." Functional correctness, not electrical measurement. We
+trust the hardware manual for the rest&mdash;ARM's architects have
+verified that WFI actually reduces power consumption. Our job is to
+verify that the kernel calls WFI at the right times.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 8:</strong> The idle thread sleeps via WFI
+instead of busy-looping. Sleep-on-exit eliminates unnecessary context
+switches between interrupts. Deep sleep is available for power-sensitive
+applications. Clock gating functions disable unused peripherals.
+Three-function power API, zero heap allocations, 10 new tests, fully
+testable on host.
+</div>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 10                               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch08-device-tree.html">&lt; Chapter 8: Describing the Hardware</a>
+    <a href="ch10-shell.html">Chapter 10: A Window Into the Kernel &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

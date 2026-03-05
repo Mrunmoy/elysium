@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 8: Describing the Hardware -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 8 -- Describing the Hardware</span>
+    <div class="header-nav">
+      <a href="ch07-syscall.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html" class="current">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch09-power.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html" class="current">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 8</span>
+  Describing the Hardware (Phase 7)
+</h2>
+
+<div class="epigraph">
+  "All problems in computer science can be solved by another level of
+  indirection."
+  <div class="attribution">&mdash; David Wheeler</div>
+</div>
+
+<p>
+Three boards. Three sets of hardcoded clock frequencies, pin assignments,
+and memory addresses scattered across startup code, HAL implementations,
+and application logic. Every time we added a target, we played
+whack-a-mole with magic numbers. The F207 runs at 120 MHz with APB1 at
+30 MHz. The F407 runs at 168 MHz with APB1 at 42 MHz. The PYNQ-Z2 runs
+at 650 MHz with a 100 MHz UART reference clock. These numbers appeared
+in SystemInit, in UART baud rate calculations, in SysTick configuration,
+in the shell's uptime display. Change one, grep for the others, hope you
+caught them all.
+</p>
+
+<p>
+It was time to describe the hardware once and let the build system figure
+out the rest.
+</p>
+
+<h3>The First Attempt: YAML</h3>
+
+<p>
+Our first approach was pragmatic: write a YAML file for each board,
+build a Python code generator (<code>dtgen</code>) to parse it, and emit
+C++ constexpr headers. One YAML file per board, one generated header,
+one source of truth.
+</p>
+
+<p>
+It worked. We wrote 67 Python tests for dtgen, covering schema
+validation, error handling, and output correctness. The generated headers
+were clean, the build integration was smooth, and applications could use
+<code>if constexpr (board::kHasLed)</code> for compile-time optional
+features. For a single-project solution, it was perfectly adequate.
+</p>
+
+<p>
+But it was proprietary. Nobody else in the world used ms-os YAML board
+files. There was no ecosystem, no tooling support, no community
+documentation. We were maintaining a custom schema, a custom parser, and
+a custom code generator for something that the embedded industry had
+already solved decades ago. Every time we changed the schema, every
+board file and every test needed updating. The maintenance burden was
+small but constant, and it would only grow.
+</p>
+
+<h3>The Standard</h3>
+
+<p>
+The Flattened Device Tree (FDT) format. Linux uses it. Zephyr uses it.
+U-Boot uses it. FreeBSD uses it. The <code>dtc</code> (device tree
+compiler) is a standard tool available on every Linux distribution.
+The DTS (Device Tree Source) format is human-readable. The DTB (Device
+Tree Blob) binary is compact and parseable with zero allocations.
+</p>
+
+<p>
+"Why invent a format when one already exists?"
+</p>
+
+<p>
+The rework replaced YAML entirely. Each board gets a <code>.dts</code>
+file written in the standard DTS v1 syntax:
+</p>
+
+<pre>
+<span class="cmt">// boards/stm32f207zgt6.dts</span>
+/dts-v1/;
+/ {
+    compatible = <span class="str">"ms-os,stm32f207zgt6"</span>;
+    model = <span class="str">"STM32F207ZGT6"</span>;
+    board { name = <span class="str">"Custom (F207)"</span>; mcu = <span class="str">"STM32F207ZGT6"</span>; };
+    clocks { system-clock = <<span class="num">120000000</span>>; };
+    memory { flash { reg = <<span class="num">0x08000000 0x100000</span>>; }; };
+    console { uart = <<span class="num">2</span>>; baud = <<span class="num">115200</span>>; };
+};
+</pre>
+
+<p>
+A Python toolchain converts DTS to binary and embeds it in firmware:
+<code>fdtlib.py</code> builds the FDT binary from Python objects,
+<code>build_dtbs.py</code> orchestrates the pipeline for all boards,
+and <code>dtb2cpp.py</code> embeds the resulting binary as a C++
+<code>const uint8_t[]</code> array linked into the firmware image. At
+boot, the kernel parses the embedded DTB blob and fills a
+<code>BoardConfig</code> struct. No runtime file I/O. No filesystem
+dependency. The device tree is part of the binary.
+</p>
+
+<h3>Building the Parser</h3>
+
+<p>
+The FDT binary format is elegantly simple. It starts with a header
+containing a magic number and structure offsets, followed by a token
+stream describing the tree, and a strings block at the end containing
+property names.
+</p>
+
+<div class="highlight">
+<strong>FDT Magic Number:</strong> <code>0xD00DFEED</code>. If the first
+four bytes of a blob are not 0xD00DFEED (big-endian), it is not a valid
+device tree. This is the first check the parser makes, and it catches
+corruption, wrong files, and byte-order mistakes immediately.
+</div>
+
+<p>
+The token stream consists of four token types:
+</p>
+
+<div class="diagram">
+  <span class="label">FDT Token Stream</span>
+
+  Token           Value        Meaning
+  -----           -----        -------
+  FDT_BEGIN_NODE  0x00000001   Start of a node (followed by name)
+  FDT_END_NODE    0x00000002   End of a node
+  FDT_PROP        0x00000003   Property (followed by length + name offset)
+  FDT_END         0x00000009   End of the structure block
+
+  Walking the tree:
+
+  BEGIN_NODE "/"
+    PROP "compatible" = "ms-os,stm32f207zgt6"
+    BEGIN_NODE "board"
+      PROP "name" = "Custom (F207)"
+      PROP "mcu" = "STM32F207ZGT6"
+    END_NODE
+    BEGIN_NODE "clocks"
+      PROP "system-clock" = &lt;120000000&gt;
+    END_NODE
+  END_NODE
+  END
+</div>
+
+<p>
+Our parser (<code>Fdt.h</code> / <code>Fdt.cpp</code>) walks this
+stream in ~300 lines of C++. It provides <code>findNode()</code> to walk
+a path like <code>/clocks</code>, <code>findProperty()</code> to locate
+a named property within a node, and <code>readU32()</code> /
+<code>readString()</code> to extract typed values. All multi-byte values
+in DTB are big-endian; the parser converts with
+<code>__builtin_bswap32()</code>. All pointers returned by the parser
+point directly into the DTB blob&mdash;no copies, no allocations. The
+parser is inherently thread-safe because it never modifies the blob.
+</p>
+
+<h3>The dt Command</h3>
+
+<p>
+The shell gained a <code>dt</code> command that displays the parsed
+device tree at runtime. Type <code>dt</code> and see the board's
+identity, clock tree, memory map, console configuration, and LED pin
+assignment. All from the embedded DTB, parsed at boot, formatted for
+human consumption. Developers can verify the board configuration on
+live hardware without reading source code or build logs.
+</p>
+
+<h3>Three Boards, One Format</h3>
+
+<p>
+Three DTS files now describe the complete hardware configuration for all
+three targets: board identity (compatible string, model name), clock
+tree (SYSCLK, APB1, APB2, HSE or UART reference clock), memory regions
+(flash base and size, SRAM, optional CCM), console UART (peripheral
+number, baud rate, TX/RX pin assignments with alternate function
+numbers), LED pin, and feature flags (FPU presence, architecture
+family). The build system selects the right DTS file based on
+<code>MSOS_TARGET</code>, compiles it to DTB, embeds it as a C++ array,
+and links it into the firmware. Adding a new board means writing one DTS
+file and adding one line to the CMake target list.
+</p>
+
+<p>
+The dtgen YAML tool was not deleted&mdash;its 67 tests still run in CI
+as a regression safety net for the Python infrastructure. But the
+firmware no longer uses it. The device tree is standard FDT, parseable
+by any tool in the ecosystem.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 7:</strong> Board configuration lives in standard
+FDT device trees. Three DTS source files, a Python build pipeline
+(fdtlib + build_dtbs + dtb2cpp, 21 new Python tests), and a kernel FDT
+parser replace all hardcoded board constants. The shell <code>dt</code>
+command displays the parsed tree at runtime. 67 dtgen tests + 21 dtb2cpp
+tests = 88 total Python tests for the device tree toolchain.
+</div>
+
+<p>
+See the <a href="../architecture/sec08-device-tree.html">Architecture Guide</a>
+for FDT format details and the complete DTS schema.
+</p>
+
+<!-- ============================================================ -->
+<!--                     CHAPTER 9                                -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="ch07-syscall.html">&lt; Chapter 7: Drawing the Line</a>
+    <a href="ch09-power.html">Chapter 9: Conserving Every Milliamp &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

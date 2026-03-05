@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 4: Context Switch -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 4 -- Context Switch</span>
+    <div class="header-nav">
+      <a href="sec03-threads.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html" class="current">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec05-scheduler.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html" class="current">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 4</span>
+  Context Switch
+</h2>
+
+<div class="epigraph">
+  "The context switch is the beating heart of any preemptive kernel."
+  <div class="attribution">&mdash; Jean Labrosse, uC/OS-III</div>
+</div>
+
+<h3>Cortex-M: PendSV Handler</h3>
+
+<p>On Cortex-M, context switches are triggered by setting the PendSV pending bit. PendSV runs at the lowest exception priority (<code>0xFF</code>), ensuring it only fires after all other interrupts have been serviced. This prevents context switches from interrupting critical ISR processing.</p>
+
+<div class="diagram">
+<span class="label">Thread A running</span> (PSP -> Thread A's stack)
+  |
+  v
+<span class="label">PendSV fires</span> (priority 0xFF -- lowest exception)
+  |
+  |  1. <span class="label">cpsid i</span>                    disable interrupts
+  |  2. mrs r0, psp               get Thread A's stack pointer
+  |  3. stmdb r0!, {r4-r11}       push software regs to A's stack
+  |  4. str r0, [g_currentTcb]    save updated SP in A's TCB [offset 0]
+  |
+  |  5. g_currentTcb = g_nextTcb  switch the "current" pointer
+  |
+  |  6. ldr r1, [tcb, #36]        load Thread B's mpuStackRbar
+  |     ldr r2, [tcb, #40]        load Thread B's mpuStackRasr
+  |     str r1, [MPU->RBAR]       update MPU region 4 (thread stack)
+  |     str r2, [MPU->RASR]
+  |
+  |  7. ldr r0, [g_nextTcb]       load Thread B's stack pointer
+  |  8. ldmia r0!, {r4-r11}       pop software regs from B's stack
+  |  9. msr psp, r0               set PSP for Thread B
+  |
+  | 10. ldrb r1, [tcb, #44]       load Thread B's "privileged" flag
+  |     CONTROL = privileged ?     0b10 (nPRIV=0) : 0b11 (nPRIV=1)
+  |     msr control, r1
+  |     isb
+  |
+  | 11. <span class="label">cpsie i</span>                    enable interrupts
+  | 12. bx 0xFFFFFFFD             EXC_RETURN -> thread mode, PSP
+  |
+  v
+<span class="label">Thread B running</span> (PSP -> Thread B's stack)
+</div>
+
+<div class="highlight">
+  <strong>Performance:</strong> The MPU region update (step 6) adds approximately 4 instructions to the context switch path -- roughly 50 nanoseconds at 120 MHz. The CONTROL register update (step 10) adds another 3 instructions including the mandatory ISB barrier.
+</div>
+
+<h3>Cortex-A9: IRQ-Based Context Switch</h3>
+
+<p>The Cortex-A profile has no PendSV exception. Instead, ms-os uses <strong>SGI #0</strong> (Software Generated Interrupt) as the context switch trigger. The context switch occurs in the IRQ handler epilogue when <code>g_currentTcb != g_nextTcb</code>.</p>
+
+<div class="diagram">
+<span class="label">IRQ Entry</span> (hardware switches to IRQ mode)
+  |
+  |  1. sub lr, lr, #4             adjust return address
+  |  2. srsdb sp!, #0x1F           save {LR_irq, SPSR_irq} to SYS stack
+  |  3. cps #0x1F                  switch to SYS mode
+  |  4. stmfd sp!, {r0-r3, r12}   save caller-saved regs
+  |
+  |  --- handle interrupt (read ICCIAR, dispatch, write ICCEOIR) ---
+  |
+  |  5. Compare g_currentTcb vs g_nextTcb
+  |     If equal: restore regs, RFEIA sp! (return to interrupted thread)
+  |
+  |  <span class="label">Context switch needed:</span>
+  |  6. stmfd sp!, {r4-r11}        save callee-saved regs (Thread A)
+  |  7. str sp, [g_currentTcb]     save SP in A's TCB
+  |  8. g_currentTcb = g_nextTcb
+  |  9. ldr sp, [g_nextTcb]        load Thread B's SP
+  | 10. ldmfd sp!, {r4-r11}        restore callee-saved regs (Thread B)
+  | 11. ldmfd sp!, {r0-r3, r12}    restore caller-saved regs
+  | 12. rfeia sp!                   atomic restore {PC, CPSR} from SYS stack
+  |
+  v
+<span class="label">Thread B running</span> (SYS mode)
+</div>
+
+<div class="lesson">
+  <strong>Critical Bug (Phase 4B):</strong> The original IRQ handler used r4/r5 to hold GIC register addresses <em>before</em> saving the callee-saved registers. This clobbered the interrupted thread's r4/r5 values. The fix: use only r0-r3 (caller-saved) for GIC access, and push to the stack if more temporaries are needed.
+</div>
+
+<div class="key-decision">
+  <strong>SRS/RFE:</strong> These A-profile instructions atomically save/restore {PC, CPSR} to/from a mode's stack. <code>srsdb sp!, #0x1F</code> saves to the SYS mode stack (mode 0x1F). <code>rfeia sp!</code> pops PC and CPSR atomically, returning to the interrupted context. This replaces the Cortex-M <code>EXC_RETURN</code> mechanism.
+</div>
+
+<h3>Triggering a Context Switch</h3>
+
+<table>
+  <tr><th>Mechanism</th><th>Cortex-M</th><th>Cortex-A9</th></tr>
+  <tr><td>Explicit yield</td><td>Set PendSV pending bit</td><td>Write SGI #0 to ICDSGIR</td></tr>
+  <tr><td>Timer preemption</td><td>SysTick_Handler sets PendSV</td><td>SCU timer IRQ triggers SGI #0</td></tr>
+  <tr><td>Unblock (mutex/IPC)</td><td>Set PendSV pending bit</td><td>Write SGI #0 to ICDSGIR</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 5: SCHEDULER                                         -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec03-threads.html">&lt; Section 3: Threads</a>
+    <a href="sec05-scheduler.html">Section 5: Scheduler &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

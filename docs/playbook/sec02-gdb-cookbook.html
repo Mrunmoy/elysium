@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 2: GDB Session Cookbook -- Debugging Playbook</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Debugging Playbook</a>
+    <span class="chapter-title-header">Section 2 -- GDB Session Cookbook</span>
+    <div class="header-nav">
+      <a href="sec01-jtag-setup.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+          <a href="sec02-gdb-cookbook.html" class="current">Section 2 -- GDB Session Cookbook</a>
+          <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+          <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+          <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+          <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+          <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+        </nav>
+      </div>
+      <a href="sec03-crash-dumps.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-jtag-setup.html">Section 1 -- JTAG and Debug Setup</a>
+  <a href="sec02-gdb-cookbook.html" class="current">Section 2 -- GDB Session Cookbook</a>
+  <a href="sec03-crash-dumps.html">Section 3 -- Crash Dump Interpretation</a>
+  <a href="sec04-bug-hunts.html">Section 4 -- Real Bug Hunts</a>
+  <a href="sec05-openocd.html">Section 5 -- OpenOCD TCL Scripts</a>
+  <a href="sec06-serial.html">Section 6 -- Serial Port Debugging</a>
+  <a href="sec07-toolchain.html">Section 7 -- Toolchain Quick Reference</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter"><span class="ch-num">Section 2</span>GDB Session Cookbook</h2>
+
+<p>
+GDB is the primary interactive debugger for ms-os. These recipes cover the most
+common tasks: connecting, inspecting state, reading fault registers, and
+translating addresses to source lines.
+</p>
+
+<h3>2.1 Starting GDB</h3>
+
+<h4>Batch mode (quick register dump after a crash)</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>gdb -batch \
+  -ex "set architecture arm" \
+  -ex "file build/app/threads/threads" \
+  -ex "target remote :2331" \
+  -ex "monitor halt" \
+  -ex "info registers" \
+  -ex "bt"
+<span class="output">The target architecture is assumed to be arm
+Reading symbols from build/app/threads/threads...
+Remote debugging using :2331
+0x08001a3c in kernel::idle (arg=0x0) at kernel/src/core/Kernel.cpp:28
+r0   0x0        0
+r1   0xe000ed00 3758157056
+r2   0x0        0
+...
+#0  0x08001a3c in kernel::idle (arg=0x0)
+#1  0x08000abc in ledThread (arg=0x0)
+#2  0x00000000 in ?? ()</span></div>
+
+<div class="highlight">
+<strong>Important:</strong> Use <code>gdb</code> from the Nix dev shell, NOT
+<code>arm-none-eabi-gdb</code>. The ARM toolchain's GDB has a broken Python 3.9
+dependency that causes segfaults on modern hosts. The multilib <code>gdb</code>
+in Nix works correctly with ARM ELF files when you set the architecture
+explicitly with <code>set architecture arm</code>.
+</div>
+
+<h4>Interactive session</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>gdb
+<span class="output">(gdb)</span> <span class="prompt">set architecture arm</span>
+<span class="output">The target architecture is assumed to be arm</span>
+<span class="output">(gdb)</span> <span class="prompt">file build/app/threads/threads</span>
+<span class="output">Reading symbols from build/app/threads/threads...</span>
+<span class="output">(gdb)</span> <span class="prompt">target remote :2331</span>
+<span class="output">Remote debugging using :2331
+0x08001a3c in kernel::idle (arg=0x0)</span>
+<span class="output">(gdb)</span> <span class="prompt">monitor halt</span>
+<span class="output">Halting target CPU...</span></div>
+
+
+<h3>2.2 Essential Commands</h3>
+
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td><code>monitor halt</code></td><td>Halt the CPU</td></tr>
+  <tr><td><code>monitor reset</code></td><td>Reset the CPU</td></tr>
+  <tr><td><code>info registers</code></td><td>Show all core registers</td></tr>
+  <tr><td><code>bt</code></td><td>Backtrace (stack trace)</td></tr>
+  <tr><td><code>x/16x $sp</code></td><td>Dump 16 words from stack pointer</td></tr>
+  <tr><td><code>x/x 0xE000ED28</code></td><td>Read CFSR register (Cortex-M)</td></tr>
+  <tr><td><code>break *0x08001234</code></td><td>Break at address</td></tr>
+  <tr><td><code>stepi</code></td><td>Single instruction step</td></tr>
+  <tr><td><code>continue</code></td><td>Resume execution</td></tr>
+  <tr><td><code>print/x $control</code></td><td>Show CONTROL register</td></tr>
+  <tr><td><code>print/x $xpsr</code></td><td>Show xPSR (flags + exception number)</td></tr>
+  <tr><td><code>info threads</code></td><td>Show RTOS thread list (if plugin loaded)</td></tr>
+  <tr><td><code>x/32x 0x20000000</code></td><td>Dump first 128 bytes of SRAM</td></tr>
+  <tr><td><code>disassemble</code></td><td>Disassemble around current PC</td></tr>
+</table>
+
+
+<h3>2.3 Reading Fault Registers</h3>
+
+<h4>Cortex-M (F207/F407)</h4>
+
+<p>
+After a fault, the CPU halts (or enters the fault handler). These four SCB
+registers tell you what happened and where:
+</p>
+
+<div class="cmd-session"><span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED28</span>    <span class="output"># CFSR  -- Configurable Fault Status Register</span>
+<span class="output">0xe000ed28: 0x00008200</span>
+
+<span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED2C</span>    <span class="output"># HFSR  -- HardFault Status Register</span>
+<span class="output">0xe000ed2c: 0x40000000</span>
+
+<span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED34</span>    <span class="output"># MMFAR -- MemManage Fault Address Register</span>
+<span class="output">0xe000ed34: 0x00000000</span>
+
+<span class="output">(gdb)</span> <span class="prompt">x/x 0xE000ED38</span>    <span class="output"># BFAR  -- BusFault Address Register</span>
+<span class="output">0xe000ed38: 0xCCCCCCCC</span></div>
+
+<h4>Cortex-A9 (PYNQ-Z2, via OpenOCD Telnet)</h4>
+
+<p>
+The Cortex-A9 stores fault information in CP15 coprocessor registers, not
+memory-mapped SCB registers. Read them via OpenOCD's <code>arm mrc</code>
+command:
+</p>
+
+<div class="cmd-session"><span class="prompt">&gt; </span>monitor arm mrc 15 0 5 0 0    <span class="output"># DFSR  -- Data Fault Status Register</span>
+<span class="output">0x00000005</span>
+<span class="prompt">&gt; </span>monitor arm mrc 15 0 5 0 1    <span class="output"># IFSR  -- Instruction Fault Status Register</span>
+<span class="output">0x00000000</span>
+<span class="prompt">&gt; </span>monitor arm mrc 15 0 6 0 0    <span class="output"># DFAR  -- Data Fault Address Register</span>
+<span class="output">0xDEADBEEF</span>
+<span class="prompt">&gt; </span>monitor arm mrc 15 0 6 0 2    <span class="output"># IFAR  -- Instruction Fault Address Register</span>
+<span class="output">0x00000000</span></div>
+
+
+<h3>2.4 Address-to-Source Mapping</h3>
+
+<p>
+When you have a PC or LR address from a crash dump, these commands translate
+it back to a source file and line number.
+</p>
+
+<h4>addr2line -- Address to file:line</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-addr2line -e build/app/threads/threads -f -C 0x08000ABC
+<span class="output">ledThread(void*)
+/home/user/ms-os/app/threads/main.cpp:42</span></div>
+
+<h4>nm -- Symbol table lookup</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-nm build/app/threads/threads | grep ledThread
+<span class="output">08000abc T ledThread(void*)</span></div>
+
+<h4>objdump -- Full disassembly</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-objdump -d build/app/threads/threads | less
+<span class="output">08000abc &lt;ledThread(void*)&gt;:
+ 8000abc:   b580        push    {r7, lr}
+ 8000abe:   af00        add     r7, sp, #0
+ 8000ac0:   6078        str     r0, [r7, #4]
+ ...</span></div>
+
+<h4>size -- Memory usage at a glance</h4>
+
+<div class="cmd-session"><span class="prompt">$ </span>arm-none-eabi-size build/app/threads/threads
+<span class="output">   text    data     bss     dec     hex filename
+  28432     168    4096   32696    7fb8 build/app/threads/threads</span></div>
+
+
+<!-- ============================================================ -->
+<!--            SECTION 3: CRASH DUMP INTERPRETATION               -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec01-jtag-setup.html">&lt; Section 1: JTAG and Debug Setup</a>
+    <a href="sec03-crash-dumps.html">Section 3: Crash Dump Interpretation &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Section 10: Watchdog -- Architecture Guide</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">Architecture Guide</a>
+    <span class="chapter-title-header">Section 10 -- Watchdog</span>
+    <div class="header-nav">
+      <a href="sec09-allocators.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+          <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+          <a href="sec03-threads.html">Section 3 -- Threads</a>
+          <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+          <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+          <a href="sec06-ipc.html">Section 6 -- IPC</a>
+          <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+          <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+          <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+          <a href="sec10-watchdog.html" class="current">Section 10 -- Watchdog</a>
+          <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+          <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+          <a href="sec13-registers.html">Section 13 -- Registers</a>
+        </nav>
+      </div>
+      <a href="sec11-dynamic-threads.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="sec01-memory-maps.html">Section 1 -- Memory Maps</a>
+  <a href="sec02-boot-sequence.html">Section 2 -- Boot Sequence</a>
+  <a href="sec03-threads.html">Section 3 -- Threads</a>
+  <a href="sec04-context-switch.html">Section 4 -- Context Switch</a>
+  <a href="sec05-scheduler.html">Section 5 -- Scheduler</a>
+  <a href="sec06-ipc.html">Section 6 -- IPC</a>
+  <a href="sec07-syscall.html">Section 7 -- Syscall</a>
+  <a href="sec08-device-tree.html">Section 8 -- Device Tree</a>
+  <a href="sec09-allocators.html">Section 9 -- Allocators</a>
+  <a href="sec10-watchdog.html" class="current">Section 10 -- Watchdog</a>
+  <a href="sec11-dynamic-threads.html">Section 11 -- Dynamic Threads</a>
+  <a href="sec12-bus-drivers.html">Section 12 -- Bus Drivers</a>
+  <a href="sec13-registers.html">Section 13 -- Registers</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Section 10</span>
+  Watchdog (IWDG)
+</h2>
+
+<div class="epigraph">
+  "A watchdog timer is the last line of defense against a hung system."
+  <div class="attribution">&mdash; Embedded systems design principle</div>
+</div>
+
+<p>The Independent Watchdog (IWDG) on STM32 provides a hardware safety net: if software fails to reload the counter before it reaches zero, the MCU performs a hard reset. ms-os integrates the watchdog with the idle thread -- if any thread starves the idle thread (e.g., an infinite loop at a higher priority), the watchdog fires and resets the system.</p>
+
+<h3>IWDG Register Map</h3>
+
+<p>The IWDG peripheral is clocked by the LSI oscillator (nominally 32 kHz) and is located at base address <code>0x40003000</code>.</p>
+
+<table>
+  <tr><th>Register</th><th>Offset</th><th>Description</th></tr>
+  <tr><td>KR (Key)</td><td><code>0x00</code></td><td>Write-only key register: controls unlock, reload, and start</td></tr>
+  <tr><td>PR (Prescaler)</td><td><code>0x04</code></td><td>3-bit prescaler divider selection (0-6)</td></tr>
+  <tr><td>RLR (Reload)</td><td><code>0x08</code></td><td>12-bit reload value (0-4095), loaded into counter on reload</td></tr>
+  <tr><td>SR (Status)</td><td><code>0x0C</code></td><td>Read-only: PVU (prescaler update) and RVU (reload update) busy flags</td></tr>
+</table>
+
+<h3>Key Register Values</h3>
+
+<p>The IWDG uses a key-based access scheme. The KR register accepts three magic values:</p>
+
+<div class="diagram">
+<span class="label">KR Key Values</span>
+
+  0x5555   Unlock PR and RLR for writing
+           <span class="comment">Must be written before modifying prescaler or reload value</span>
+
+  0xAAAA   Reload the counter
+           <span class="comment">Resets the downcounter to the value in RLR (prevents reset)</span>
+
+  0xCCCC   Start the watchdog
+           <span class="comment">Once started, the IWDG cannot be stopped (hardware limitation)</span>
+
+<span class="label">Typical sequence:</span>
+  1. KR = 0xCCCC    <span class="comment">// start IWDG</span>
+  2. KR = 0x5555    <span class="comment">// unlock registers</span>
+  3. PR = prescaler <span class="comment">// set prescaler divider</span>
+  4. RLR = reload   <span class="comment">// set reload value</span>
+  5. Wait for SR == 0 <span class="comment">// wait for update to complete</span>
+  6. KR = 0xAAAA    <span class="comment">// initial counter reload</span>
+</div>
+
+<div class="lesson">
+  <strong>Hardware constraint:</strong> Once started with <code>0xCCCC</code>, the IWDG cannot be stopped. It is clocked by the independent LSI oscillator and continues running even if the main clock fails. This is by design -- the watchdog must be immune to the failures it protects against.
+</div>
+
+<h3>Prescaler Table</h3>
+
+<table>
+  <tr><th>PR Value</th><th>Name</th><th>Divider</th><th>Min Timeout (RLR=0)</th><th>Max Timeout (RLR=4095)</th></tr>
+  <tr><td>0</td><td>Div4</td><td>/4</td><td>0.125 ms</td><td>512 ms</td></tr>
+  <tr><td>1</td><td>Div8</td><td>/8</td><td>0.25 ms</td><td>1024 ms</td></tr>
+  <tr><td>2</td><td>Div16</td><td>/16</td><td>0.5 ms</td><td>2048 ms</td></tr>
+  <tr><td>3</td><td>Div32</td><td>/32</td><td>1 ms</td><td>4096 ms</td></tr>
+  <tr><td>4</td><td>Div64</td><td>/64</td><td>2 ms</td><td>8192 ms</td></tr>
+  <tr><td>5</td><td>Div128</td><td>/128</td><td>4 ms</td><td>16384 ms</td></tr>
+  <tr><td>6</td><td>Div256</td><td>/256</td><td>8 ms</td><td>32768 ms</td></tr>
+</table>
+
+<h3>Timeout Calculation</h3>
+
+<p>The IWDG downcounter is clocked at <code>LSI / prescaler_divider</code>. The timeout before reset is:</p>
+
+<div class="diagram">
+<span class="label">Timeout Formula</span>
+
+  timeout_ms = (prescaler_divider * reloadValue) / 32
+
+<span class="label">Example:</span> Prescaler = Div64 (divider = 64), Reload = 1000
+
+  timeout_ms = (64 * 1000) / 32 = 2000 ms  <span class="comment">(2 seconds to feed the watchdog)</span>
+
+<span class="label">LSI clock note:</span>
+  The LSI oscillator is nominally 32 kHz but can vary between 17 kHz and 47 kHz
+  depending on temperature and voltage. Timeouts should include safety margin.
+</div>
+
+<h3>Idle Thread Integration</h3>
+
+<p>The watchdog is fed (reloaded) exclusively from the <strong>idle thread</strong>. The idle thread runs at priority 31 (lowest) and only executes when no other thread is ready. This creates a natural starvation detector:</p>
+
+<div class="diagram">
+<span class="label">Watchdog Feed Strategy</span>
+
+<span class="label">Idle Thread</span> (priority 31)
+  |
+  |  loop:
+  |    watchdogFeed()          <span class="comment">// KR = 0xAAAA (reload counter)</span>
+  |    arch::waitForInterrupt() <span class="comment">// WFI -- low power until next tick</span>
+  |    goto loop
+  |
+
+<span class="label">Normal operation:</span>
+  App threads run -> yield/sleep -> idle runs -> feeds watchdog -> OK
+
+<span class="label">Starvation scenario:</span>
+  App thread stuck in infinite loop at priority < 31
+    -> idle thread never runs
+    -> watchdog counter reaches zero
+    -> MCU RESET
+</div>
+
+<div class="key-decision">
+  <strong>Key Decision:</strong> Feeding the watchdog from the idle thread means the watchdog monitors system liveness holistically. Any condition that prevents the idle thread from running -- priority inversion deadlock, infinite loop, kernel hang -- will trigger a reset. This is simpler and more robust than requiring each thread to feed the watchdog individually.
+</div>
+
+<h3>Kernel API</h3>
+
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>watchdogStart(reloadValue, prescaler)</code></td><td>Start IWDG with the given reload value (0-4095) and prescaler (Div4-Div256). Once called, the watchdog cannot be stopped.</td></tr>
+  <tr><td><code>watchdogFeed()</code></td><td>Reload the IWDG counter (write <code>0xAAAA</code> to KR). Called from the idle thread loop.</td></tr>
+  <tr><td><code>watchdogRunning()</code></td><td>Returns <code>true</code> if the watchdog has been started. Used to avoid double-start and to conditionally feed.</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 11: DYNAMIC THREAD LIFECYCLE                         -->
+<!-- ============================================================ -->
+  <div class="chapter-nav-footer">
+    <a href="sec09-allocators.html">&lt; Section 9: Allocators</a>
+    <a href="sec11-dynamic-threads.html">Section 11: Dynamic Threads &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>
