@@ -16,6 +16,7 @@ add_library(hal STATIC
 
 target_include_directories(hal PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/inc
+    ${CMAKE_SOURCE_DIR}/common/inc
 )
 
 target_link_libraries(hal PRIVATE startup)

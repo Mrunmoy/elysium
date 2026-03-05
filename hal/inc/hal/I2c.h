@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "msos/ErrorCode.h"
+
 namespace hal
 {
     enum class I2cId : std::uint8_t
@@ -27,6 +29,28 @@ namespace hal
         Timeout,
         Invalid
     };
+
+    // Map HAL-local I2C errors into global ms-os status codes.
+    constexpr std::int32_t i2cErrorToStatus(I2cError err)
+    {
+        switch (err)
+        {
+            case I2cError::Ok:
+                return msos::error::kOk;
+            case I2cError::Nack:
+                return msos::error::kNoAck;
+            case I2cError::BusError:
+                return msos::error::kIo;
+            case I2cError::ArbitrationLost:
+                return msos::error::kBusy;
+            case I2cError::Timeout:
+                return msos::error::kTimedOut;
+            case I2cError::Invalid:
+                return msos::error::kInvalid;
+            default:
+                return msos::error::kInvalid;
+        }
+    }
 
     using I2cCallbackFn = void (*)(void *arg, I2cError error);
 

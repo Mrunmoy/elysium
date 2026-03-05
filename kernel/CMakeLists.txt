@@ -24,6 +24,7 @@ add_library(kernel STATIC
 
 target_include_directories(kernel PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/inc
+    ${CMAKE_SOURCE_DIR}/common/inc
 )
 
 target_include_directories(kernel PRIVATE

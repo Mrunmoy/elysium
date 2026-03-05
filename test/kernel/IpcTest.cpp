@@ -99,6 +99,17 @@ TEST_F(IpcTest, Init_MailboxesEmpty)
     }
 }
 
+TEST_F(IpcTest, StatusCodes_AreBackedByGlobalErrorCodes)
+{
+    EXPECT_EQ(kernel::kIpcOk, msos::error::kOk);
+    EXPECT_EQ(kernel::kIpcErrInvalid, msos::error::kInvalid);
+    EXPECT_EQ(kernel::kIpcErrFull, msos::error::kAgain);
+    EXPECT_EQ(kernel::kIpcErrEmpty, msos::error::kNoData);
+    EXPECT_EQ(kernel::kIpcErrNoThread, msos::error::kNoThread);
+    EXPECT_EQ(kernel::kIpcErrIsr, msos::error::kPerm);
+    EXPECT_EQ(kernel::kIpcErrMethod, msos::error::kNoSys);
+}
+
 TEST_F(IpcTest, GetMailbox_InvalidId_ReturnsNull)
 {
     EXPECT_EQ(kernel::ipcGetMailbox(kernel::kMaxThreads), nullptr);
