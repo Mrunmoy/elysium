@@ -19,6 +19,7 @@ namespace
     // Register offsets
     constexpr std::uint32_t kCr1 = 0x00;
     constexpr std::uint32_t kCr2 = 0x04;
+    constexpr std::uint32_t kOar1 = 0x08;
     constexpr std::uint32_t kDr = 0x10;
     constexpr std::uint32_t kSr1 = 0x14;
     constexpr std::uint32_t kSr2 = 0x18;
@@ -41,11 +42,15 @@ namespace
     constexpr std::uint32_t kSr1Sb = 0;
     constexpr std::uint32_t kSr1Addr = 1;
     constexpr std::uint32_t kSr1Btf = 2;
+    constexpr std::uint32_t kSr1Stopf = 4;
     constexpr std::uint32_t kSr1Rxne = 6;
     constexpr std::uint32_t kSr1Txe = 7;
     constexpr std::uint32_t kSr1Berr = 8;
     constexpr std::uint32_t kSr1Arlo = 9;
     constexpr std::uint32_t kSr1Af = 10;
+
+    // SR2 bits
+    constexpr std::uint32_t kSr2Tra = 2;
 
     // CCR bits
     constexpr std::uint32_t kCcrFs = 15;
@@ -128,100 +133,246 @@ namespace
 
     I2cAsyncState s_i2cState[3];
 
-    void handleI2cEventIrq(std::uint8_t idx)
-    {
-        auto &st = s_i2cState[idx];
-        if (!st.active)
-        {
-            return;
-        }
+    // --- Slave mode state ---
 
+    constexpr std::size_t kSlaveBufferSize = 256;
+
+    struct I2cSlaveState
+    {
+        hal::I2cSlaveRxCallbackFn rxCallback = nullptr;
+        hal::I2cSlaveTxCallbackFn txCallback = nullptr;
+        void *arg = nullptr;
+        std::uint8_t ownAddr = 0;
+        bool active = false;
+
+        std::uint8_t rxBuf[kSlaveBufferSize];
+        std::size_t rxIndex = 0;
+
+        std::uint8_t txBuf[kSlaveBufferSize];
+        std::size_t txLength = 0;
+        std::size_t txIndex = 0;
+
+        bool isTx = false;
+    };
+
+    I2cSlaveState s_i2cSlaveState[3];
+
+    // NVIC register base
+    constexpr std::uint32_t kNvicIserBase = 0xE000E100;
+    constexpr std::uint32_t kNvicIcerBase = 0xE000E180;
+    constexpr std::uint32_t kNvicIprBase = 0xE000E400;
+
+    void nvicEnableIrq(std::uint32_t irqn)
+    {
+        reg(kNvicIserBase + (irqn / 32) * 4) = (1U << (irqn % 32));
+    }
+
+    void nvicDisableIrq(std::uint32_t irqn)
+    {
+        reg(kNvicIcerBase + (irqn / 32) * 4) = (1U << (irqn % 32));
+    }
+
+    void nvicSetPriority(std::uint32_t irqn, std::uint8_t priority)
+    {
+        volatile auto *ipr = reinterpret_cast<volatile std::uint8_t *>(kNvicIprBase);
+        ipr[irqn] = priority;
+    }
+
+    // I2C IRQ numbers (STM32F2/F4)
+    constexpr std::uint32_t kI2cEvIrq[] = {31, 33, 72};  // I2C1_EV, I2C2_EV, I2C3_EV
+    constexpr std::uint32_t kI2cErIrq[] = {32, 34, 73};  // I2C1_ER, I2C2_ER, I2C3_ER
+
+    void handleI2cSlaveEventIrq(std::uint8_t idx)
+    {
+        auto &sl = s_i2cSlaveState[idx];
         std::uint32_t base = i2cBase(static_cast<hal::I2cId>(idx));
         std::uint32_t sr1 = reg(base + kSr1);
-
-        // START sent
-        if (sr1 & (1U << kSr1Sb))
-        {
-            if (st.isRead)
-            {
-                reg(base + kDr) = (st.addr << 1) | 1;
-            }
-            else
-            {
-                reg(base + kDr) = (st.addr << 1) | 0;
-            }
-            return;
-        }
 
         // ADDR matched
         if (sr1 & (1U << kSr1Addr))
         {
             // Clear ADDR by reading SR1 + SR2
             readDiscard(base + kSr1);
-            readDiscard(base + kSr2);
+            std::uint32_t sr2 = reg(base + kSr2);
 
-            if (st.isRead && st.length == 1)
+            if (sr2 & (1U << kSr2Tra))
             {
-                // Single-byte read: disable ACK before clearing ADDR
-                reg(base + kCr1) &= ~(1U << kCr1Ack);
-                reg(base + kCr1) |= (1U << kCr1Stop);
-            }
-            return;
-        }
-
-        // TX empty (write mode)
-        if (!st.isRead && (sr1 & (1U << kSr1Txe)))
-        {
-            if (st.index < st.length)
-            {
-                reg(base + kDr) = st.txBuf[st.index++];
+                // Master read (slave transmitting): call txCallback to fill buffer
+                sl.isTx = true;
+                sl.txLength = 0;
+                sl.txIndex = 0;
+                if (sl.txCallback)
+                {
+                    sl.txCallback(sl.arg, sl.txBuf, &sl.txLength, kSlaveBufferSize);
+                }
             }
             else
             {
-                // All bytes sent, send STOP
-                reg(base + kCr1) |= (1U << kCr1Stop);
-                reg(base + kCr2) &= ~((1U << kCr2Itevten) | (1U << kCr2Itbufen));
-                st.active = false;
-                if (st.callback)
+                // Master write (slave receiving): prepare RX buffer
+                sl.isTx = false;
+                sl.rxIndex = 0;
+            }
+            return;
+        }
+
+        // RXNE (slave receiving)
+        if (!sl.isTx && (sr1 & (1U << kSr1Rxne)))
+        {
+            std::uint8_t byte = static_cast<std::uint8_t>(reg(base + kDr));
+            if (sl.rxIndex < kSlaveBufferSize)
+            {
+                sl.rxBuf[sl.rxIndex++] = byte;
+            }
+            return;
+        }
+
+        // TXE (slave transmitting)
+        if (sl.isTx && (sr1 & (1U << kSr1Txe)))
+        {
+            if (sl.txIndex < sl.txLength)
+            {
+                reg(base + kDr) = sl.txBuf[sl.txIndex++];
+            }
+            else
+            {
+                reg(base + kDr) = 0xFF;
+            }
+            return;
+        }
+
+        // STOPF (end of master write)
+        if (sr1 & (1U << kSr1Stopf))
+        {
+            // Clear STOPF: read SR1 (already done), write CR1 with PE=1
+            reg(base + kCr1) |= (1U << kCr1Pe);
+
+            if (!sl.isTx && sl.rxCallback)
+            {
+                sl.rxCallback(sl.arg, sl.rxBuf, sl.rxIndex);
+            }
+            sl.rxIndex = 0;
+        }
+    }
+
+    void handleI2cEventIrq(std::uint8_t idx)
+    {
+        // Master async path
+        auto &st = s_i2cState[idx];
+        if (st.active)
+        {
+            std::uint32_t base = i2cBase(static_cast<hal::I2cId>(idx));
+            std::uint32_t sr1 = reg(base + kSr1);
+
+            // START sent
+            if (sr1 & (1U << kSr1Sb))
+            {
+                if (st.isRead)
                 {
-                    st.callback(st.arg, hal::I2cError::Ok);
+                    reg(base + kDr) = (st.addr << 1) | 1;
+                }
+                else
+                {
+                    reg(base + kDr) = (st.addr << 1) | 0;
+                }
+                return;
+            }
+
+            // ADDR matched
+            if (sr1 & (1U << kSr1Addr))
+            {
+                // Clear ADDR by reading SR1 + SR2
+                readDiscard(base + kSr1);
+                readDiscard(base + kSr2);
+
+                if (st.isRead && st.length == 1)
+                {
+                    // Single-byte read: disable ACK before clearing ADDR
+                    reg(base + kCr1) &= ~(1U << kCr1Ack);
+                    reg(base + kCr1) |= (1U << kCr1Stop);
+                }
+                return;
+            }
+
+            // TX empty (write mode)
+            if (!st.isRead && (sr1 & (1U << kSr1Txe)))
+            {
+                if (st.index < st.length)
+                {
+                    reg(base + kDr) = st.txBuf[st.index++];
+                }
+                else
+                {
+                    // All bytes sent, send STOP
+                    reg(base + kCr1) |= (1U << kCr1Stop);
+                    reg(base + kCr2) &= ~((1U << kCr2Itevten) | (1U << kCr2Itbufen));
+                    st.active = false;
+                    if (st.callback)
+                    {
+                        st.callback(st.arg, hal::I2cError::Ok);
+                    }
+                }
+                return;
+            }
+
+            // RX not empty (read mode)
+            if (st.isRead && (sr1 & (1U << kSr1Rxne)))
+            {
+                st.rxBuf[st.index++] = static_cast<std::uint8_t>(reg(base + kDr));
+
+                if (st.index >= st.length)
+                {
+                    reg(base + kCr2) &= ~((1U << kCr2Itevten) | (1U << kCr2Itbufen));
+                    st.active = false;
+                    if (st.callback)
+                    {
+                        st.callback(st.arg, hal::I2cError::Ok);
+                    }
+                }
+                else if (st.index == st.length - 1)
+                {
+                    // Next byte is last: disable ACK, send STOP
+                    reg(base + kCr1) &= ~(1U << kCr1Ack);
+                    reg(base + kCr1) |= (1U << kCr1Stop);
                 }
             }
             return;
         }
 
-        // RX not empty (read mode)
-        if (st.isRead && (sr1 & (1U << kSr1Rxne)))
+        // Slave path
+        auto &sl = s_i2cSlaveState[idx];
+        if (sl.active)
         {
-            st.rxBuf[st.index++] = static_cast<std::uint8_t>(reg(base + kDr));
-
-            if (st.index >= st.length)
-            {
-                reg(base + kCr2) &= ~((1U << kCr2Itevten) | (1U << kCr2Itbufen));
-                st.active = false;
-                if (st.callback)
-                {
-                    st.callback(st.arg, hal::I2cError::Ok);
-                }
-            }
-            else if (st.index == st.length - 1)
-            {
-                // Next byte is last: disable ACK, send STOP
-                reg(base + kCr1) &= ~(1U << kCr1Ack);
-                reg(base + kCr1) |= (1U << kCr1Stop);
-            }
+            handleI2cSlaveEventIrq(idx);
         }
     }
 
     void handleI2cErrorIrq(std::uint8_t idx)
     {
+        std::uint32_t base = i2cBase(static_cast<hal::I2cId>(idx));
+
+        // Slave mode: AF (acknowledge failure) is normal at end of master read.
+        // Master sends NACK on last byte to signal end-of-read.
+        auto &sl = s_i2cSlaveState[idx];
+        if (sl.active)
+        {
+            std::uint32_t sr1 = reg(base + kSr1);
+            if (sr1 & (1U << kSr1Af))
+            {
+                // Clear AF flag
+                reg(base + kSr1) = ~(1U << kSr1Af);
+                sl.txIndex = 0;
+                sl.txLength = 0;
+                return;
+            }
+        }
+
+        // Master async path
         auto &st = s_i2cState[idx];
         if (!st.active)
         {
             return;
         }
 
-        std::uint32_t base = i2cBase(static_cast<hal::I2cId>(idx));
         hal::I2cError err = checkErrors(base);
 
         if (err != hal::I2cError::Ok)
@@ -512,6 +663,86 @@ namespace hal
         // Generate START
         reg(base + kCr1) |= (1U << kCr1Start);
     }
+    // --- Slave mode ---
+
+    void i2cSlaveInit(I2cId id, std::uint8_t ownAddr,
+                      I2cSlaveRxCallbackFn rxCallback,
+                      I2cSlaveTxCallbackFn txCallback, void *arg)
+    {
+        std::uint8_t idx = static_cast<std::uint8_t>(id);
+        std::uint32_t base = i2cBase(id);
+        std::uint32_t apb1Mhz = g_apb1Clock / 1000000;
+
+        // Software reset
+        reg(base + kCr1) |= (1U << kCr1Swrst);
+        reg(base + kCr1) &= ~(1U << kCr1Swrst);
+
+        // Disable peripheral
+        reg(base + kCr1) &= ~(1U << kCr1Pe);
+
+        // Set APB1 frequency in CR2 (MHz value in bits [5:0])
+        reg(base + kCr2) = apb1Mhz & 0x3F;
+
+        // Standard mode: CCR = APB1 / (2 * 100kHz)
+        std::uint32_t ccr = g_apb1Clock / (2 * 100000);
+        if (ccr < 4)
+        {
+            ccr = 4;
+        }
+        reg(base + kCcr) = ccr;
+
+        // TRISE = APB1_MHz + 1
+        reg(base + kTrise) = apb1Mhz + 1;
+
+        // Set own address: bits [7:1] = address, bit [14] = 1 (required by RM0090)
+        reg(base + kOar1) = (static_cast<std::uint32_t>(ownAddr) << 1) | (1U << 14);
+
+        // Enable peripheral + ACK
+        reg(base + kCr1) = (1U << kCr1Pe) | (1U << kCr1Ack);
+
+        // Store callbacks
+        auto &sl = s_i2cSlaveState[idx];
+        sl.rxCallback = rxCallback;
+        sl.txCallback = txCallback;
+        sl.arg = arg;
+        sl.ownAddr = ownAddr;
+        sl.rxIndex = 0;
+        sl.txIndex = 0;
+        sl.txLength = 0;
+        sl.isTx = false;
+    }
+
+    void i2cSlaveEnable(I2cId id)
+    {
+        std::uint8_t idx = static_cast<std::uint8_t>(id);
+        std::uint32_t base = i2cBase(id);
+
+        // Set NVIC priority and enable for both EV and ER IRQs
+        nvicSetPriority(kI2cEvIrq[idx], 0x80);
+        nvicSetPriority(kI2cErIrq[idx], 0x80);
+        nvicEnableIrq(kI2cEvIrq[idx]);
+        nvicEnableIrq(kI2cErIrq[idx]);
+
+        // Enable event, buffer, and error interrupts
+        reg(base + kCr2) |= (1U << kCr2Itevten) | (1U << kCr2Itbufen) | (1U << kCr2Iterren);
+
+        s_i2cSlaveState[idx].active = true;
+    }
+
+    void i2cSlaveDisable(I2cId id)
+    {
+        std::uint8_t idx = static_cast<std::uint8_t>(id);
+        std::uint32_t base = i2cBase(id);
+
+        // Disable event, buffer, and error interrupts
+        reg(base + kCr2) &= ~((1U << kCr2Itevten) | (1U << kCr2Itbufen) | (1U << kCr2Iterren));
+
+        nvicDisableIrq(kI2cEvIrq[idx]);
+        nvicDisableIrq(kI2cErIrq[idx]);
+
+        s_i2cSlaveState[idx].active = false;
+    }
+
 }  // namespace hal
 
 // ISR handlers

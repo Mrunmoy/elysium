@@ -39,4 +39,14 @@ namespace hal
                       I2cCallbackFn /* callback */, void * /* arg */)
     {
     }
+    void i2cSlaveInit(I2cId /* id */, std::uint8_t /* ownAddr */,
+                      I2cSlaveRxCallbackFn /* rxCallback */,
+                      I2cSlaveTxCallbackFn /* txCallback */, void * /* arg */)
+    {
+    }
+
+    void i2cSlaveEnable(I2cId /* id */) {}
+
+    void i2cSlaveDisable(I2cId /* id */) {}
+
 }  // namespace hal

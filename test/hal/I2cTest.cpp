@@ -227,6 +227,172 @@ TEST_F(I2cTest, AsyncReadFillsBuffer)
     EXPECT_EQ(buf[1], 0xFE);
 }
 
+// ---- Slave init ----
+
+TEST_F(I2cTest, I2cSlaveInitRecordsOwnAddr)
+{
+    auto rxCb = [](void *, const std::uint8_t *, std::size_t) {};
+    auto txCb = [](void *, std::uint8_t *, std::size_t *, std::size_t) {};
+
+    hal::i2cSlaveInit(hal::I2cId::I2c1, 0x44, rxCb, txCb, nullptr);
+
+    ASSERT_EQ(test::g_i2cSlaveInitCalls.size(), 1u);
+    EXPECT_EQ(test::g_i2cSlaveInitCalls[0].id,
+              static_cast<std::uint8_t>(hal::I2cId::I2c1));
+    EXPECT_EQ(test::g_i2cSlaveInitCalls[0].ownAddr, 0x44);
+}
+
+TEST_F(I2cTest, I2cSlaveInitRecordsCallbacks)
+{
+    auto rxCb = [](void *, const std::uint8_t *, std::size_t) {};
+    auto txCb = [](void *, std::uint8_t *, std::size_t *, std::size_t) {};
+
+    hal::i2cSlaveInit(hal::I2cId::I2c1, 0x44, rxCb, txCb, nullptr);
+
+    ASSERT_EQ(test::g_i2cSlaveInitCalls.size(), 1u);
+    EXPECT_NE(test::g_i2cSlaveInitCalls[0].rxCallback, nullptr);
+    EXPECT_NE(test::g_i2cSlaveInitCalls[0].txCallback, nullptr);
+    EXPECT_EQ(test::g_i2cSlaveRxCallback,
+              test::g_i2cSlaveInitCalls[0].rxCallback);
+    EXPECT_EQ(test::g_i2cSlaveTxCallback,
+              test::g_i2cSlaveInitCalls[0].txCallback);
+}
+
+TEST_F(I2cTest, I2cSlaveInitStoresArg)
+{
+    int dummy = 42;
+    auto rxCb = [](void *, const std::uint8_t *, std::size_t) {};
+    auto txCb = [](void *, std::uint8_t *, std::size_t *, std::size_t) {};
+
+    hal::i2cSlaveInit(hal::I2cId::I2c2, 0x50, rxCb, txCb, &dummy);
+
+    ASSERT_EQ(test::g_i2cSlaveInitCalls.size(), 1u);
+    EXPECT_EQ(test::g_i2cSlaveInitCalls[0].arg, &dummy);
+    EXPECT_EQ(test::g_i2cSlaveArg, &dummy);
+}
+
+TEST_F(I2cTest, I2cSlaveMultipleInits)
+{
+    auto rxCb = [](void *, const std::uint8_t *, std::size_t) {};
+    auto txCb = [](void *, std::uint8_t *, std::size_t *, std::size_t) {};
+
+    hal::i2cSlaveInit(hal::I2cId::I2c1, 0x44, rxCb, txCb, nullptr);
+    hal::i2cSlaveInit(hal::I2cId::I2c2, 0x55, rxCb, txCb, nullptr);
+
+    ASSERT_EQ(test::g_i2cSlaveInitCalls.size(), 2u);
+    EXPECT_EQ(test::g_i2cSlaveInitCalls[0].ownAddr, 0x44);
+    EXPECT_EQ(test::g_i2cSlaveInitCalls[1].ownAddr, 0x55);
+}
+
+// ---- Slave enable/disable ----
+
+TEST_F(I2cTest, I2cSlaveEnableRecordsCall)
+{
+    hal::i2cSlaveEnable(hal::I2cId::I2c1);
+
+    EXPECT_EQ(test::g_i2cSlaveEnableCount, 1u);
+    EXPECT_TRUE(test::g_i2cSlaveActive);
+}
+
+TEST_F(I2cTest, I2cSlaveDisableRecordsCall)
+{
+    test::g_i2cSlaveActive = true;
+    hal::i2cSlaveDisable(hal::I2cId::I2c1);
+
+    EXPECT_EQ(test::g_i2cSlaveDisableCount, 1u);
+    EXPECT_FALSE(test::g_i2cSlaveActive);
+}
+
+TEST_F(I2cTest, I2cSlaveEnableThenDisableClearsState)
+{
+    hal::i2cSlaveEnable(hal::I2cId::I2c1);
+    EXPECT_TRUE(test::g_i2cSlaveActive);
+
+    hal::i2cSlaveDisable(hal::I2cId::I2c1);
+    EXPECT_FALSE(test::g_i2cSlaveActive);
+
+    EXPECT_EQ(test::g_i2cSlaveEnableCount, 1u);
+    EXPECT_EQ(test::g_i2cSlaveDisableCount, 1u);
+}
+
+// ---- Slave callback simulation ----
+
+TEST_F(I2cTest, I2cSlaveRxCallbackInvoked)
+{
+    bool called = false;
+    std::size_t rxLen = 0;
+
+    auto rxCb = [](void *arg, const std::uint8_t * /* data */, std::size_t length)
+    {
+        auto *info = static_cast<std::pair<bool *, std::size_t *> *>(arg);
+        *info->first = true;
+        *info->second = length;
+    };
+    auto txCb = [](void *, std::uint8_t *, std::size_t *, std::size_t) {};
+
+    std::pair<bool *, std::size_t *> info(&called, &rxLen);
+    hal::i2cSlaveInit(hal::I2cId::I2c1, 0x44, rxCb, txCb, &info);
+
+    // Simulate ISR invoking the stored callback
+    auto fn = reinterpret_cast<hal::I2cSlaveRxCallbackFn>(test::g_i2cSlaveRxCallback);
+    std::uint8_t data[] = {0xAB, 0xCD};
+    fn(test::g_i2cSlaveArg, data, 2);
+
+    EXPECT_TRUE(called);
+    EXPECT_EQ(rxLen, 2u);
+}
+
+TEST_F(I2cTest, I2cSlaveTxCallbackInvoked)
+{
+    bool called = false;
+
+    auto rxCb = [](void *, const std::uint8_t *, std::size_t) {};
+    auto txCb = [](void *arg, std::uint8_t *data, std::size_t *length, std::size_t maxLength)
+    {
+        *static_cast<bool *>(arg) = true;
+        if (maxLength >= 2)
+        {
+            data[0] = 0xDE;
+            data[1] = 0xAD;
+            *length = 2;
+        }
+    };
+
+    hal::i2cSlaveInit(hal::I2cId::I2c1, 0x44, rxCb, txCb, &called);
+
+    // Simulate ISR invoking the stored TX callback
+    auto fn = reinterpret_cast<hal::I2cSlaveTxCallbackFn>(test::g_i2cSlaveTxCallback);
+    std::uint8_t buf[4] = {};
+    std::size_t len = 0;
+    fn(test::g_i2cSlaveArg, buf, &len, 4);
+
+    EXPECT_TRUE(called);
+    EXPECT_EQ(len, 2u);
+    EXPECT_EQ(buf[0], 0xDE);
+    EXPECT_EQ(buf[1], 0xAD);
+}
+
+// ---- Slave mock state reset ----
+
+TEST_F(I2cTest, I2cSlaveStateResetsCleanly)
+{
+    auto rxCb = [](void *, const std::uint8_t *, std::size_t) {};
+    auto txCb = [](void *, std::uint8_t *, std::size_t *, std::size_t) {};
+
+    hal::i2cSlaveInit(hal::I2cId::I2c1, 0x44, rxCb, txCb, nullptr);
+    hal::i2cSlaveEnable(hal::I2cId::I2c1);
+
+    test::resetMockState();
+
+    EXPECT_TRUE(test::g_i2cSlaveInitCalls.empty());
+    EXPECT_EQ(test::g_i2cSlaveEnableCount, 0u);
+    EXPECT_EQ(test::g_i2cSlaveDisableCount, 0u);
+    EXPECT_FALSE(test::g_i2cSlaveActive);
+    EXPECT_EQ(test::g_i2cSlaveRxCallback, nullptr);
+    EXPECT_EQ(test::g_i2cSlaveTxCallback, nullptr);
+    EXPECT_EQ(test::g_i2cSlaveArg, nullptr);
+}
+
 // ---- Mock state reset ----
 
 TEST_F(I2cTest, MockStateResetsCleanly)

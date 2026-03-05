@@ -192,6 +192,21 @@ def flash_openocd_stm32(target, app):
     ])
 
 
+def flash_openocd_stlink(target, app):
+    """Flash firmware to STM32 target via ST-Link V2 and OpenOCD."""
+    bin_path = os.path.join(BUILD_DIR, "app", app, f"{app}.bin")
+    if not os.path.exists(bin_path):
+        print(f"Error: {bin_path} not found. Run build first.")
+        sys.exit(1)
+
+    run([
+        "openocd",
+        "-f", "interface/stlink.cfg",
+        "-f", "target/stm32f4x.cfg",
+        "-c", f"program {bin_path} 0x08000000 verify reset exit",
+    ])
+
+
 def flash_openocd(app):
     """Load firmware to PYNQ-Z2 via OpenOCD JTAG."""
     elf_path = os.path.join(BUILD_DIR, "app", app, app)
@@ -221,6 +236,8 @@ def flash(target, app, probe="jlink"):
         flash_openocd(app)
     elif probe == "cmsis-dap":
         flash_openocd_stm32(target, app)
+    elif probe == "stlink":
+        flash_openocd_stlink(target, app)
     else:
         flash_jlink(target, app)
 
@@ -234,7 +251,7 @@ def main():
     parser.add_argument("-d", "--dtb", action="store_true",
                         help="Rebuild DTB(s) from DTS sources (all boards, or --target for one)")
     parser.add_argument("--app", default=None, help="App to flash (default: threads or hello)")
-    parser.add_argument("--probe", default="jlink", choices=["jlink", "cmsis-dap"],
+    parser.add_argument("--probe", default="jlink", choices=["jlink", "cmsis-dap", "stlink"],
                         help="Debug probe for flashing (default: jlink)")
     parser.add_argument("--target", default=None,
                         choices=["stm32f207zgt6", "stm32f407zgt6", "pynq-z2"],

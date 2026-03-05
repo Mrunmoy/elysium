@@ -220,6 +220,24 @@ namespace test
     inline void *g_i2cAsyncCallback = nullptr;
     inline void *g_i2cAsyncArg = nullptr;
 
+    // I2C slave mock state
+    struct I2cSlaveInitCall
+    {
+        std::uint8_t id;
+        std::uint8_t ownAddr;
+        void *rxCallback;
+        void *txCallback;
+        void *arg;
+    };
+
+    inline std::vector<I2cSlaveInitCall> g_i2cSlaveInitCalls;
+    inline std::uint32_t g_i2cSlaveEnableCount = 0;
+    inline std::uint32_t g_i2cSlaveDisableCount = 0;
+    inline bool g_i2cSlaveActive = false;
+    inline void *g_i2cSlaveRxCallback = nullptr;
+    inline void *g_i2cSlaveTxCallback = nullptr;
+    inline void *g_i2cSlaveArg = nullptr;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -274,6 +292,14 @@ namespace test
         g_i2cAsyncReadCount = 0;
         g_i2cAsyncCallback = nullptr;
         g_i2cAsyncArg = nullptr;
+
+        g_i2cSlaveInitCalls.clear();
+        g_i2cSlaveEnableCount = 0;
+        g_i2cSlaveDisableCount = 0;
+        g_i2cSlaveActive = false;
+        g_i2cSlaveRxCallback = nullptr;
+        g_i2cSlaveTxCallback = nullptr;
+        g_i2cSlaveArg = nullptr;
     }
 
 }  // namespace test

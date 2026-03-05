@@ -143,4 +143,32 @@ namespace hal
             callback(arg, static_cast<I2cError>(test::g_i2cReturnError));
         }
     }
+    void i2cSlaveInit(I2cId id, std::uint8_t ownAddr,
+                      I2cSlaveRxCallbackFn rxCallback,
+                      I2cSlaveTxCallbackFn txCallback, void *arg)
+    {
+        test::g_i2cSlaveInitCalls.push_back({
+            static_cast<std::uint8_t>(id),
+            ownAddr,
+            reinterpret_cast<void *>(rxCallback),
+            reinterpret_cast<void *>(txCallback),
+            arg,
+        });
+        test::g_i2cSlaveRxCallback = reinterpret_cast<void *>(rxCallback);
+        test::g_i2cSlaveTxCallback = reinterpret_cast<void *>(txCallback);
+        test::g_i2cSlaveArg = arg;
+    }
+
+    void i2cSlaveEnable(I2cId /* id */)
+    {
+        ++test::g_i2cSlaveEnableCount;
+        test::g_i2cSlaveActive = true;
+    }
+
+    void i2cSlaveDisable(I2cId /* id */)
+    {
+        ++test::g_i2cSlaveDisableCount;
+        test::g_i2cSlaveActive = false;
+    }
+
 }  // namespace hal

@@ -60,4 +60,27 @@ namespace hal
     void i2cReadAsync(I2cId id, std::uint8_t addr, std::uint8_t *data,
                       std::size_t length, I2cCallbackFn callback, void *arg);
 
+    // --- Slave mode ---
+
+    // Slave RX callback: called in ISR context when master write completes (STOP detected).
+    using I2cSlaveRxCallbackFn = void (*)(void *arg, const std::uint8_t *data,
+                                          std::size_t length);
+
+    // Slave TX callback: called in ISR context when master requests a read (ADDR with R/W=1).
+    // Fill data buffer, set *length. maxLength is buffer capacity.
+    using I2cSlaveTxCallbackFn = void (*)(void *arg, std::uint8_t *data,
+                                          std::size_t *length, std::size_t maxLength);
+
+    // Init I2C in slave mode with 7-bit own address. Enables PE+ACK, does NOT
+    // enable interrupts -- call i2cSlaveEnable() after init.
+    void i2cSlaveInit(I2cId id, std::uint8_t ownAddr,
+                      I2cSlaveRxCallbackFn rxCallback,
+                      I2cSlaveTxCallbackFn txCallback, void *arg);
+
+    // Enable slave event/error/buffer interrupts and NVIC.
+    void i2cSlaveEnable(I2cId id);
+
+    // Disable slave interrupts.
+    void i2cSlaveDisable(I2cId id);
+
 }  // namespace hal
