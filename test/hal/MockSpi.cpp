@@ -7,8 +7,21 @@
 
 namespace hal
 {
+    namespace
+    {
+        bool isValidSpiId(SpiId id)
+        {
+            return static_cast<std::uint8_t>(id) <= static_cast<std::uint8_t>(SpiId::Spi3);
+        }
+    }  // namespace
+
     void spiInit(const SpiConfig &config)
     {
+        if (!isValidSpiId(config.id))
+        {
+            return;
+        }
+
         test::g_spiInitCalls.push_back({
             static_cast<std::uint8_t>(config.id),
             static_cast<std::uint8_t>(config.mode),
@@ -23,6 +36,11 @@ namespace hal
     void spiTransfer(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                      std::size_t length)
     {
+        if (!isValidSpiId(id) || length == 0)
+        {
+            return;
+        }
+
         test::g_spiTransferCalls.push_back({
             static_cast<std::uint8_t>(id),
             length,
@@ -49,6 +67,11 @@ namespace hal
 
     std::uint8_t spiTransferByte(SpiId id, std::uint8_t txByte)
     {
+        if (!isValidSpiId(id))
+        {
+            return 0;
+        }
+
         std::uint8_t rx = 0;
         spiTransfer(id, &txByte, &rx, 1);
         return rx;
@@ -57,6 +80,11 @@ namespace hal
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg)
     {
+        if (!isValidSpiId(id) || length == 0)
+        {
+            return;
+        }
+
         test::g_spiTransferCalls.push_back({
             static_cast<std::uint8_t>(id),
             length,
@@ -93,22 +121,37 @@ namespace hal
 
     void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg)
     {
+        if (!isValidSpiId(id))
+        {
+            return;
+        }
+
         test::g_spiSlaveRxEnableCalls.push_back({static_cast<std::uint8_t>(id)});
         test::g_spiSlaveRxCallback = reinterpret_cast<void *>(callback);
         test::g_spiSlaveRxArg = arg;
         test::g_spiSlaveRxActive = true;
     }
 
-    void spiSlaveRxInterruptDisable(SpiId /* id */)
+    void spiSlaveRxInterruptDisable(SpiId id)
     {
+        if (!isValidSpiId(id))
+        {
+            return;
+        }
+
         ++test::g_spiSlaveRxDisableCount;
         test::g_spiSlaveRxCallback = nullptr;
         test::g_spiSlaveRxArg = nullptr;
         test::g_spiSlaveRxActive = false;
     }
 
-    void spiSlaveSetTxByte(SpiId /* id */, std::uint8_t value)
+    void spiSlaveSetTxByte(SpiId id, std::uint8_t value)
     {
+        if (!isValidSpiId(id))
+        {
+            return;
+        }
+
         test::g_spiSlaveSetTxBytes.push_back(value);
     }
 }  // namespace hal

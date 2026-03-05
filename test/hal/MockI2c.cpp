@@ -7,8 +7,21 @@
 
 namespace hal
 {
+    namespace
+    {
+        bool isValidI2cId(I2cId id)
+        {
+            return static_cast<std::uint8_t>(id) <= static_cast<std::uint8_t>(I2cId::I2c3);
+        }
+    }  // namespace
+
     void i2cInit(const I2cConfig &config)
     {
+        if (!isValidI2cId(config.id))
+        {
+            return;
+        }
+
         test::g_i2cInitCalls.push_back({
             static_cast<std::uint8_t>(config.id),
             static_cast<std::uint8_t>(config.speed),
@@ -20,6 +33,15 @@ namespace hal
     I2cError i2cWrite(I2cId id, std::uint8_t addr, const std::uint8_t *data,
                       std::size_t length)
     {
+        if (!isValidI2cId(id))
+        {
+            return I2cError::Invalid;
+        }
+        if (length > 0 && data == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+
         (void)data;
         test::g_i2cWriteCalls.push_back({
             static_cast<std::uint8_t>(id),
@@ -32,6 +54,15 @@ namespace hal
     I2cError i2cRead(I2cId id, std::uint8_t addr, std::uint8_t *data,
                      std::size_t length)
     {
+        if (!isValidI2cId(id))
+        {
+            return I2cError::Invalid;
+        }
+        if (length > 0 && data == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+
         test::g_i2cReadCalls.push_back({
             static_cast<std::uint8_t>(id),
             addr,
@@ -61,6 +92,19 @@ namespace hal
                           const std::uint8_t *txData, std::size_t txLength,
                           std::uint8_t *rxData, std::size_t rxLength)
     {
+        if (!isValidI2cId(id))
+        {
+            return I2cError::Invalid;
+        }
+        if (txLength > 0 && txData == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+        if (rxLength > 0 && rxData == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+
         (void)txData;
         test::g_i2cWriteReadCalls.push_back({
             static_cast<std::uint8_t>(id),
@@ -91,6 +135,27 @@ namespace hal
     void i2cWriteAsync(I2cId id, std::uint8_t addr, const std::uint8_t *data,
                        std::size_t length, I2cCallbackFn callback, void *arg)
     {
+        if (!isValidI2cId(id))
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+        if (length == 0)
+        {
+            return;
+        }
+        if (data == nullptr)
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+
         (void)data;
         test::g_i2cWriteCalls.push_back({
             static_cast<std::uint8_t>(id),
@@ -112,6 +177,27 @@ namespace hal
     void i2cReadAsync(I2cId id, std::uint8_t addr, std::uint8_t *data,
                       std::size_t length, I2cCallbackFn callback, void *arg)
     {
+        if (!isValidI2cId(id))
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+        if (length == 0)
+        {
+            return;
+        }
+        if (data == nullptr)
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+
         test::g_i2cReadCalls.push_back({
             static_cast<std::uint8_t>(id),
             addr,
@@ -147,6 +233,11 @@ namespace hal
                       I2cSlaveRxCallbackFn rxCallback,
                       I2cSlaveTxCallbackFn txCallback, void *arg)
     {
+        if (!isValidI2cId(id))
+        {
+            return;
+        }
+
         test::g_i2cSlaveInitCalls.push_back({
             static_cast<std::uint8_t>(id),
             ownAddr,
@@ -159,14 +250,22 @@ namespace hal
         test::g_i2cSlaveArg = arg;
     }
 
-    void i2cSlaveEnable(I2cId /* id */)
+    void i2cSlaveEnable(I2cId id)
     {
+        if (!isValidI2cId(id))
+        {
+            return;
+        }
         ++test::g_i2cSlaveEnableCount;
         test::g_i2cSlaveActive = true;
     }
 
-    void i2cSlaveDisable(I2cId /* id */)
+    void i2cSlaveDisable(I2cId id)
     {
+        if (!isValidI2cId(id))
+        {
+            return;
+        }
         ++test::g_i2cSlaveDisableCount;
         test::g_i2cSlaveActive = false;
     }

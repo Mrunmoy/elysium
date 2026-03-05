@@ -158,8 +158,14 @@ namespace kernel
             arch::enterCritical();
         }
 
-        // Enqueue message
-        mailboxEnqueue(destBox, msg, currentId);
+        // Enqueue message. Re-check result after wakeup to avoid blocking for
+        // reply when mailbox is still full due to contention.
+        if (!mailboxEnqueue(destBox, msg, currentId))
+        {
+            myBox.blockReason = IpcBlockReason::None;
+            arch::exitCritical();
+            return kIpcErrFull;
+        }
 
         // If receiver is blocked waiting for a message, unblock it
         if (!waitQueueEmpty(destBox.receiverWaitHead))

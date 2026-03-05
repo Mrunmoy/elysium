@@ -24,7 +24,8 @@ namespace hal
         Nack,
         BusError,
         ArbitrationLost,
-        Timeout
+        Timeout,
+        Invalid
     };
 
     using I2cCallbackFn = void (*)(void *arg, I2cError error);

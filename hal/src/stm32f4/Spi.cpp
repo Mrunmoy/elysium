@@ -12,6 +12,7 @@ namespace
     constexpr std::uint32_t kSpi1Base = 0x40013000;
     constexpr std::uint32_t kSpi2Base = 0x40003800;
     constexpr std::uint32_t kSpi3Base = 0x40003C00;
+    constexpr std::uint8_t kSpiCount = 3;
 
     // Register offsets
     constexpr std::uint32_t kCr1 = 0x00;
@@ -55,6 +56,11 @@ namespace
             case hal::SpiId::Spi3: return kSpi3Base;
             default: return kSpi1Base;
         }
+    }
+
+    bool isValidSpiId(hal::SpiId id)
+    {
+        return static_cast<std::uint8_t>(id) < kSpiCount;
     }
 
     std::uint32_t disableIrq()
@@ -197,6 +203,11 @@ namespace hal
 {
     void spiInit(const SpiConfig &config)
     {
+        if (!isValidSpiId(config.id))
+        {
+            return;
+        }
+
         std::uint32_t base = spiBase(config.id);
 
         // Disable SPI first
@@ -269,6 +280,11 @@ namespace hal
     void spiTransfer(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                      std::size_t length)
     {
+        if (!isValidSpiId(id) || length == 0)
+        {
+            return;
+        }
+
         std::uint32_t base = spiBase(id);
 
         for (std::size_t i = 0; i < length; ++i)
@@ -309,6 +325,11 @@ namespace hal
 
     std::uint8_t spiTransferByte(SpiId id, std::uint8_t txByte)
     {
+        if (!isValidSpiId(id))
+        {
+            return 0;
+        }
+
         std::uint8_t rx = 0;
         spiTransfer(id, &txByte, &rx, 1);
         return rx;
@@ -317,6 +338,11 @@ namespace hal
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg)
     {
+        if (!isValidSpiId(id) || length == 0)
+        {
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = spiBase(id);
 
@@ -344,6 +370,11 @@ namespace hal
 
     void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg)
     {
+        if (!isValidSpiId(id))
+        {
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = spiBase(id);
 
@@ -370,6 +401,11 @@ namespace hal
 
     void spiSlaveRxInterruptDisable(SpiId id)
     {
+        if (!isValidSpiId(id))
+        {
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = spiBase(id);
 
@@ -388,6 +424,11 @@ namespace hal
 
     void spiSlaveSetTxByte(SpiId id, std::uint8_t value)
     {
+        if (!isValidSpiId(id))
+        {
+            return;
+        }
+
         std::uint32_t base = spiBase(id);
         reg(base + kDr) = value;
     }

@@ -88,6 +88,22 @@ TEST_F(I2cTest, WriteSingleByte)
     EXPECT_EQ(test::g_i2cWriteCalls[0].length, 1u);
 }
 
+TEST_F(I2cTest, WriteInvalidIdReturnsInvalid)
+{
+    std::uint8_t data[] = {0x12};
+    hal::I2cError err = hal::i2cWrite(static_cast<hal::I2cId>(99), 0x50, data, 1);
+
+    EXPECT_EQ(err, hal::I2cError::Invalid);
+    EXPECT_TRUE(test::g_i2cWriteCalls.empty());
+}
+
+TEST_F(I2cTest, WriteNullDataWithLengthReturnsInvalid)
+{
+    hal::I2cError err = hal::i2cWrite(hal::I2cId::I2c1, 0x50, nullptr, 1);
+    EXPECT_EQ(err, hal::I2cError::Invalid);
+    EXPECT_TRUE(test::g_i2cWriteCalls.empty());
+}
+
 // ---- Read ----
 
 TEST_F(I2cTest, ReadRecordsIdAddrAndLength)
@@ -135,6 +151,22 @@ TEST_F(I2cTest, ReadSingleByte)
     EXPECT_EQ(buf[0], 0x42);
 }
 
+TEST_F(I2cTest, ReadInvalidIdReturnsInvalid)
+{
+    std::uint8_t buf[1] = {};
+    hal::I2cError err = hal::i2cRead(static_cast<hal::I2cId>(99), 0x50, buf, 1);
+
+    EXPECT_EQ(err, hal::I2cError::Invalid);
+    EXPECT_TRUE(test::g_i2cReadCalls.empty());
+}
+
+TEST_F(I2cTest, ReadNullBufferWithLengthReturnsInvalid)
+{
+    hal::I2cError err = hal::i2cRead(hal::I2cId::I2c1, 0x50, nullptr, 1);
+    EXPECT_EQ(err, hal::I2cError::Invalid);
+    EXPECT_TRUE(test::g_i2cReadCalls.empty());
+}
+
 // ---- WriteRead ----
 
 TEST_F(I2cTest, WriteReadRecordsBothLengths)
@@ -177,6 +209,18 @@ TEST_F(I2cTest, WriteReadReturnsInjectableError)
     EXPECT_EQ(err, hal::I2cError::ArbitrationLost);
 }
 
+TEST_F(I2cTest, WriteReadNullPointersReturnInvalid)
+{
+    std::uint8_t rx[1] = {};
+    std::uint8_t tx[1] = {0x00};
+
+    EXPECT_EQ(hal::i2cWriteRead(hal::I2cId::I2c1, 0x50, nullptr, 1, rx, 1),
+              hal::I2cError::Invalid);
+    EXPECT_EQ(hal::i2cWriteRead(hal::I2cId::I2c1, 0x50, tx, 1, nullptr, 1),
+              hal::I2cError::Invalid);
+    EXPECT_TRUE(test::g_i2cWriteReadCalls.empty());
+}
+
 // ---- Async write ----
 
 TEST_F(I2cTest, AsyncWriteRecordsCall)
@@ -202,6 +246,44 @@ TEST_F(I2cTest, AsyncWriteInvokesCallback)
     EXPECT_TRUE(called);
 }
 
+TEST_F(I2cTest, AsyncWriteZeroLengthDoesNothing)
+{
+    bool called = false;
+    auto cb = [](void *arg, hal::I2cError) { *static_cast<bool *>(arg) = true; };
+
+    std::uint8_t data[] = {0xAA};
+    hal::i2cWriteAsync(hal::I2cId::I2c1, 0x50, data, 0, cb, &called);
+
+    EXPECT_FALSE(called);
+    EXPECT_EQ(test::g_i2cAsyncWriteCount, 0u);
+    EXPECT_TRUE(test::g_i2cWriteCalls.empty());
+}
+
+TEST_F(I2cTest, AsyncWriteInvalidIdInvokesInvalidCallback)
+{
+    struct CallbackState
+    {
+        bool called = false;
+        hal::I2cError error = hal::I2cError::Ok;
+    };
+
+    auto cb = [](void *arg, hal::I2cError err)
+    {
+        auto *state = static_cast<CallbackState *>(arg);
+        state->called = true;
+        state->error = err;
+    };
+
+    CallbackState state;
+    std::uint8_t data[] = {0xAA};
+    hal::i2cWriteAsync(static_cast<hal::I2cId>(99), 0x50, data, 1, cb, &state);
+
+    EXPECT_TRUE(state.called);
+    EXPECT_EQ(state.error, hal::I2cError::Invalid);
+    EXPECT_EQ(test::g_i2cAsyncWriteCount, 0u);
+    EXPECT_TRUE(test::g_i2cWriteCalls.empty());
+}
+
 // ---- Async read ----
 
 TEST_F(I2cTest, AsyncReadRecordsCall)
@@ -225,6 +307,43 @@ TEST_F(I2cTest, AsyncReadFillsBuffer)
 
     EXPECT_EQ(buf[0], 0xCA);
     EXPECT_EQ(buf[1], 0xFE);
+}
+
+TEST_F(I2cTest, AsyncReadZeroLengthDoesNothing)
+{
+    bool called = false;
+    auto cb = [](void *arg, hal::I2cError) { *static_cast<bool *>(arg) = true; };
+
+    std::uint8_t buf[2] = {};
+    hal::i2cReadAsync(hal::I2cId::I2c1, 0x50, buf, 0, cb, &called);
+
+    EXPECT_FALSE(called);
+    EXPECT_EQ(test::g_i2cAsyncReadCount, 0u);
+    EXPECT_TRUE(test::g_i2cReadCalls.empty());
+}
+
+TEST_F(I2cTest, AsyncReadNullBufferInvokesInvalidCallback)
+{
+    struct CallbackState
+    {
+        bool called = false;
+        hal::I2cError error = hal::I2cError::Ok;
+    };
+
+    auto cb = [](void *arg, hal::I2cError err)
+    {
+        auto *state = static_cast<CallbackState *>(arg);
+        state->called = true;
+        state->error = err;
+    };
+
+    CallbackState state;
+    hal::i2cReadAsync(hal::I2cId::I2c1, 0x50, nullptr, 1, cb, &state);
+
+    EXPECT_TRUE(state.called);
+    EXPECT_EQ(state.error, hal::I2cError::Invalid);
+    EXPECT_EQ(test::g_i2cAsyncReadCount, 0u);
+    EXPECT_TRUE(test::g_i2cReadCalls.empty());
 }
 
 // ---- Slave init ----
@@ -313,6 +432,16 @@ TEST_F(I2cTest, I2cSlaveEnableThenDisableClearsState)
 
     EXPECT_EQ(test::g_i2cSlaveEnableCount, 1u);
     EXPECT_EQ(test::g_i2cSlaveDisableCount, 1u);
+}
+
+TEST_F(I2cTest, I2cSlaveInvalidIdDoesNothing)
+{
+    hal::i2cSlaveEnable(static_cast<hal::I2cId>(99));
+    hal::i2cSlaveDisable(static_cast<hal::I2cId>(99));
+
+    EXPECT_EQ(test::g_i2cSlaveEnableCount, 0u);
+    EXPECT_EQ(test::g_i2cSlaveDisableCount, 0u);
+    EXPECT_FALSE(test::g_i2cSlaveActive);
 }
 
 // ---- Slave callback simulation ----

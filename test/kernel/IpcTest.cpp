@@ -408,6 +408,29 @@ TEST_F(IpcTest, Send_NullReply_ReturnsInvalid)
     EXPECT_EQ(kernel::messageSend(t2, msg, nullptr), kernel::kIpcErrInvalid);
 }
 
+TEST_F(IpcTest, Send_FullMailboxAfterResume_ReturnsFull)
+{
+    kernel::ThreadId sender = createThread("sender", g_stack1, sizeof(g_stack1), 10);
+    kernel::ThreadId receiver = createThread("receiver", g_stack2, sizeof(g_stack2), 10);
+    makeRunning(sender);
+    m_scheduler.addThread(receiver);
+
+    // Fill receiver mailbox to capacity.
+    kernel::Message msg = makeRequest(0x1234, 1);
+    for (std::uint8_t i = 0; i < kernel::kMailboxDepth; ++i)
+    {
+        EXPECT_EQ(kernel::messageTrySend(receiver, msg), kernel::kIpcOk);
+    }
+
+    kernel::Message reply{};
+    EXPECT_EQ(kernel::messageSend(receiver, msg, &reply), kernel::kIpcErrFull);
+
+    // Sender must not transition into reply-wait state on failed enqueue.
+    kernel::ThreadMailbox *senderBox = kernel::ipcGetMailbox(sender);
+    ASSERT_NE(senderBox, nullptr);
+    EXPECT_EQ(senderBox->blockReason, kernel::IpcBlockReason::None);
+}
+
 TEST_F(IpcTest, Reply_InvalidDest_ReturnsNoThread)
 {
     kernel::Message reply{};

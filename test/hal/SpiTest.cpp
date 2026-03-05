@@ -181,10 +181,38 @@ TEST_F(SpiTest, AsyncTransferStoresCallbackAndArg)
 {
     int ctx = 0;
 
-    hal::spiTransferAsync(hal::SpiId::Spi1, nullptr, nullptr, 0, dummySpiCb, &ctx);
+    hal::spiTransferAsync(hal::SpiId::Spi1, nullptr, nullptr, 1, dummySpiCb, &ctx);
 
     EXPECT_EQ(test::g_spiAsyncCallback, reinterpret_cast<void *>(dummySpiCb));
     EXPECT_EQ(test::g_spiAsyncArg, &ctx);
+}
+
+TEST_F(SpiTest, AsyncTransferZeroLengthDoesNothing)
+{
+    bool called = false;
+    auto cb = [](void *arg) { *static_cast<bool *>(arg) = true; };
+
+    std::uint8_t tx[] = {0x01};
+    std::uint8_t rx[1] = {};
+    hal::spiTransferAsync(hal::SpiId::Spi1, tx, rx, 0, cb, &called);
+
+    EXPECT_FALSE(called);
+    EXPECT_EQ(test::g_spiAsyncCount, 0u);
+    EXPECT_TRUE(test::g_spiTransferCalls.empty());
+}
+
+TEST_F(SpiTest, AsyncTransferInvalidIdDoesNothing)
+{
+    bool called = false;
+    auto cb = [](void *arg) { *static_cast<bool *>(arg) = true; };
+
+    std::uint8_t tx[] = {0x01};
+    std::uint8_t rx[1] = {};
+    hal::spiTransferAsync(static_cast<hal::SpiId>(99), tx, rx, 1, cb, &called);
+
+    EXPECT_FALSE(called);
+    EXPECT_EQ(test::g_spiAsyncCount, 0u);
+    EXPECT_TRUE(test::g_spiTransferCalls.empty());
 }
 
 // ---- Slave RX Interrupt ----
@@ -260,6 +288,17 @@ TEST_F(SpiTest, SlaveSetTxByteRecordsMultipleCalls)
     EXPECT_EQ(test::g_spiSlaveSetTxBytes[0], 0x11);
     EXPECT_EQ(test::g_spiSlaveSetTxBytes[1], 0x22);
     EXPECT_EQ(test::g_spiSlaveSetTxBytes[2], 0x33);
+}
+
+TEST_F(SpiTest, SlaveInvalidIdDoesNothing)
+{
+    hal::spiSlaveRxInterruptEnable(static_cast<hal::SpiId>(99), dummySlaveRxCb, nullptr);
+    hal::spiSlaveRxInterruptDisable(static_cast<hal::SpiId>(99));
+    hal::spiSlaveSetTxByte(static_cast<hal::SpiId>(99), 0x55);
+
+    EXPECT_TRUE(test::g_spiSlaveRxEnableCalls.empty());
+    EXPECT_EQ(test::g_spiSlaveRxDisableCount, 0u);
+    EXPECT_TRUE(test::g_spiSlaveSetTxBytes.empty());
 }
 
 TEST_F(SpiTest, InitRecordsSoftwareNssForSlave)

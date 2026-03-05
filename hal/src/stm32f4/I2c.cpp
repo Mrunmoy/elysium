@@ -15,6 +15,7 @@ namespace
     constexpr std::uint32_t kI2c1Base = 0x40005400;
     constexpr std::uint32_t kI2c2Base = 0x40005800;
     constexpr std::uint32_t kI2c3Base = 0x40005C00;
+    constexpr std::uint8_t kI2cCount = 3;
 
     // Register offsets
     constexpr std::uint32_t kCr1 = 0x00;
@@ -79,6 +80,11 @@ namespace
             case hal::I2cId::I2c3: return kI2c3Base;
             default: return kI2c1Base;
         }
+    }
+
+    bool isValidI2cId(hal::I2cId id)
+    {
+        return static_cast<std::uint8_t>(id) < kI2cCount;
     }
 
     hal::I2cError checkErrors(std::uint32_t base)
@@ -391,6 +397,11 @@ namespace hal
 {
     void i2cInit(const I2cConfig &config)
     {
+        if (!isValidI2cId(config.id))
+        {
+            return;
+        }
+
         std::uint32_t base = i2cBase(config.id);
         std::uint32_t apb1Mhz = g_apb1Clock / 1000000;
 
@@ -439,6 +450,15 @@ namespace hal
     I2cError i2cWrite(I2cId id, std::uint8_t addr, const std::uint8_t *data,
                       std::size_t length)
     {
+        if (!isValidI2cId(id))
+        {
+            return I2cError::Invalid;
+        }
+        if (length > 0 && data == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+
         std::uint32_t base = i2cBase(id);
 
         // Generate START
@@ -491,6 +511,15 @@ namespace hal
     I2cError i2cRead(I2cId id, std::uint8_t addr, std::uint8_t *data,
                      std::size_t length)
     {
+        if (!isValidI2cId(id))
+        {
+            return I2cError::Invalid;
+        }
+        if (length > 0 && data == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+
         std::uint32_t base = i2cBase(id);
 
         if (length == 0)
@@ -570,6 +599,19 @@ namespace hal
                           const std::uint8_t *txData, std::size_t txLength,
                           std::uint8_t *rxData, std::size_t rxLength)
     {
+        if (!isValidI2cId(id))
+        {
+            return I2cError::Invalid;
+        }
+        if (txLength > 0 && txData == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+        if (rxLength > 0 && rxData == nullptr)
+        {
+            return I2cError::Invalid;
+        }
+
         std::uint32_t base = i2cBase(id);
 
         // --- Write phase (no STOP) ---
@@ -616,6 +658,27 @@ namespace hal
     void i2cWriteAsync(I2cId id, std::uint8_t addr, const std::uint8_t *data,
                        std::size_t length, I2cCallbackFn callback, void *arg)
     {
+        if (!isValidI2cId(id))
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+        if (length == 0)
+        {
+            return;
+        }
+        if (data == nullptr)
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = i2cBase(id);
 
@@ -640,6 +703,27 @@ namespace hal
     void i2cReadAsync(I2cId id, std::uint8_t addr, std::uint8_t *data,
                       std::size_t length, I2cCallbackFn callback, void *arg)
     {
+        if (!isValidI2cId(id))
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+        if (length == 0)
+        {
+            return;
+        }
+        if (data == nullptr)
+        {
+            if (callback != nullptr)
+            {
+                callback(arg, I2cError::Invalid);
+            }
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = i2cBase(id);
 
@@ -669,6 +753,11 @@ namespace hal
                       I2cSlaveRxCallbackFn rxCallback,
                       I2cSlaveTxCallbackFn txCallback, void *arg)
     {
+        if (!isValidI2cId(id))
+        {
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = i2cBase(id);
         std::uint32_t apb1Mhz = g_apb1Clock / 1000000;
@@ -714,6 +803,11 @@ namespace hal
 
     void i2cSlaveEnable(I2cId id)
     {
+        if (!isValidI2cId(id))
+        {
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = i2cBase(id);
 
@@ -731,6 +825,11 @@ namespace hal
 
     void i2cSlaveDisable(I2cId id)
     {
+        if (!isValidI2cId(id))
+        {
+            return;
+        }
+
         std::uint8_t idx = static_cast<std::uint8_t>(id);
         std::uint32_t base = i2cBase(id);
 
