@@ -12,3 +12,5 @@ compile_commands.json
 result
 __pycache__/
 Testing/
+.claude/worktrees/
+artifacts/
