@@ -670,6 +670,34 @@ introduced the unwanted dependency.
 
 
 <!-- ============================================================ -->
+<!--             TIMER DEBUGGING NOTES (Phase 19)                  -->
+<!-- ============================================================ -->
+
+  <h2 id="timer-gotchas">Timer Peripheral Gotchas</h2>
+
+  <div class="callout callout-warning">
+    <strong>UIF set by UG:</strong> Writing EGR.UG = 1 to force-load shadow registers also
+    sets SR.UIF. Always clear SR after EGR.UG, or a spurious interrupt fires on the first
+    <code>timerStart</code>.
+  </div>
+
+  <h3>Verifying timer output with a logic analyzer</h3>
+  <p>Use the <code>timer-logic</code> app (<code>app/timer-test/logic-test.cpp</code>) to output
+  a sequence of known PWM frequencies on PB4 (TIM3_CH1, AF2). Connect Saleae channel 0 to PB4
+  and capture at 4 MHz or higher. The app cycles through 1 kHz/10 kHz/100 Hz and an ISR toggle
+  test, then leaves 1 kHz running continuously.</p>
+
+  <h3>Timer clock calculation cheat sheet</h3>
+  <pre><code>APB1 timer clock (F407) = 84 MHz
+APB1 timer clock (F207) = 60 MHz
+
+f_overflow = timer_clock / ((PSC + 1) * (ARR + 1))
+
+1 kHz:  PSC=83, ARR=999
+10 kHz: PSC=83, ARR=99
+1 MHz tick (for delays): PSC=83, ARR=0xFFFF</code></pre>
+
+<!-- ============================================================ -->
 <!--             SECTION 5: OPENOCD TCL SCRIPTS                    -->
 <!-- ============================================================ -->
   <div class="chapter-nav-footer">

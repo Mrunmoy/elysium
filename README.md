@@ -35,8 +35,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 17 | Hardware driver validation runner (machine-parseable UART/SPI/I2C/DMA smoke tests) | Complete |
 | 18 | DMA hardware coverage expansion (width/alignment/increment/repeatability matrix) | Complete |
 | 19 | SPI DMA transfer integration (`spiTransferDma`) with host + board-to-board validation | Complete |
+| 20 | Hardware timers (TIM2-TIM7, periodic interrupt, PWM, microsecond delay) | Complete |
 
-**Test coverage:** 466 C++ host tests, 145 Python tests.
+**Test coverage:** 498 C++ host tests, 145 Python tests.
 
 ## Prerequisites
 
@@ -119,7 +120,7 @@ ms-os/
     stm32f407zgt6/          STM32F407 vector table, linker script, clock init
     pynq-z2/                PYNQ-Z2 startup (ARM mode, GIC, SCU timer)
   hal/
-    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c)
+    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c, Timer)
     src/stm32f4/            STM32F2/F4 register-level implementation
     src/zynq7000/           Zynq-7000 register-level implementation
   kernel/
@@ -155,6 +156,7 @@ ms-os/
     i2c-slave/              I2C1 slave echo server (board-to-board, Board 2)
     i2c-test/               I2C1 master test runner (board-to-board, Board 1)
     dma-test/               DMA2 hardware smoke test runner
+    timer-test/             Timer hardware test (TIM6/TIM7/TIM3/TIM5)
   tools/
     hw_driver_runner.py     Host runner: flash boards + parse machine test output
     ipcgen/                 IDL code generator (embedded backend)

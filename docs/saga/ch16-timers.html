@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 14: Counting Time -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 14 -- Counting Time</span>
+    <div class="header-nav">
+      <a href="ch14-uart-test.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch16-timers.html" class="current">Chapter 14 -- Counting Time</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch15-epilogue.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch16-timers.html" class="current">Chapter 14 -- Counting Time</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+  <h1>Chapter 14: Counting Time</h1>
+  <p class="chapter-subtitle">Phase 19 -- Hardware timer abstraction for STM32F4</p>
+
+  <h2>The next peripheral</h2>
+
+  <p>With SPI, I2C, DMA, and UART all validated across physical wires, the HAL was
+  starting to feel substantial. But one category of peripheral had been conspicuously
+  absent: <em>hardware timers</em>. The STM32F407 has fourteen of them, spanning basic
+  counters (TIM6, TIM7), general-purpose timers with PWM (TIM2-TIM5), and advanced
+  timers with complementary outputs (TIM1, TIM8). Every embedded system eventually
+  needs precise timing -- whether for periodic interrupts, PWM outputs, or
+  microsecond-resolution delays.</p>
+
+  <h2>Scoping the work</h2>
+
+  <p>Fourteen timers is a lot of silicon to abstract. The design decision was to start
+  with the six most commonly used: TIM2 through TIM7. TIM2 and TIM5 have 32-bit
+  counters; TIM3, TIM4, TIM6, and TIM7 are 16-bit. TIM6 and TIM7 are "basic" timers
+  with no output channels -- perfect for periodic interrupts and delay generation.
+  TIM2-TIM5 are general-purpose with four capture/compare channels each, ideal for
+  PWM output.</p>
+
+  <p>The advanced timers (TIM1, TIM8) with their complementary outputs, break inputs,
+  and dead-time generators were deliberately left for a future phase. Same for input
+  capture, encoder interface, and DMA-driven timer operations.</p>
+
+  <h2>Clock arithmetic</h2>
+
+  <p>All six timers sit on the APB1 bus. On the STM32F407, APB1 runs at 42 MHz with a
+  prescaler of /4, but the timer clock gets doubled when the APB prescaler is not 1.
+  So the timer input clock is 84 MHz. The prescaler register (PSC) divides this by
+  (PSC + 1), and the auto-reload register (ARR) determines the overflow period.</p>
+
+  <div class="callout callout-insight">
+    <strong>Timer frequency formula:</strong>
+    <code>f_overflow = timer_clock / ((PSC + 1) * (ARR + 1))</code><br>
+    For 1 kHz on F407: PSC = 83 (84 MHz / 84 = 1 MHz tick), ARR = 999 (1 MHz / 1000 = 1 kHz).
+  </div>
+
+  <h2>The API</h2>
+
+  <p>The timer HAL follows the same pattern as every other driver: a public header in
+  <code>hal/inc/hal/Timer.h</code>, register-level implementation in
+  <code>hal/src/stm32f4/Timer.cpp</code>, a Zynq stub, and link-time mock for host tests.</p>
+
+  <p>The API covers five areas:</p>
+
+  <ul>
+    <li><strong>Basic timer</strong>: <code>timerInit</code>, <code>timerStart</code> (with ISR callback),
+        <code>timerStop</code></li>
+    <li><strong>Counter access</strong>: <code>timerGetCount</code>, <code>timerSetCount</code></li>
+    <li><strong>Runtime update</strong>: <code>timerSetPeriod</code>, <code>timerSetPrescaler</code></li>
+    <li><strong>PWM output</strong>: <code>timerPwmInit</code>, <code>timerPwmStart</code>,
+        <code>timerPwmStop</code>, <code>timerPwmSetDuty</code></li>
+    <li><strong>Utility</strong>: <code>timerDelayUs</code> (blocking microsecond delay via TIM7),
+        <code>rccEnableTimerClock</code>, <code>rccDisableTimerClock</code></li>
+  </ul>
+
+  <h2>Register-level implementation</h2>
+
+  <p>The STM32F4 implementation directly manipulates CR1, DIER, SR, EGR, CCMR, CCER,
+  CNT, PSC, ARR, and CCRx registers. Each timer has its own ISR handler
+  (<code>TIM2_IRQHandler</code> through <code>TIM7_IRQHandler</code>) that checks the
+  update interrupt flag (UIF), clears it, and invokes the registered callback.</p>
+
+  <p>PWM configuration uses output compare mode 1 (OCxM = 110 in CCMR) with preload
+  enabled, and the polarity is controlled through the CCER register. The channel
+  mapping handles all four channels across the two CCMR registers.</p>
+
+  <h2>Testing</h2>
+
+  <p>32 host tests verify the mock layer: init records config, start records callbacks,
+  stop clears state, PWM operations record channel actions, counter get/set works,
+  and invalid timer IDs are handled gracefully.</p>
+
+  <p>The hardware test runs four scenarios on the STM32F407:</p>
+
+  <ol>
+    <li><strong>TIM6 periodic interrupt</strong>: 1 kHz overflow, count callbacks for ~1 second.
+        Got 1085 callbacks (the busy-loop reference overshoots slightly, not a timer error).</li>
+    <li><strong>TIM7 microsecond delay</strong>: 10 ms delay measured against TIM6 reference counter.
+        Exactly 10000 ticks -- perfect accuracy at PSC = 83.</li>
+    <li><strong>TIM3 PWM output</strong>: 1 kHz PWM on PB4 (AF2), init/start/setDuty/stop
+        without faults.</li>
+    <li><strong>TIM5 start/stop</strong>: verify the 32-bit counter freezes after
+        <code>timerStop</code>. Running count was 65, stopped count stayed at 66.</li>
+  </ol>
+
+  <div class="callout callout-hardware">
+    <strong>Hardware result:</strong> 5/5 PASS on STM32F407ZGT6 (Board 1, J-Link).
+  </div>
+
+  <h2>Logic analyzer verification</h2>
+
+  <p>To go beyond "it didn't crash," we connected a Saleae logic analyzer to PB4
+  and captured the PWM output at 4 MHz sample rate. A dedicated
+  <code>timer-logic</code> app cycled through four frequency/duty combinations:</p>
+
+  <table>
+    <thead><tr><th>Expected</th><th>Measured Freq</th><th>Error</th><th>Duty</th><th>Jitter</th></tr></thead>
+    <tbody>
+      <tr><td>1 kHz, 50%</td><td>999.89 Hz</td><td>0.01%</td><td>50.00%</td><td>0.25 us</td></tr>
+      <tr><td>10 kHz, 25%</td><td>9998.86 Hz</td><td>0.01%</td><td>25.00%</td><td>0.25 us</td></tr>
+      <tr><td>100 Hz, 75%</td><td>99.84 Hz</td><td>0.16%</td><td>75.04%</td><td>exact</td></tr>
+      <tr><td>ISR toggle ~10 kHz</td><td>9998.86 Hz</td><td>0.01%</td><td>50.00%</td><td>0.50 us</td></tr>
+    </tbody>
+  </table>
+
+  <p>The 0.25 us jitter equals exactly one sample period at 4 MHz -- meaning the actual
+  hardware jitter is below measurement resolution. The timer peripheral generates
+  cycle-accurate waveforms from the 84 MHz APB1 timer clock.</p>
+
+  <h2>What it enables</h2>
+
+  <p>With hardware timers in place, the OS now has the building blocks for:</p>
+
+  <ul>
+    <li>Kernel software timer wheels (callback scheduling without ISR-per-timer overhead)</li>
+    <li>PWM-driven actuators (motor control, LED dimming, servo positioning)</li>
+    <li>Precise microsecond-resolution delays for protocol timing</li>
+    <li>Frequency measurement and pulse counting (once input capture is added)</li>
+  </ul>
+
+  <div class="chapter-nav-footer">
+    <a href="ch14-uart-test.html">&lt; Previous: The Wire Between Two Worlds</a>
+    <a href="ch15-epilogue.html">Next: Epilogue &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  Built bare-metal. Documented with care.
+</footer>
+
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

@@ -251,6 +251,71 @@ namespace test
     inline void *g_i2cSlaveTxCallback = nullptr;
     inline void *g_i2cSlaveArg = nullptr;
 
+    // ---- Timer mock state ----
+
+    struct TimerInitCall
+    {
+        std::uint8_t id;
+        std::uint16_t prescaler;
+        std::uint32_t period;
+        bool autoReload;
+        bool onePulse;
+    };
+
+    struct TimerStartCall
+    {
+        std::uint8_t id;
+        bool hasCallback;
+    };
+
+    struct PwmInitCall
+    {
+        std::uint8_t id;
+        std::uint8_t channel;
+        std::uint16_t prescaler;
+        std::uint32_t period;
+        std::uint32_t duty;
+        bool activeHigh;
+    };
+
+    struct PwmChannelAction
+    {
+        std::uint8_t id;
+        std::uint8_t channel;
+        bool start;  // true = start, false = stop
+    };
+
+    struct PwmSetDutyCall
+    {
+        std::uint8_t id;
+        std::uint8_t channel;
+        std::uint32_t duty;
+    };
+
+    struct TimerRccCall
+    {
+        std::uint8_t id;
+        bool enable;  // true = enable, false = disable
+    };
+
+    inline std::vector<TimerInitCall> g_timerInitCalls;
+    inline std::vector<TimerStartCall> g_timerStartCalls;
+    inline std::uint32_t g_timerStopCount = 0;
+    inline std::uint32_t g_timerCount = 0;       // mock counter value
+    inline std::uint32_t g_timerSetCountVal = 0;
+    inline std::uint32_t g_timerSetPeriodVal = 0;
+    inline std::uint16_t g_timerSetPrescalerVal = 0;
+    inline void *g_timerCallback = nullptr;
+    inline void *g_timerCallbackArg = nullptr;
+
+    inline std::vector<PwmInitCall> g_pwmInitCalls;
+    inline std::vector<PwmChannelAction> g_pwmChannelActions;
+    inline std::vector<PwmSetDutyCall> g_pwmSetDutyCalls;
+
+    inline std::vector<TimerRccCall> g_timerRccCalls;
+
+    inline std::uint32_t g_timerDelayUsValue = 0;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -316,6 +381,24 @@ namespace test
         g_i2cSlaveRxCallback = nullptr;
         g_i2cSlaveTxCallback = nullptr;
         g_i2cSlaveArg = nullptr;
+
+        g_timerInitCalls.clear();
+        g_timerStartCalls.clear();
+        g_timerStopCount = 0;
+        g_timerCount = 0;
+        g_timerSetCountVal = 0;
+        g_timerSetPeriodVal = 0;
+        g_timerSetPrescalerVal = 0;
+        g_timerCallback = nullptr;
+        g_timerCallbackArg = nullptr;
+
+        g_pwmInitCalls.clear();
+        g_pwmChannelActions.clear();
+        g_pwmSetDutyCalls.clear();
+
+        g_timerRccCalls.clear();
+
+        g_timerDelayUsValue = 0;
     }
 
 }  // namespace test
