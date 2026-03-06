@@ -24,7 +24,7 @@ namespace
 {
     hal::UartId g_consoleUart;
 
-    // RX interrupt sets this flag; waitForEcho uses WFI to sleep until data arrives.
+    // RX interrupt sets this flag; waitForEcho uses it as a hint to poll faster.
     volatile bool g_rxReady = false;
 
     void rxNotify(void * /* arg */)
@@ -186,8 +186,8 @@ namespace
     }
 
     // Wait for a single echo byte with timeout.
-    // Uses WFI to sleep between polls, woken by USART2 RX interrupt.
-    // Timeout is a fallback loop count in case no interrupt fires.
+    // Do not use WFI here: in this standalone test app there is no periodic
+    // interrupt source, so WFI can sleep forever if RX never arrives.
     bool waitForEcho(char *out, std::uint32_t timeoutLoops)
     {
         for (std::uint32_t i = 0; i < timeoutLoops; ++i)
@@ -200,13 +200,16 @@ namespace
                 return true;
             }
 
-            // Sleep until next interrupt (USART2 RX or any other).
-            // Avoids burning CPU while waiting for echo.
-            if (!g_rxReady)
+            if (g_rxReady)
             {
-                __asm volatile("wfi");
+                g_rxReady = false;
+                continue;
             }
-            g_rxReady = false;
+
+            for (volatile std::uint32_t spin = 0; spin < 64; ++spin)
+            {
+                __asm volatile("nop");
+            }
         }
         return false;
     }
