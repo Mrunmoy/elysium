@@ -56,4 +56,14 @@ namespace hal
     {
         test::g_rccDisableCalls.push_back({"dma", static_cast<std::uint8_t>(controller)});
     }
+
+    void rccEnableRngClock()
+    {
+        test::g_rccEnableCalls.push_back({"rng", 0});
+    }
+
+    void rccDisableRngClock()
+    {
+        test::g_rccDisableCalls.push_back({"rng", 0});
+    }
 }  // namespace hal

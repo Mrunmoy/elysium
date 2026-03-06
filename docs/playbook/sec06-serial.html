@@ -94,6 +94,36 @@ debugging. It does not set the baud rate and will either show garbage or block
 indefinitely. Always use pyserial or a proper serial terminal (minicom, picocom).
 </div>
 
+<h3>6.1b Serial Capture Timing</h3>
+
+<p>
+Bare-metal firmware typically prints its output and enters <code>WFI</code> in
+microseconds. If you open the serial port <em>after</em> resetting the CPU, the
+output is already lost. Always open the serial port <strong>before</strong>
+triggering the reset.
+</p>
+
+<h4>Correct pattern</h4>
+
+<pre><span class="cmt"># 1. Start serial reader FIRST</span>
+stty -F /dev/ttyACM0 <span class="num">115200</span> raw -echo
+cat /dev/ttyACM0 &gt; /tmp/output.txt &amp;
+
+<span class="cmt"># 2. THEN reset the CPU</span>
+openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
+  -c <span class="str">"init; reset run; shutdown"</span>
+
+<span class="cmt"># 3. Wait for output, then kill reader</span>
+sleep <span class="num">3</span>
+kill %1
+cat /tmp/output.txt</pre>
+
+<div class="lesson">
+<strong>Lesson:</strong> The ST-Link V2 (VID:PID 0483:3748) does <em>not</em>
+have a virtual COM port. Board 2's serial goes through the CMSIS-DAP adapter's
+UART bridge on <code>/dev/ttyACM0</code>, not through the ST-Link itself.
+</div>
+
 
 <h3>6.2 crash_monitor.py Usage</h3>
 

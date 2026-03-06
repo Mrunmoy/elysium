@@ -13,11 +13,13 @@ namespace hal
     void rccEnableSpiClock(SpiId id);
     void rccEnableI2cClock(I2cId id);
     void rccEnableDmaClock(DmaController controller);
+    void rccEnableRngClock();
 
     void rccDisableGpioClock(Port port);
     void rccDisableUartClock(UartId id);
     void rccDisableSpiClock(SpiId id);
     void rccDisableI2cClock(I2cId id);
     void rccDisableDmaClock(DmaController controller);
+    void rccDisableRngClock();
 
 }  // namespace hal

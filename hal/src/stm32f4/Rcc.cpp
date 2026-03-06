@@ -6,6 +6,7 @@ namespace
 {
     constexpr std::uint32_t kRccBase = 0x40023800;
     constexpr std::uint32_t kRccAhb1enr = 0x30;
+    constexpr std::uint32_t kRccAhb2enr = 0x34;
     constexpr std::uint32_t kRccApb1enr = 0x40;
     constexpr std::uint32_t kRccApb2enr = 0x44;
 
@@ -215,6 +216,20 @@ namespace hal
             default:
                 break;
         }
+        restoreIrq(saved);
+    }
+
+    void rccEnableRngClock()
+    {
+        std::uint32_t saved = disableIrq();
+        reg(kRccBase + kRccAhb2enr) |= (1U << 6);
+        restoreIrq(saved);
+    }
+
+    void rccDisableRngClock()
+    {
+        std::uint32_t saved = disableIrq();
+        reg(kRccBase + kRccAhb2enr) &= ~(1U << 6);
         restoreIrq(saved);
     }
 }  // namespace hal

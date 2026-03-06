@@ -25,11 +25,14 @@
 - [x] Hardware test on STM32F407 (5/5 PASS + Saleae logic analyzer verification)
 - [x] Zynq stub
 
-### RNG (Hardware Random Number Generator)
-- [ ] HAL API: `rngInit`, `rngRead`
-- [ ] STM32F4 register-level driver (F4 only, not available on F2)
-- [ ] Host tests
-- [ ] Hardware test
+### RNG (Hardware Random Number Generator) -- DONE
+- [x] Design doc (`docs/design/phase-rng.md`)
+- [x] HAL API: `rngInit`, `rngRead`, `rngDeinit`
+- [x] STM32F4 register-level driver (RNG at 0x50060800, RCC AHB2ENR bit 6)
+- [x] RCC: `rccEnableRngClock`, `rccDisableRngClock`
+- [x] Zynq stub (returns `kNoSys`)
+- [x] 11 host tests with link-time mocks
+- [x] Hardware test on STM32F407 (4/4 PASS, rng-demo app)
 
 ### RTC (Real-Time Clock)
 - [ ] HAL API: `rtcInit`, `rtcGetTime`, `rtcSetTime`, `rtcSetAlarm`

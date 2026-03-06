@@ -316,6 +316,15 @@ namespace test
 
     inline std::uint32_t g_timerDelayUsValue = 0;
 
+    // RNG mock state
+    inline std::uint32_t g_rngInitCount = 0;
+    inline std::uint32_t g_rngReadCount = 0;
+    inline std::uint32_t g_rngDeinitCount = 0;
+    inline std::vector<std::uint32_t> g_rngValues;
+    inline std::size_t g_rngReadPos = 0;
+    inline std::int32_t g_rngReadReturnCode = 0;
+    inline std::int32_t g_rngInitReturnCode = 0;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -399,6 +408,14 @@ namespace test
         g_timerRccCalls.clear();
 
         g_timerDelayUsValue = 0;
+
+        g_rngInitCount = 0;
+        g_rngReadCount = 0;
+        g_rngDeinitCount = 0;
+        g_rngValues.clear();
+        g_rngReadPos = 0;
+        g_rngReadReturnCode = 0;
+        g_rngInitReturnCode = 0;
     }
 
 }  // namespace test

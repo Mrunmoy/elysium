@@ -113,4 +113,8 @@ namespace hal
     // Zynq PS DMA (DMAC) clock is always on
     void rccEnableDmaClock(DmaController /* controller */) {}
     void rccDisableDmaClock(DmaController /* controller */) {}
+
+    // Zynq PS has no hardware RNG
+    void rccEnableRngClock() {}
+    void rccDisableRngClock() {}
 }  // namespace hal
