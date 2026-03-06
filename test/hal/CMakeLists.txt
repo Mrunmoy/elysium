@@ -13,6 +13,8 @@ add_executable(hal_tests
     MockDma.cpp
     MockSpi.cpp
     MockI2c.cpp
+    TimerTest.cpp
+    MockTimer.cpp
 )
 
 target_include_directories(hal_tests PRIVATE

@@ -12,6 +12,7 @@ add_library(hal STATIC
     ${HAL_SRC_DIR}/Dma.cpp
     ${HAL_SRC_DIR}/Spi.cpp
     ${HAL_SRC_DIR}/I2c.cpp
+    ${HAL_SRC_DIR}/Timer.cpp
 )
 
 target_include_directories(hal PUBLIC
