@@ -18,3 +18,9 @@
 - [x] Add negative/error-path hardware scenarios (NACK, wrong address, no peer, timeout).
 - [ ] Add nightly hardware test stage in CI (or local scheduled run script if CI hardware is unavailable).
 - [x] Add optional register-trace logging mode for failure diagnostics.
+
+## In Progress: DMA + Peripheral Integration
+
+- [x] DMA-driven SPI transfers (`spiTransferDma`) with host tests and board-to-board hardware validation.
+- [ ] DMA-driven UART TX/RX.
+- [ ] DMA-driven ADC continuous conversion.

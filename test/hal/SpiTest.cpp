@@ -223,6 +223,61 @@ TEST_F(SpiTest, TransferRequestStatusMapping_UsesGlobalCodes)
     EXPECT_EQ(hal::spiTransferRequestToStatus(false), msos::error::kInvalid);
 }
 
+// ---- DMA Transfer ----
+
+TEST_F(SpiTest, DmaTransferRecordsCall)
+{
+    std::uint8_t tx[] = {0x10, 0x20, 0x30, 0x40};
+    std::uint8_t rx[4] = {};
+    test::g_spiRxData = {0xA1, 0xA2, 0xA3, 0xA4};
+    test::g_spiDmaStatus = msos::error::kOk;
+
+    std::int32_t st = hal::spiTransferDma(hal::SpiId::Spi1, tx, rx, 4, 12345);
+
+    EXPECT_EQ(st, msos::error::kOk);
+    ASSERT_EQ(test::g_spiDmaTransferCalls.size(), 1u);
+    EXPECT_EQ(test::g_spiDmaTransferCalls[0].id, static_cast<std::uint8_t>(hal::SpiId::Spi1));
+    EXPECT_EQ(test::g_spiDmaTransferCalls[0].length, 4u);
+    EXPECT_TRUE(test::g_spiDmaTransferCalls[0].hasTxData);
+    EXPECT_TRUE(test::g_spiDmaTransferCalls[0].hasRxData);
+    EXPECT_EQ(test::g_spiDmaTransferCalls[0].timeoutLoops, 12345u);
+    EXPECT_EQ(rx[0], 0xA1);
+    EXPECT_EQ(rx[3], 0xA4);
+}
+
+TEST_F(SpiTest, DmaTransfer_ZeroLengthReturnsInvalid)
+{
+    std::uint8_t tx[] = {0x10};
+    std::uint8_t rx[1] = {};
+
+    std::int32_t st = hal::spiTransferDma(hal::SpiId::Spi1, tx, rx, 0, 123);
+
+    EXPECT_EQ(st, msos::error::kInvalid);
+    EXPECT_TRUE(test::g_spiDmaTransferCalls.empty());
+}
+
+TEST_F(SpiTest, DmaTransfer_ZeroTimeoutReturnsInvalid)
+{
+    std::uint8_t tx[] = {0x10};
+    std::uint8_t rx[1] = {};
+
+    std::int32_t st = hal::spiTransferDma(hal::SpiId::Spi1, tx, rx, 1, 0);
+
+    EXPECT_EQ(st, msos::error::kInvalid);
+    EXPECT_TRUE(test::g_spiDmaTransferCalls.empty());
+}
+
+TEST_F(SpiTest, DmaTransfer_InvalidIdReturnsInvalid)
+{
+    std::uint8_t tx[] = {0x10};
+    std::uint8_t rx[1] = {};
+
+    std::int32_t st = hal::spiTransferDma(static_cast<hal::SpiId>(99), tx, rx, 1, 64);
+
+    EXPECT_EQ(st, msos::error::kInvalid);
+    EXPECT_TRUE(test::g_spiDmaTransferCalls.empty());
+}
+
 // ---- Slave RX Interrupt ----
 
 static void dummySlaveRxCb(void *, std::uint8_t) {}

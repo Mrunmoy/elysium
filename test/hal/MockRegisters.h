@@ -163,6 +163,19 @@ namespace test
     inline std::uint32_t g_spiAsyncCount = 0;
     inline void *g_spiAsyncCallback = nullptr;
     inline void *g_spiAsyncArg = nullptr;
+    inline std::uint32_t g_spiDmaCount = 0;
+
+    struct SpiDmaTransferCall
+    {
+        std::uint8_t id;
+        std::size_t length;
+        bool hasTxData;
+        bool hasRxData;
+        std::uint32_t timeoutLoops;
+    };
+
+    inline std::vector<SpiDmaTransferCall> g_spiDmaTransferCalls;
+    inline std::int32_t g_spiDmaStatus = 0;
 
     // SPI slave mock state
     struct SpiSlaveRxEnableCall
@@ -273,6 +286,9 @@ namespace test
         g_spiAsyncCount = 0;
         g_spiAsyncCallback = nullptr;
         g_spiAsyncArg = nullptr;
+        g_spiDmaCount = 0;
+        g_spiDmaTransferCalls.clear();
+        g_spiDmaStatus = 0;
 
         g_spiSlaveRxEnableCalls.clear();
         g_spiSlaveRxDisableCount = 0;

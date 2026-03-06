@@ -19,6 +19,7 @@
 #include "hal/Rcc.h"
 #include "hal/Spi.h"
 #include "hal/Uart.h"
+#include "msos/ErrorCode.h"
 
 #include <cstdint>
 
@@ -397,6 +398,47 @@ namespace
         }
         return true;
     }
+
+    // --- Test 6: DMA full-duplex transfer (32 bytes) ---
+    bool testDmaTransfer()
+    {
+        constexpr std::uint8_t kLen = 32;
+        constexpr std::uint8_t kPrime = 0xA5;
+        std::uint8_t tx[kLen + 1];
+        std::uint8_t rx[kLen + 1] = {};
+
+        tx[0] = kPrime;
+        for (std::uint8_t i = 0; i < kLen; ++i)
+        {
+            tx[i + 1] = static_cast<std::uint8_t>((i * 9U) ^ 0x5AU);
+        }
+
+        std::int32_t st = hal::spiTransferDma(hal::SpiId::Spi1, tx, rx, kLen + 1, 2000000);
+        if (st != msos::error::kOk)
+        {
+            print("  [spiTransferDma status=");
+            printDecimal(static_cast<std::uint32_t>(-st));
+            print("]\r\n");
+            return false;
+        }
+
+        for (std::uint8_t i = 1; i < (kLen + 1); ++i)
+        {
+            if (rx[i] != tx[i - 1])
+            {
+                print("  [dma mismatch at ");
+                printDecimal(static_cast<std::uint32_t>(i - 1));
+                print(": expected 0x");
+                printHex(tx[i - 1]);
+                print(", got 0x");
+                printHex(rx[i]);
+                print("]\r\n");
+                return false;
+            }
+        }
+
+        return true;
+    }
 }  // namespace
 
 int main()
@@ -416,7 +458,7 @@ int main()
     delayMs(500);
 
     std::uint32_t pass = 0;
-    constexpr std::uint32_t kTotal = 5;
+    constexpr std::uint32_t kTotal = 6;
 
     bool r1 = testSingleByte();
     printResult("Single byte echo", r1);
@@ -446,6 +488,12 @@ int main()
     printResult("Stress echo (64 bytes)", r5);
     printMachineCase("stress", r5);
     if (r5) ++pass;
+    hal::gpioToggle(hal::Port::C, 13);
+
+    bool r6 = testDmaTransfer();
+    printResult("DMA transfer echo (32 bytes)", r6);
+    printMachineCase("dma-transfer", r6);
+    if (r6) ++pass;
     hal::gpioToggle(hal::Port::C, 13);
 
     print("\r\n--- Summary: ");

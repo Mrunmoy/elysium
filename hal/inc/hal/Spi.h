@@ -75,6 +75,11 @@ namespace hal
     void spiTransferAsync(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
                           std::size_t length, SpiCallbackFn callback, void *arg);
 
+    // DMA-driven full-duplex transfer with bounded timeout.
+    // Returns global status code (kOk / kInvalid / kNoSys / kTimedOut).
+    std::int32_t spiTransferDma(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
+                                std::size_t length, std::uint32_t timeoutLoops);
+
     // Canonical status mapping for transfer request validation.
     constexpr std::int32_t spiTransferRequestToStatus(bool accepted)
     {

@@ -129,6 +129,41 @@ namespace hal
         }
     }
 
+    std::int32_t spiTransferDma(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
+                                std::size_t length, std::uint32_t timeoutLoops)
+    {
+        if (!isValidSpiId(id) || length == 0 || timeoutLoops == 0)
+        {
+            return msos::error::kInvalid;
+        }
+
+        test::g_spiDmaTransferCalls.push_back({
+            static_cast<std::uint8_t>(id),
+            length,
+            txData != nullptr,
+            rxData != nullptr,
+            timeoutLoops,
+        });
+        ++test::g_spiDmaCount;
+
+        if (rxData)
+        {
+            for (std::size_t i = 0; i < length; ++i)
+            {
+                if (test::g_spiRxReadPos < test::g_spiRxData.size())
+                {
+                    rxData[i] = test::g_spiRxData[test::g_spiRxReadPos++];
+                }
+                else
+                {
+                    rxData[i] = 0;
+                }
+            }
+        }
+
+        return test::g_spiDmaStatus;
+    }
+
     void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg)
     {
         if (!isValidSpiId(id))

@@ -4,6 +4,8 @@
 // Registers: CR1(0x00), CR2(0x04), SR(0x08), DR(0x0C)
 
 #include "hal/Spi.h"
+#include "hal/Dma.h"
+#include "hal/Rcc.h"
 
 #include <cstdint>
 
@@ -36,6 +38,8 @@ namespace
     constexpr std::uint32_t kCr2Errie = 5;
     constexpr std::uint32_t kCr2Rxneie = 6;
     constexpr std::uint32_t kCr2Txeie = 7;
+    constexpr std::uint32_t kCr2Rxdmaen = 0;
+    constexpr std::uint32_t kCr2Txdmaen = 1;
 
     // SR bit positions
     constexpr std::uint32_t kSrRxne = 0;
@@ -374,6 +378,83 @@ namespace hal
         reg(base + kCr2) |= (1U << kCr2Rxneie) | (1U << kCr2Txeie) | (1U << kCr2Errie);
 
         restoreIrq(saved);
+    }
+
+    std::int32_t spiTransferDma(SpiId id, const std::uint8_t *txData, std::uint8_t *rxData,
+                                std::size_t length, std::uint32_t timeoutLoops)
+    {
+        if (!isValidSpiId(id) || length == 0 || timeoutLoops == 0)
+        {
+            return msos::error::kInvalid;
+        }
+
+        // Phase 19 scope: SPI1 only.
+        if (id != SpiId::Spi1)
+        {
+            return msos::error::kNoSys;
+        }
+
+        std::uint32_t base = spiBase(id);
+        rccEnableDmaClock(DmaController::Dma2);
+
+        static std::uint8_t s_dummyTx = 0xFF;
+        static std::uint8_t s_dummyRx = 0;
+
+        std::uint8_t *rxTarget = (rxData != nullptr) ? rxData : &s_dummyRx;
+        const std::uint8_t *txSource = (txData != nullptr) ? txData : &s_dummyTx;
+
+        DmaConfig rxCfg{};
+        rxCfg.controller = DmaController::Dma2;
+        rxCfg.stream = DmaStream::Stream0;
+        rxCfg.channel = DmaChannel::Channel3;
+        rxCfg.direction = DmaDirection::PeriphToMemory;
+        rxCfg.peripheralSize = DmaDataSize::Byte;
+        rxCfg.memorySize = DmaDataSize::Byte;
+        rxCfg.peripheralIncrement = false;
+        rxCfg.memoryIncrement = (rxData != nullptr);
+        rxCfg.priority = DmaPriority::VeryHigh;
+        dmaInit(rxCfg);
+
+        DmaConfig txCfg{};
+        txCfg.controller = DmaController::Dma2;
+        txCfg.stream = DmaStream::Stream3;
+        txCfg.channel = DmaChannel::Channel3;
+        txCfg.direction = DmaDirection::MemoryToPeriph;
+        txCfg.peripheralSize = DmaDataSize::Byte;
+        txCfg.memorySize = DmaDataSize::Byte;
+        txCfg.peripheralIncrement = false;
+        txCfg.memoryIncrement = (txData != nullptr);
+        txCfg.priority = DmaPriority::VeryHigh;
+        dmaInit(txCfg);
+
+        const std::uint32_t drAddr = base + kDr;
+        dmaStart(DmaController::Dma2, DmaStream::Stream0, drAddr,
+                 reinterpret_cast<std::uint32_t>(rxTarget),
+                 static_cast<std::uint16_t>(length), nullptr, nullptr);
+        dmaStart(DmaController::Dma2, DmaStream::Stream3, drAddr,
+                 reinterpret_cast<std::uint32_t>(txSource),
+                 static_cast<std::uint16_t>(length), nullptr, nullptr);
+
+        reg(base + kCr2) |= (1U << kCr2Rxdmaen) | (1U << kCr2Txdmaen);
+
+        for (std::uint32_t i = 0; i < timeoutLoops; ++i)
+        {
+            bool rxBusy = dmaIsBusy(DmaController::Dma2, DmaStream::Stream0);
+            bool txBusy = dmaIsBusy(DmaController::Dma2, DmaStream::Stream3);
+            bool spiBusy = (reg(base + kSr) & (1U << kSrBsy)) != 0;
+            if (!rxBusy && !txBusy && !spiBusy)
+            {
+                reg(base + kCr2) &= ~((1U << kCr2Rxdmaen) | (1U << kCr2Txdmaen));
+                dmaStop(DmaController::Dma2, DmaStream::Stream0);
+                dmaStop(DmaController::Dma2, DmaStream::Stream3);
+                return msos::error::kOk;
+            }
+        }
+
+        reg(base + kCr2) &= ~((1U << kCr2Rxdmaen) | (1U << kCr2Txdmaen));
+        dmaStop(DmaController::Dma2, DmaStream::Stream0);
+        dmaStop(DmaController::Dma2, DmaStream::Stream3);
+        return msos::error::kTimedOut;
     }
 
     void spiSlaveRxInterruptEnable(SpiId id, SpiSlaveRxCallbackFn callback, void *arg)
