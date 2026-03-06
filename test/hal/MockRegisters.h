@@ -376,6 +376,27 @@ namespace test
     inline std::uint8_t g_rtcDay = 1;
     inline std::uint8_t g_rtcWeekday = 1;
 
+    // ADC mock state
+    struct AdcInitCall
+    {
+        std::uint8_t id;
+        std::uint8_t resolution;
+        std::uint8_t align;
+        std::uint8_t sampleTime;
+    };
+
+    struct AdcReadCall
+    {
+        std::uint8_t id;
+        std::uint8_t channel;
+        std::uint32_t timeoutLoops;
+    };
+
+    inline std::vector<AdcInitCall> g_adcInitCalls;
+    inline std::vector<AdcReadCall> g_adcReadCalls;
+    inline std::uint16_t g_adcReadValue = 0;
+    inline std::int32_t g_adcReadStatus = 0;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -481,6 +502,11 @@ namespace test
         g_rtcMonth = 1;
         g_rtcDay = 1;
         g_rtcWeekday = 1;
+
+        g_adcInitCalls.clear();
+        g_adcReadCalls.clear();
+        g_adcReadValue = 0;
+        g_adcReadStatus = 0;
     }
 
 }  // namespace test

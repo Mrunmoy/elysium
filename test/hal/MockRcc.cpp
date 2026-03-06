@@ -66,4 +66,14 @@ namespace hal
     {
         test::g_rccDisableCalls.push_back({"rng", 0});
     }
+
+    void rccEnableAdcClock(AdcId id)
+    {
+        test::g_rccEnableCalls.push_back({"adc", static_cast<std::uint8_t>(id)});
+    }
+
+    void rccDisableAdcClock(AdcId id)
+    {
+        test::g_rccDisableCalls.push_back({"adc", static_cast<std::uint8_t>(id)});
+    }
 }  // namespace hal

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 18: Listening to Silicon -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 18 -- Listening to Silicon</span>
+    <div class="header-nav">
+      <a href="ch15-epilogue.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="ch18-adc-on-target.html" class="current">Chapter 18 -- Listening to Silicon</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="appendix.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="ch18-adc-on-target.html" class="current">Chapter 18 -- Listening to Silicon</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+<h2 class="chapter">
+  <span class="ch-num">Chapter 18</span>
+  Listening to Silicon
+</h2>
+
+<div class="epigraph">
+  "The ADC is where software stops guessing and starts measuring."
+  <div class="attribution">&mdash; Lab notebook, Phase 20</div>
+</div>
+
+<p>
+Phase 20 focused on one thing: the STM32F4 ADC path from register write to
+real conversion result. The new HAL introduced <code>adcInit()</code> and
+<code>adcRead()</code> for single-shot, polled conversions with global
+status-code returns. Host tests locked down argument validation, status
+mapping, and call behavior first. Then the real work started on hardware.
+</p>
+
+<p>
+To avoid extra wiring, the first on-target validation used internal ADC
+channels:
+</p>
+
+<ul>
+  <li><strong>Channel 17</strong> &mdash; VREFINT</li>
+  <li><strong>Channel 16</strong> &mdash; temperature sensor</li>
+</ul>
+
+<p>
+Those channels removed board-to-board dependencies and answered the core
+question directly: can the driver configure ADC1, trigger SWSTART, observe
+EOC, and return stable non-zero samples?
+</p>
+
+<h3>The Debug Detour</h3>
+
+<p>
+Early runs looked broken: no UART output appeared on the expected console
+port, despite successful flashing and a running core. The fix was procedural:
+start serial capture first, then reset-and-run the target through J-Link.
+With that sequence, console logs appeared reliably and the machine-parseable
+ADC case lines became visible.
+</p>
+
+<h3>On-Target Result</h3>
+
+<p>
+The hardware run on STM32F407 with J-Link reported:
+</p>
+
+<pre><code>MSOS_CASE:adc:vrefint-read:PASS
+MSOS_CASE:adc:temp-read:PASS
+MSOS_CASE:adc:invalid-channel:PASS
+MSOS_SUMMARY:adc:pass=3:total=3:result=PASS</code></pre>
+
+<p>
+That gave us an end-to-end validation chain for Phase 20:
+design &rarr; host TDD &rarr; cross-build &rarr; on-target execution.
+</p>
+
+<div class="highlight">
+<strong>Status after Phase 20:</strong> ADC single-shot driver implemented for
+STM32F4, host-tested, and verified on hardware through internal-channel
+sampling. Total test count: 538 C++ host tests, 145 Python tests.
+</div>
+
+  <div class="chapter-nav-footer">
+    <a href="ch15-epilogue.html">&lt; Epilogue: The Road Ahead</a>
+    <a href="appendix.html">Appendix A: Hardware Targets &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">Built bare-metal. Documented with care.</footer>
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>

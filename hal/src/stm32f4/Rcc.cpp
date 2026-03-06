@@ -202,6 +202,26 @@ namespace hal
         restoreIrq(saved);
     }
 
+    void rccEnableAdcClock(AdcId id)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (id)
+        {
+            case AdcId::Adc1:
+                reg(kRccBase + kRccApb2enr) |= (1U << 8);
+                break;
+            case AdcId::Adc2:
+                reg(kRccBase + kRccApb2enr) |= (1U << 9);
+                break;
+            case AdcId::Adc3:
+                reg(kRccBase + kRccApb2enr) |= (1U << 10);
+                break;
+            default:
+                break;
+        }
+        restoreIrq(saved);
+    }
+
     void rccDisableDmaClock(DmaController controller)
     {
         std::uint32_t saved = disableIrq();
@@ -230,6 +250,26 @@ namespace hal
     {
         std::uint32_t saved = disableIrq();
         reg(kRccBase + kRccAhb2enr) &= ~(1U << 6);
+        restoreIrq(saved);
+    }
+
+    void rccDisableAdcClock(AdcId id)
+    {
+        std::uint32_t saved = disableIrq();
+        switch (id)
+        {
+            case AdcId::Adc1:
+                reg(kRccBase + kRccApb2enr) &= ~(1U << 8);
+                break;
+            case AdcId::Adc2:
+                reg(kRccBase + kRccApb2enr) &= ~(1U << 9);
+                break;
+            case AdcId::Adc3:
+                reg(kRccBase + kRccApb2enr) &= ~(1U << 10);
+                break;
+            default:
+                break;
+        }
         restoreIrq(saved);
     }
 }  // namespace hal

@@ -15,6 +15,7 @@ add_library(hal STATIC
     ${HAL_SRC_DIR}/Timer.cpp
     ${HAL_SRC_DIR}/Rng.cpp
     ${HAL_SRC_DIR}/Rtc.cpp
+    ${HAL_SRC_DIR}/Adc.cpp
 )
 
 target_include_directories(hal PUBLIC

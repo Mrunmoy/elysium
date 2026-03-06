@@ -38,10 +38,11 @@
           <a href="ch16-timers.html">Chapter 14 -- Counting Time</a>
           <a href="ch17-rtc.html">Chapter 15 -- Keeping Time</a>
           <a href="ch15-epilogue.html" class="current">Epilogue -- The Road Ahead</a>
+          <a href="ch18-adc-on-target.html">Chapter 18 -- Listening to Silicon</a>
           <a href="appendix.html">Appendix A -- Hardware Targets</a>
         </nav>
       </div>
-      <a href="appendix.html" class="nav-arrow">Next &gt;</a>
+      <a href="ch18-adc-on-target.html" class="nav-arrow">Next &gt;</a>
       <button class="nav-hamburger" aria-label="Menu">=</button>
     </div>
   </div>
@@ -67,6 +68,7 @@
   <a href="ch16-timers.html">Chapter 14 -- Counting Time</a>
   <a href="ch17-rtc.html">Chapter 15 -- Keeping Time</a>
   <a href="ch15-epilogue.html" class="current">Epilogue -- The Road Ahead</a>
+  <a href="ch18-adc-on-target.html">Chapter 18 -- Listening to Silicon</a>
   <a href="appendix.html">Appendix A -- Hardware Targets</a>
 </nav>
 
@@ -82,17 +84,18 @@
 </div>
 
 <p>
-As of March 2026, ms-os has completed thirteen phases of development. It runs
+As of March 2026, ms-os has completed twenty-three phases of development. It runs
 on three hardware targets spanning two ARM architecture families, with
-389 C++ unit tests and 135 Python tests verified by GitHub Actions CI on
+538 C++ unit tests and 145 Python tests verified by GitHub Actions CI on
 every push. The kernel schedules 8 threads across 32 priority levels,
 enforces a hardware privilege boundary with SVC syscalls and MPU protection,
 communicates through Minix-style IPC, parses standard FDT device trees at
 runtime, conserves power via WFI and sleep modes, drives SPI/I2C/DMA
 peripherals at the register level, and provides an interactive shell for
 runtime introspection. All of it cross-compiles for Cortex-M3, Cortex-M4,
-and Cortex-A9 from the same source tree. And now, for the first time, two
-boards talk to each other.
+and Cortex-A9 from the same source tree. Board-to-board UART, SPI, and I2C
+validation is now routine, and ADC single-shot conversions are verified on
+hardware.
 </p>
 
 <p>
@@ -138,7 +141,7 @@ continues to grow.
 <!-- ============================================================ -->
   <div class="chapter-nav-footer">
     <a href="ch14-uart-test.html">&lt; Chapter 13: The Wire Between Two Worlds</a>
-    <a href="appendix.html">Appendix A: Hardware Targets &gt;</a>
+    <a href="ch18-adc-on-target.html">Chapter 18: Listening to Silicon &gt;</a>
   </div>
 </main>
 

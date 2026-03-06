@@ -7,6 +7,7 @@ add_executable(hal_tests
     SpiTest.cpp
     I2cTest.cpp
     RngTest.cpp
+    AdcTest.cpp
     MockGpio.cpp
     MockWatchdog.cpp
     MockUart.cpp
@@ -19,6 +20,7 @@ add_executable(hal_tests
     MockRng.cpp
     RtcTest.cpp
     MockRtc.cpp
+    MockAdc.cpp
 )
 
 target_include_directories(hal_tests PRIVATE

@@ -38,8 +38,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 20 | Hardware timers (TIM2-TIM7, periodic interrupt, PWM, microsecond delay) | Complete |
 | 21 | RNG hardware random number generator (TRNG driver, 4/4 hardware tests) | Complete |
 | 22 | RTC (real-time clock, BCD calendar, alarm callback, LSI/LSE) | Complete |
+| 23 | ADC single-shot HAL (`adcInit` + polled `adcRead`) with host + on-target validation | Complete |
 
-**Test coverage:** 527 C++ host tests, 145 Python tests.
+**Test coverage:** 538 C++ host tests, 145 Python tests.
 
 ## Prerequisites
 
@@ -122,7 +123,7 @@ ms-os/
     stm32f407zgt6/          STM32F407 vector table, linker script, clock init
     pynq-z2/                PYNQ-Z2 startup (ARM mode, GIC, SCU timer)
   hal/
-    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c, Timer, Rng)
+    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c, Timer, Rng, Rtc, Adc)
     src/stm32f4/            STM32F2/F4 register-level implementation
     src/zynq7000/           Zynq-7000 register-level implementation
   kernel/
@@ -158,6 +159,7 @@ ms-os/
     i2c-slave/              I2C1 slave echo server (board-to-board, Board 2)
     i2c-test/               I2C1 master test runner (board-to-board, Board 1)
     dma-test/               DMA2 hardware smoke test runner
+    adc-test/               ADC1 internal-channel test runner (VREFINT + temp sensor)
     timer-test/             Timer hardware test (TIM6/TIM7/TIM3/TIM5)
     rng-demo/               RNG hardware random number test
     rtc-test/               RTC hardware test (init, time, date, alarm)
@@ -195,6 +197,7 @@ and process management. Written in C++17 with assembly where required.
 - **DMA** -- Dual-controller DMA with 8 streams each, interrupt callbacks, configurable data sizes and priorities
 - **SPI** -- Full-duplex SPI master and slave with polled, async, interrupt-driven, and DMA transfers
 - **I2C** -- I2C master and slave (standard/fast mode), polled and async, interrupt-driven slave with RX/TX callbacks
+- **ADC** -- ADC1/2/3 single-shot conversions with configurable resolution/alignment/sample time
 - **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
 
@@ -241,6 +244,14 @@ python3 tools/hw_driver_runner.py --register-trace
 
 DMA matrix coverage details are documented in
 `docs/design/phase-18-dma-hw-coverage.md`.
+
+ADC single-shot driver details are documented in
+`docs/design/phase-20-adc-single-shot.md`.
+
+On-target ADC validation app (`app/adc-test`) emits:
+
+- `MSOS_CASE:adc:<case-name>:PASS|FAIL`
+- `MSOS_SUMMARY:adc:pass=<n>:total=<m>:result=PASS|FAIL`
 
 Required board-to-board wiring for these scenarios:
 

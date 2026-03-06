@@ -48,12 +48,13 @@
 - [ ] Hardware test (compare against known CRC32 values)
 
 ### ADC
-- [ ] Design doc
-- [ ] HAL API: `adcInit`, `adcRead` (single-shot), `adcStartContinuous` (with DMA)
-- [ ] STM32F4 ADC1/2/3 register-level driver
-- [ ] Host tests
-- [ ] Hardware test (read known voltage or internal temp sensor)
-- [ ] Zynq stub
+- [x] Design doc (`docs/design/phase-20-adc-single-shot.md`)
+- [x] HAL API: `adcInit`, `adcRead` (single-shot)
+- [ ] HAL API: `adcStartContinuous` (with DMA)
+- [x] STM32F4 ADC1/2/3 register-level driver
+- [x] Host tests
+- [x] Hardware test (`app/adc-test`, internal channels 16/17, 3/3 PASS)
+- [x] Zynq stub
 
 ### DAC
 - [ ] HAL API: `dacInit`, `dacWrite`, `dacStartDma`

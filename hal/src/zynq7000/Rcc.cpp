@@ -117,4 +117,8 @@ namespace hal
     // Zynq PS has no hardware RNG
     void rccEnableRngClock() {}
     void rccDisableRngClock() {}
+
+    // XADC integration is not in current Zynq port.
+    void rccEnableAdcClock(AdcId /* id */) {}
+    void rccDisableAdcClock(AdcId /* id */) {}
 }  // namespace hal
