@@ -98,6 +98,7 @@ if(CMAKE_CROSSCOMPILING)
         add_subdirectory(app/dma-test)
         add_subdirectory(app/timer-test)
         add_subdirectory(app/rng-demo)
+        add_subdirectory(app/rtc-test)
     endif()
 
 else()

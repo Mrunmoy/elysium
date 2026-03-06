@@ -17,6 +17,8 @@ add_executable(hal_tests
     TimerTest.cpp
     MockTimer.cpp
     MockRng.cpp
+    RtcTest.cpp
+    MockRtc.cpp
 )
 
 target_include_directories(hal_tests PRIVATE

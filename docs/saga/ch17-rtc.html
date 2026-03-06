@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 15: Keeping Time -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 15 -- Keeping Time</span>
+    <div class="header-nav">
+      <a href="ch16-timers.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch16-timers.html">Chapter 14 -- Counting Time</a>
+          <a href="ch17-rtc.html" class="current">Chapter 15 -- Keeping Time</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch15-epilogue.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch16-timers.html">Chapter 14 -- Counting Time</a>
+  <a href="ch17-rtc.html" class="current">Chapter 15 -- Keeping Time</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+  <h1>Chapter 15: Keeping Time</h1>
+
+  <div class="callout callout-insight">
+    <strong>Phase 21:</strong> RTC -- real-time clock driver for the STM32F4 backup domain.
+    Calendar time, BCD encoding, alarm interrupts, and the quiet hum of a 32 kHz oscillator.
+  </div>
+
+  <h2>The Backup Domain</h2>
+
+  <p>Most peripherals on the STM32 live and die with VDD. Power off the chip and
+  everything vanishes -- GPIO states, timer counts, UART FIFOs. The RTC is different.
+  It sits in the <em>backup domain</em>, a small island of silicon powered by VBAT.
+  Wire a coin cell to the VBAT pin and the clock keeps ticking even when the rest
+  of the chip is dark.</p>
+
+  <p>The backup domain comes with its own set of rules. Before you can touch any
+  register in this domain, you must unlock the gate:</p>
+
+  <ol>
+    <li>Enable the PWR peripheral clock (APB1ENR bit 28)</li>
+    <li>Set the DBP bit in PWR_CR to allow backup domain writes</li>
+    <li>Enable the clock source (LSI or LSE) and select it in BDCR</li>
+  </ol>
+
+  <p>Skip any of these steps and the RTC registers silently ignore your writes.
+  No fault, no error flag -- just silence.</p>
+
+  <h2>BCD: An Old Encoding for an Old Problem</h2>
+
+  <p>The RTC stores time and date in Binary-Coded Decimal. Each decimal digit occupies
+  four bits: the value 23 is stored as <code>0x23</code>, not <code>0x17</code>.
+  This is a design choice from the days when displaying digits on seven-segment
+  displays was the primary use case -- BCD maps directly to display hardware without
+  division.</p>
+
+  <p>Two small helpers handle the conversion:</p>
+
+  <pre><code>std::uint8_t toBcd(std::uint8_t val)
+{
+    return ((val / 10) &lt;&lt; 4) | (val % 10);
+}
+
+std::uint8_t fromBcd(std::uint8_t bcd)
+{
+    return (bcd &gt;&gt; 4) * 10 + (bcd &amp; 0x0F);
+}</code></pre>
+
+  <p>The time register packs hours, minutes, and seconds into a single 32-bit word.
+  The date register does the same with year, month, day, and weekday. Reading and
+  writing these registers requires entering and exiting <em>init mode</em> -- a
+  two-step handshake where you set the INIT bit, wait for INITF, write your values,
+  then clear INIT to let the clock resume.</p>
+
+  <h2>Write Protection</h2>
+
+  <p>ST added a two-key unlock sequence to prevent accidental writes to RTC registers.
+  You must write <code>0xCA</code> then <code>0x53</code> to the Write Protection Register (WPR).
+  Any wrong key immediately re-enables protection. After your writes, send <code>0xFF</code>
+  to lock it again.</p>
+
+  <p>This means every RTC operation follows the same ritual: unlock, do work, lock.
+  The pattern shows up in <code>rtcSetTime</code>, <code>rtcSetDate</code>,
+  <code>rtcSetAlarm</code>, and <code>rtcCancelAlarm</code>.</p>
+
+  <h2>The LSI Clock</h2>
+
+  <p>We chose the LSI (Low Speed Internal) oscillator as the default clock source.
+  It is an on-chip RC oscillator running at roughly 32 kHz -- not exactly 32,768 Hz
+  like a crystal would provide, but close enough for many applications and it requires
+  no external components.</p>
+
+  <p>The prescaler math adjusts for this:</p>
+
+  <ul>
+    <li><strong>LSI (~32 kHz):</strong> PREDIV_A=127, PREDIV_S=249 gives 32000 / (128 * 250) = 1 Hz</li>
+    <li><strong>LSE (32.768 kHz):</strong> PREDIV_A=127, PREDIV_S=255 gives 32768 / (128 * 256) = 1 Hz</li>
+  </ul>
+
+  <p>The LSI frequency varies per chip (the datasheet says 17-47 kHz typical range,
+  with 32 kHz nominal). For precise timekeeping, an external 32.768 kHz crystal on
+  the LSE pins is the right choice. For our tests, LSI drift of a few percent over
+  minutes is acceptable.</p>
+
+  <h2>Alarm A: Waking Up on Schedule</h2>
+
+  <p>The RTC provides two alarm units (A and B). We implemented Alarm A with a
+  flexible mask system. Each field (hours, minutes, seconds, date) has a mask bit:</p>
+
+  <ul>
+    <li>Mask = 1: ignore this field (wildcard)</li>
+    <li>Mask = 0: field must match for the alarm to fire</li>
+  </ul>
+
+  <p>All masks set to 1 means the alarm fires every second. Only seconds unmasked
+  with seconds=30 means the alarm fires once per minute when the seconds reach 30.
+  This gives applications fine-grained control without multiple alarm configurations.</p>
+
+  <p>The alarm triggers through EXTI line 17, which requires its own configuration:
+  unmask the interrupt, set rising-edge trigger, and enable NVIC IRQ 41. The ISR
+  checks the ALRAF flag, clears it, clears the EXTI pending bit, and calls the
+  user-registered callback.</p>
+
+  <h2>The API</h2>
+
+  <p>Eight functions, no state objects, no dynamic allocation:</p>
+
+  <pre><code>void rtcInit(RtcClockSource clockSource);
+void rtcSetTime(const RtcTime &amp;time);
+void rtcGetTime(RtcTime &amp;time);
+void rtcSetDate(const RtcDate &amp;date);
+void rtcGetDate(RtcDate &amp;date);
+void rtcSetAlarm(const RtcAlarmConfig &amp;config, RtcAlarmCallbackFn callback, void *arg);
+void rtcCancelAlarm();
+bool rtcIsReady();</code></pre>
+
+  <p>The structs use plain <code>uint8_t</code> fields. <code>RtcTime</code> holds
+  hours/minutes/seconds. <code>RtcDate</code> holds year (0-99, offset from 2000),
+  month, day, and weekday (1=Monday). <code>RtcAlarmConfig</code> adds mask booleans
+  for each field.</p>
+
+  <h2>Testing: 18 Host Tests + 5 Hardware Tests</h2>
+
+  <p>The host tests follow the established link-time mock substitution pattern.
+  <code>MockRtc.cpp</code> records all calls into global vectors in
+  <code>MockRegisters.h</code>. The tests verify that the API correctly records
+  init calls, set/get time round-trips, alarm configuration, and cancel counting.</p>
+
+  <p>The hardware test runs five cases on the STM32F407:</p>
+
+  <ol>
+    <li><strong>Init and ready:</strong> <code>rtcInit(Lsi)</code>, verify <code>rtcIsReady()</code> returns true</li>
+    <li><strong>Set/get time:</strong> Set 14:30:00, read back, verify BCD round-trip</li>
+    <li><strong>Set/get date:</strong> Set 2026-03-06 (Friday), read back, verify all fields</li>
+    <li><strong>Time advances:</strong> Set 12:00:00, wait 3 seconds, read 12:00:03</li>
+    <li><strong>Alarm fires:</strong> Set alarm matching seconds=3, verify callback fires within 5 seconds</li>
+  </ol>
+
+  <p>All five pass on the first run after fixing one subtle issue: the microsecond
+  delay function (<code>timerDelayUs</code>) requires TIM7 to be fully initialized
+  with <code>timerInit()</code>, not just clock-enabled with <code>rccEnableTimerClock()</code>.
+  Without the prescaler and period configuration, the delay returns instantly and
+  time-dependent tests appear to fail because they read the RTC before it has a
+  chance to tick.</p>
+
+  <h2>What Comes Next</h2>
+
+  <p>With a working RTC, the OS can now:</p>
+
+  <ul>
+    <li>Timestamp log messages and crash dumps</li>
+    <li>Wake from low-power modes at scheduled times</li>
+    <li>Provide wall-clock time to user applications</li>
+    <li>Schedule periodic tasks aligned to calendar boundaries</li>
+  </ul>
+
+  <p>The Alarm B unit and the wakeup timer are left for future work -- they follow
+  identical patterns and can be added when needed.</p>
+
+  <div class="chapter-nav-footer">
+    <a href="ch16-timers.html">&lt; Previous: Counting Time</a>
+    <a href="ch15-epilogue.html">Next: Epilogue &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  Built bare-metal. Documented with care.
+</footer>
+
+<button id="back-to-top" aria-label="Back to top">^</button>
+
+<script src="shared.js"></script>
+</body>
+</html>

@@ -36,9 +36,10 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 18 | DMA hardware coverage expansion (width/alignment/increment/repeatability matrix) | Complete |
 | 19 | SPI DMA transfer integration (`spiTransferDma`) with host + board-to-board validation | Complete |
 | 20 | Hardware timers (TIM2-TIM7, periodic interrupt, PWM, microsecond delay) | Complete |
-| -- | RNG hardware random number generator (TRNG driver, 4/4 hardware tests) | Complete |
+| 21 | RNG hardware random number generator (TRNG driver, 4/4 hardware tests) | Complete |
+| 22 | RTC (real-time clock, BCD calendar, alarm callback, LSI/LSE) | Complete |
 
-**Test coverage:** 509 C++ host tests, 145 Python tests.
+**Test coverage:** 527 C++ host tests, 145 Python tests.
 
 ## Prerequisites
 
@@ -159,6 +160,7 @@ ms-os/
     dma-test/               DMA2 hardware smoke test runner
     timer-test/             Timer hardware test (TIM6/TIM7/TIM3/TIM5)
     rng-demo/               RNG hardware random number test
+    rtc-test/               RTC hardware test (init, time, date, alarm)
   tools/
     hw_driver_runner.py     Host runner: flash boards + parse machine test output
     ipcgen/                 IDL code generator (embedded backend)

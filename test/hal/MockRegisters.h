@@ -325,6 +325,57 @@ namespace test
     inline std::int32_t g_rngReadReturnCode = 0;
     inline std::int32_t g_rngInitReturnCode = 0;
 
+    // ---- RTC mock state ----
+
+    struct RtcInitCall
+    {
+        std::uint8_t clockSource;
+    };
+
+    struct RtcSetTimeCall
+    {
+        std::uint8_t hours;
+        std::uint8_t minutes;
+        std::uint8_t seconds;
+    };
+
+    struct RtcSetDateCall
+    {
+        std::uint8_t year;
+        std::uint8_t month;
+        std::uint8_t day;
+        std::uint8_t weekday;
+    };
+
+    struct RtcAlarmCall
+    {
+        std::uint8_t hours;
+        std::uint8_t minutes;
+        std::uint8_t seconds;
+        bool maskHours;
+        bool maskMinutes;
+        bool maskSeconds;
+        bool maskDate;
+        void *callback;
+        void *arg;
+    };
+
+    inline std::vector<RtcInitCall> g_rtcInitCalls;
+    inline std::vector<RtcSetTimeCall> g_rtcSetTimeCalls;
+    inline std::vector<RtcSetDateCall> g_rtcSetDateCalls;
+    inline std::vector<RtcAlarmCall> g_rtcAlarmCalls;
+    inline std::uint32_t g_rtcCancelAlarmCount = 0;
+    inline bool g_rtcReady = true;
+
+    // Injectable time/date for rtcGetTime/rtcGetDate
+    inline std::uint8_t g_rtcHours = 0;
+    inline std::uint8_t g_rtcMinutes = 0;
+    inline std::uint8_t g_rtcSeconds = 0;
+    inline std::uint8_t g_rtcYear = 0;
+    inline std::uint8_t g_rtcMonth = 1;
+    inline std::uint8_t g_rtcDay = 1;
+    inline std::uint8_t g_rtcWeekday = 1;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -416,6 +467,20 @@ namespace test
         g_rngReadPos = 0;
         g_rngReadReturnCode = 0;
         g_rngInitReturnCode = 0;
+
+        g_rtcInitCalls.clear();
+        g_rtcSetTimeCalls.clear();
+        g_rtcSetDateCalls.clear();
+        g_rtcAlarmCalls.clear();
+        g_rtcCancelAlarmCount = 0;
+        g_rtcReady = true;
+        g_rtcHours = 0;
+        g_rtcMinutes = 0;
+        g_rtcSeconds = 0;
+        g_rtcYear = 0;
+        g_rtcMonth = 1;
+        g_rtcDay = 1;
+        g_rtcWeekday = 1;
     }
 
 }  // namespace test

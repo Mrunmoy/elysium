@@ -697,6 +697,45 @@ f_overflow = timer_clock / ((PSC + 1) * (ARR + 1))
 10 kHz: PSC=83, ARR=99
 1 MHz tick (for delays): PSC=83, ARR=0xFFFF</code></pre>
 
+  <h2 id="rtc-gotchas">RTC Peripheral Gotchas</h2>
+
+  <h3>Backup Domain Unlock Sequence</h3>
+  <p>The RTC sits in the backup domain. Before touching <em>any</em> RTC register, you must:</p>
+  <ol>
+    <li>Enable PWR clock: <code>RCC_APB1ENR |= (1 &lt;&lt; 28)</code></li>
+    <li>Set DBP in PWR_CR: <code>PWR_CR |= (1 &lt;&lt; 8)</code></li>
+    <li>Enable clock source (LSI via RCC_CSR, or LSE via RCC_BDCR)</li>
+  </ol>
+  <p>Skipping any step causes silent write failures -- no fault, no error flag.</p>
+
+  <h3>Write Protection Keys</h3>
+  <p>RTC registers are write-protected. Unlock: write <code>0xCA</code> then <code>0x53</code> to WPR.
+  Any wrong key re-enables protection immediately. Lock after writes: write <code>0xFF</code> to WPR.</p>
+
+  <h3>Init Mode Required for Time/Date Writes</h3>
+  <p>Writing TR or DR requires entering init mode (set ISR.INIT bit 7, wait for ISR.INITF bit 6).
+  Exit init mode (clear INIT) to let the clock resume. Time does not advance while in init mode.</p>
+
+  <h3>timerDelayUs Requires Full TIM7 Init</h3>
+  <p><code>timerDelayUs()</code> uses TIM7 as a 1 MHz free-running counter. Calling
+  <code>rccEnableTimerClock(Tim7)</code> alone is not enough -- you must also call
+  <code>timerInit()</code> with PSC=83 (for 84 MHz APB1) and ARR=0xFFFF. Without this,
+  the timer counter never runs and delays return instantly. This caused silent failures
+  in the RTC time-advance and alarm tests.</p>
+
+  <h3>Alarm EXTI Configuration</h3>
+  <p>RTC Alarm A uses EXTI line 17. You must configure:</p>
+  <ul>
+    <li>EXTI_IMR bit 17 = 1 (unmask)</li>
+    <li>EXTI_RTSR bit 17 = 1 (rising edge)</li>
+    <li>NVIC IRQ 41 enabled</li>
+  </ul>
+  <p>Missing any of these causes the alarm flag to set but no interrupt fires.</p>
+
+  <h3>LSI vs LSE Prescaler</h3>
+  <pre><code>LSI (~32 kHz):  PREDIV_A=127, PREDIV_S=249  -> 32000/(128*250) = 1 Hz
+LSE (32.768 kHz): PREDIV_A=127, PREDIV_S=255 -> 32768/(128*256) = 1 Hz</code></pre>
+
 <!-- ============================================================ -->
 <!--             SECTION 5: OPENOCD TCL SCRIPTS                    -->
 <!-- ============================================================ -->
