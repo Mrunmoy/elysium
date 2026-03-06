@@ -33,6 +33,7 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 15 | Board-to-board I2C1 integration test (slave echo + master test runner + BME680) | Complete |
 | 16 | Global error-code unification (`msos::error`) across kernel/HAL layers | Complete |
 | 17 | Hardware driver validation runner (machine-parseable UART/SPI/I2C/DMA smoke tests) | Complete |
+| 18 | DMA hardware coverage expansion (width/alignment/increment/repeatability matrix) | Complete |
 
 **Test coverage:** 462 C++ host tests, 145 Python tests.
 
@@ -230,6 +231,9 @@ Enable raw log artifact capture:
 ```bash
 python3 tools/hw_driver_runner.py --register-trace
 ```
+
+DMA matrix coverage details are documented in
+`docs/design/phase-18-dma-hw-coverage.md`.
 
 Required board-to-board wiring for these scenarios:
 
