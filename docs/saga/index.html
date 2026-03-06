@@ -35,6 +35,7 @@
           <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
           <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
           <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="ch16-adc-on-target.html">Chapter 16 -- Listening to Silicon</a>
           <a href="appendix.html">Appendix A -- Hardware Targets</a>
         </nav>
       </div>
@@ -61,6 +62,7 @@
   <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
   <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
   <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="ch16-adc-on-target.html">Chapter 16 -- Listening to Silicon</a>
   <a href="appendix.html">Appendix A -- Hardware Targets</a>
 </nav>
 
@@ -74,7 +76,7 @@
     <p>
       This is the technical narrative of ms-os, a microkernel RTOS written in C++17 for
       ARM Cortex-M and Cortex-A processors. Each chapter covers one phase of development,
-      from the first blinking LED to board-to-board communication over SPI and I2C.
+      from the first blinking LED to board-to-board buses and ADC validation on real hardware.
     </p>
   </div>
 
@@ -85,7 +87,7 @@
       <div class="hw-card-row"><span class="hw-label">Secondary:</span> <span class="hw-value">STM32F407ZGT6 (Cortex-M4, 168 MHz)</span></div>
       <div class="hw-card-row"><span class="hw-label">Tertiary:</span> <span class="hw-value">PYNQ-Z2 Zynq-7020 (Cortex-A9, 650 MHz)</span></div>
       <div class="hw-card-row"><span class="hw-label">Language:</span> <span class="hw-value">C++17 + Assembly</span></div>
-      <div class="hw-card-row"><span class="hw-label">Tests:</span> <span class="hw-value">407 C++ + 135 Python</span></div>
+      <div class="hw-card-row"><span class="hw-label">Tests:</span> <span class="hw-value">477 C++ + 145 Python</span></div>
       <div class="hw-card-row"><span class="hw-label">Architecture:</span> <span class="hw-value">Microkernel</span></div>
     </div>
   </div>
@@ -167,6 +169,10 @@
     <div class="timeline-item completed">
       <div class="timeline-chapter-num">Epilogue</div>
       <div class="timeline-chapter-title"><a href="ch15-epilogue.html">The Road Ahead</a></div>
+    </div>
+    <div class="timeline-item completed">
+      <div class="timeline-chapter-num">Chapter 16</div>
+      <div class="timeline-chapter-title"><a href="ch16-adc-on-target.html">Listening to Silicon</a></div>
     </div>
     <div class="timeline-item completed">
       <div class="timeline-chapter-num">Appendix A</div>

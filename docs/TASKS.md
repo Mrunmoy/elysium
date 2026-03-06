@@ -33,4 +33,4 @@
 - [x] Add ADC RCC clock helpers (`rccEnableAdcClock`, `rccDisableAdcClock`).
 - [x] Add host tests and mocks (`test/hal/AdcTest.cpp`, `test/hal/MockAdc.cpp`).
 - [x] Add Zynq ADC stub for cross-target build parity.
-- [ ] Add on-target ADC hardware validation app/cases.
+- [x] Add on-target ADC hardware validation app/cases.

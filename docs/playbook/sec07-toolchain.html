@@ -409,6 +409,16 @@ the same I2C1 bus -- Test 6 reads chip ID register 0xD0 (expected 0x61).
 <table>
   <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
   <tr>
+    <td>Serial capture starts after reset</td>
+    <td>No boot banner or case lines captured even when firmware is running</td>
+    <td>Open <code>/dev/ttyUSB0</code> first, then reset/run target from J-Link</td>
+  </tr>
+  <tr>
+    <td>Board config not initialized before console setup</td>
+    <td>ADC test runs but prints nothing on UART</td>
+    <td>Call <code>board::configInit(g_boardDtb, g_boardDtbSize)</code> before <code>board::config()</code>/<code>initConsole()</code></td>
+  </tr>
+  <tr>
     <td>ADC clock not enabled</td>
     <td>Reads always timeout (EOC never sets)</td>
     <td>Enable APB2 ADC clock for selected controller (ADC1/2/3) before triggering conversion</td>

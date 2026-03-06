@@ -35,7 +35,7 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 17 | Hardware driver validation runner (machine-parseable UART/SPI/I2C/DMA smoke tests) | Complete |
 | 18 | DMA hardware coverage expansion (width/alignment/increment/repeatability matrix) | Complete |
 | 19 | SPI DMA transfer integration (`spiTransferDma`) with host + board-to-board validation | Complete |
-| 20 | ADC single-shot HAL (`adcInit` + polled `adcRead`) with host-test coverage | Complete |
+| 20 | ADC single-shot HAL (`adcInit` + polled `adcRead`) with host + on-target validation | Complete |
 
 **Test coverage:** 477 C++ host tests, 145 Python tests.
 
@@ -156,6 +156,7 @@ ms-os/
     i2c-slave/              I2C1 slave echo server (board-to-board, Board 2)
     i2c-test/               I2C1 master test runner (board-to-board, Board 1)
     dma-test/               DMA2 hardware smoke test runner
+    adc-test/               ADC1 internal-channel test runner (VREFINT + temp sensor)
   tools/
     hw_driver_runner.py     Host runner: flash boards + parse machine test output
     ipcgen/                 IDL code generator (embedded backend)
@@ -240,6 +241,11 @@ DMA matrix coverage details are documented in
 
 ADC single-shot driver details are documented in
 `docs/design/phase-20-adc-single-shot.md`.
+
+On-target ADC validation app (`app/adc-test`) emits:
+
+- `MSOS_CASE:adc:<case-name>:PASS|FAIL`
+- `MSOS_SUMMARY:adc:pass=<n>:total=<m>:result=PASS|FAIL`
 
 Required board-to-board wiring for these scenarios:
 

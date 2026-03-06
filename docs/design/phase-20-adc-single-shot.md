@@ -103,8 +103,28 @@ RCC tests extended:
 - ADC clock enable/disable call recording
 - mixed call-order check includes ADC
 
+## Hardware Verification (STM32F407, J-Link)
+
+Validated on target with `app/adc-test` using internal ADC channels only
+(no external analog wiring):
+
+- channel 17 (`VREFINT`)
+- channel 16 (temperature sensor)
+
+Command used:
+
+```bash
+python3 build.py -f --target stm32f407zgt6 --app adc-test --probe jlink
+```
+
+Observed machine output:
+
+- `MSOS_CASE:adc:vrefint-read:PASS`
+- `MSOS_CASE:adc:temp-read:PASS`
+- `MSOS_CASE:adc:invalid-channel:PASS`
+- `MSOS_SUMMARY:adc:pass=3:total=3:result=PASS`
+
 ## Follow-Up Work
 
-- Add ADC hardware test application on STM32F407 (channels + known sources)
 - Add continuous mode + DMA (`adcStartContinuous`)
 - Integrate ADC results into hardware validation runner
