@@ -96,6 +96,7 @@ if(CMAKE_CROSSCOMPILING)
         add_subdirectory(app/i2c-slave)
         add_subdirectory(app/i2c-test)
         add_subdirectory(app/dma-test)
+        add_subdirectory(app/adc-test)
     endif()
 
 else()

@@ -34,6 +34,7 @@ namespace
     constexpr std::uint32_t kCr2Swstart = 30;
     constexpr std::uint32_t kSqr1L = 20;       // [23:20]
     constexpr std::uint32_t kCcrAdcpre = 16;   // [17:16]
+    constexpr std::uint32_t kCcrTsvrefe = 23;
 
     volatile std::uint32_t &reg(std::uint32_t addr)
     {
@@ -127,6 +128,7 @@ namespace hal
         std::uint32_t ccr = reg(kAdcCommonBase + kCcr);
         ccr &= ~(0x3U << kCcrAdcpre);
         ccr |= (0x1U << kCcrAdcpre);
+        ccr |= (1U << kCcrTsvrefe);  // Enable temperature sensor and VREFINT channels.
         reg(kAdcCommonBase + kCcr) = ccr;
 
         s_sampleTime[static_cast<std::uint8_t>(config.id)] = config.sampleTime;
