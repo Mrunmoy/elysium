@@ -106,3 +106,45 @@ Behavior:
 - `test/tools/test_hw_driver_runner.py`
 - `README.md`
 - `docs/TASKS.md`
+
+## Implementation Summary
+
+Completed implementation includes:
+
+- machine-parseable case/summary lines added to `uart2-test`, `spi2-test`, `i2c-test`
+- new `dma-test` hardware smoke app using the same machine output contract
+- host runner `tools/hw_driver_runner.py` with:
+  - board flashing orchestration (Board 2 service then Board 1 test)
+  - serial capture and parser/validator
+  - non-zero failure exit behavior for automation
+  - optional `--register-trace` raw log artifacts
+- runner unit tests in `test/tools/test_hw_driver_runner.py`
+- explicit I2C negative-path coverage (`wrong-address-nack`, `no-peer-timeout`)
+
+## Debug Findings And Resolution
+
+During on-target bring-up, UART scenario initially failed to emit summary lines due to
+`WFI`-based waiting in `uart2-test` timeout logic. In the absence of a guaranteed wake
+interrupt source, timeout progress could stall indefinitely.
+
+Resolution:
+
+- `app/uart2-test/main.cpp`: removed blocking `WFI` path in `waitForEcho(...)`
+- replaced with bounded polling/spin so timeout always progresses and result lines are emitted
+
+This fix ensures runner-visible PASS/FAIL behavior even when UART peer link is absent.
+
+## Hardware Verification Snapshot
+
+Verified on STM32F407 dual-board setup (Board 1 J-Link, Board 2 ST-Link), with
+board-to-board links connected:
+
+- `uart`: PASS (`5/5`)
+- `spi`: PASS (`5/5`)
+- `i2c`: PASS (`8/8`, includes BME680 chip ID check and negative-path cases)
+
+Host validation completed for this phase:
+
+- host C++ tests (`python3 build.py -t`) pass
+- cross-compile passes for `stm32f207zgt6`, `stm32f407zgt6`, `pynq-z2`
+- runner parser tests pass (`test/tools/test_hw_driver_runner.py`)

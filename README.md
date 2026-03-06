@@ -231,6 +231,17 @@ Enable raw log artifact capture:
 python3 tools/hw_driver_runner.py --register-trace
 ```
 
+Required board-to-board wiring for these scenarios:
+
+- UART: `PA2 (TX) <-> PA3 (RX)` cross-connected between boards + shared GND
+- SPI: `PA5(SCK)`, `PA6(MISO)`, `PA7(MOSI)` + shared GND
+- I2C: `PB6(SCL)`, `PB7(SDA)` + shared GND
+
+Troubleshooting note:
+
+- If UART case lines do not progress beyond startup banner, verify USART2 cross-wiring first.
+  Missing UART jumpers reproduces deterministic timeout failures in all UART cases.
+
 ### Shell Commands
 
 Connect to the console UART (115200 baud) and type commands:
