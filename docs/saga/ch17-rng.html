@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter 15: The Dice Roll -- The Story of ms-os</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<div id="scroll-progress"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="index.html" class="site-title">The Story of ms-os</a>
+    <span class="chapter-title-header">Chapter 15 -- The Dice Roll</span>
+    <div class="header-nav">
+      <a href="ch16-timers.html" class="nav-arrow">&lt; Prev</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">Chapters</button>
+        <nav class="nav-dropdown-menu">
+          <a href="index.html">Home</a>
+          <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+          <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+          <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+          <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+          <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+          <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+          <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+          <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+          <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+          <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+          <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+          <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+          <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+          <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+          <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+          <a href="ch16-timers.html">Chapter 14 -- Counting Time</a>
+          <a href="ch17-rng.html" class="current">Chapter 15 -- The Dice Roll</a>
+          <a href="ch17-rtc.html">Chapter 16 -- Keeping Time</a>
+          <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+          <a href="appendix.html">Appendix A -- Hardware Targets</a>
+        </nav>
+      </div>
+      <a href="ch17-rtc.html" class="nav-arrow">Next &gt;</a>
+      <button class="nav-hamburger" aria-label="Menu">=</button>
+    </div>
+  </div>
+</header>
+
+<nav class="mobile-nav-panel">
+  <a href="index.html">Home</a>
+  <a href="ch00-prologue.html">Prologue -- Why Build an OS?</a>
+  <a href="ch01-foundation.html">Chapter 1 -- Laying the Foundation</a>
+  <a href="ch02-kernel-core.html">Chapter 2 -- The Kernel Comes Alive</a>
+  <a href="ch03-scheduling.html">Chapter 3 -- Teaching the OS to Multitask</a>
+  <a href="ch04-memory.html">Chapter 4 -- Guarding Memory</a>
+  <a href="ch05-multi-target.html">Chapter 5 -- New Horizons: The PYNQ-Z2</a>
+  <a href="ch06-ipc.html">Chapter 6 -- Talking Between Threads</a>
+  <a href="ch07-syscall.html">Chapter 7 -- Drawing the Line</a>
+  <a href="ch08-device-tree.html">Chapter 8 -- Describing the Hardware</a>
+  <a href="ch09-power.html">Chapter 9 -- Conserving Every Milliamp</a>
+  <a href="ch10-shell.html">Chapter 10 -- A Window Into the Kernel</a>
+  <a href="ch11-ci.html">Chapter 11 -- The Safety Net</a>
+  <a href="ch12-night-shift.html">Chapter 12 -- The Night Shift</a>
+  <a href="ch13-bus-drivers.html">Chapter 12 -- The Bus Drivers</a>
+  <a href="ch14-uart-test.html">Chapter 13 -- The Wire Between Two Worlds</a>
+  <a href="ch16-timers.html">Chapter 14 -- Counting Time</a>
+  <a href="ch17-rng.html" class="current">Chapter 15 -- The Dice Roll</a>
+  <a href="ch17-rtc.html">Chapter 16 -- Keeping Time</a>
+  <a href="ch15-epilogue.html">Epilogue -- The Road Ahead</a>
+  <a href="appendix.html">Appendix A -- Hardware Targets</a>
+</nav>
+
+<main class="content">
+  <h1>Chapter 15: The Dice Roll</h1>
+  <p class="chapter-subtitle">Hardware random number generation on the STM32F4</p>
+
+  <h2>True randomness from silicon</h2>
+
+  <p>Software pseudo-random number generators are fine for shuffling playlists, but
+  when an embedded system needs unpredictable values -- cryptographic keys, nonces,
+  session tokens -- only hardware entropy will do. The STM32F4 contains a True
+  Random Number Generator (TRNG) that derives entropy from analog noise sources
+  inside the chip. Three registers, one peripheral clock bit, and a few lines of
+  code: this was going to be the simplest driver yet.</p>
+
+  <h2>Three registers and a gotcha</h2>
+
+  <p>The RNG peripheral lives at <code>0x50060800</code> on the AHB2 bus. Its entire
+  register set is just three words:</p>
+
+  <table>
+    <thead><tr><th>Offset</th><th>Register</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>0x00</td><td>RNG_CR</td><td>Control: bit 2 (RNGEN) enables the generator</td></tr>
+      <tr><td>0x04</td><td>RNG_SR</td><td>Status: DRDY, clock error (CECS), seed error (SECS)</td></tr>
+      <tr><td>0x08</td><td>RNG_DR</td><td>Data: 32-bit random value (read clears DRDY)</td></tr>
+    </tbody>
+  </table>
+
+  <p>The clock source is PLL48CLK -- the same 48 MHz output from the PLL Q divider
+  that feeds the USB peripheral. On the F407, PLL Q = 7 gives exactly 48 MHz from
+  the 336 MHz VCO. The RCC gate is bit 6 of AHB2ENR.</p>
+
+  <div class="callout callout-insight">
+    <strong>RM0090, section 24.3.4:</strong> "The first random number generated after
+    setting the RNGEN bit should not be used." The analog noise sources need one
+    generation cycle to seed properly. Skipping this value is mandatory.
+  </div>
+
+  <p>The Mbed-OS TRNG driver confirmed this: their <code>trng_init</code> calls
+  <code>HAL_RNG_GenerateRandomNumber</code> once and discards the result before
+  returning. Our <code>rngInit()</code> does the same -- waits for DRDY, reads
+  and discards the data register, then returns.</p>
+
+  <h2>Error detection</h2>
+
+  <p>The RNG can detect two fault conditions: CECS (clock error) means the PLL48CLK
+  frequency is wrong or missing, and SECS (seed error) means the noise source
+  produced an anomalous sequence. Both are checked inside the <code>waitDrdy()</code>
+  polling loop. If either flag is set, <code>rngRead()</code> returns
+  <code>msos::error::kIo</code> without writing to the output buffer. A timeout
+  of one million iterations prevents infinite hangs if the peripheral is broken.</p>
+
+  <h2>The serial capture lesson</h2>
+
+  <p>The hardware test passed on the first flash -- the interesting part was
+  <em>seeing</em> it pass. The <code>rng-demo</code> app prints ten random values
+  and a summary, then enters WFI. The entire output takes a few milliseconds.
+  When we opened the serial port after resetting the CPU, we captured zero bytes
+  every time. The output had already been sent and lost.</p>
+
+  <p>The fix: open the serial port <em>before</em> triggering the reset. Start
+  <code>cat /dev/ttyACM0</code> in the background, then issue
+  <code>openocd reset run</code>. The UART data arrives into an already-listening
+  file descriptor and nothing is lost.</p>
+
+  <div class="callout callout-insight">
+    <strong>Rule of thumb:</strong> For bare-metal apps that print and halt,
+    always open the serial listener before resetting the target. The CPU is faster
+    than your shell.
+  </div>
+
+  <h2>Results</h2>
+
+  <p>11 host tests (init, read, error injection, sequential reads, deinit, RCC clock
+  enable/disable) and 4 hardware tests on the STM32F407:</p>
+
+  <table>
+    <thead><tr><th>Test</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Init and read 10 values</td><td>PASS</td></tr>
+      <tr><td>All values non-zero</td><td>PASS</td></tr>
+      <tr><td>Not all identical</td><td>PASS</td></tr>
+      <tr><td>Deinit</td><td>PASS</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-hardware">
+    <strong>Hardware result:</strong> 4/4 PASS on STM32F407ZGT6 (Board 2, ST-Link).
+  </div>
+
+  <p>Sample output from the TRNG:</p>
+
+  <pre>0x45E821B9 0xBA1CAD75 0xBC840C9F 0x56F80603 0xA7FF3233
+0xE6EC336F 0xA6F99A27 0x3B06E583 0x4F18F610 0xA2D45547</pre>
+
+  <p>Ten unique, high-entropy, non-zero values -- genuine randomness from analog
+  noise, not an LFSR or deterministic sequence. The smallest driver in the HAL,
+  but the one that makes cryptographic operations possible.</p>
+
+  <div class="chapter-nav-footer">
+    <a href="ch16-timers.html">&lt; Previous: Counting Time</a>
+    <a href="ch17-rtc.html">Next: Keeping Time &gt;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  Built bare-metal. Documented with care.
+</footer>
+
+<button id="back-to-top" aria-label="Back to top">^</button>
+<script src="shared.js"></script>
+</body>
+</html>
