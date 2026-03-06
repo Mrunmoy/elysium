@@ -1,26 +1,124 @@
 # Development Tasks
 
-## In Progress: Global Error Codes
+## Completed
 
-- [x] Create shared global error-code header (`common/inc/msos/ErrorCode.h`).
-- [x] Wire shared header include paths into kernel/HAL/test builds.
-- [x] Migrate kernel IPC status constants to shared global codes.
-- [x] Add I2C-to-global-status mapping helper.
-- [x] Add baseline tests for IPC/global-code wiring and I2C mapping.
-- [x] Define canonical code ownership/rules (which layer returns which codes).
-- [x] Roll out global status usage to additional modules (scheduler, sync primitives, shell commands, drivers).
-- [x] Add docs section in `README.md` describing global error semantics.
+- [x] Global error codes (`common/inc/msos/ErrorCode.h`, kernel/HAL/test wiring, status APIs)
+- [x] Hardware driver validation framework (uart/spi/i2c/dma smoke tests, host runner, negative paths)
+- [x] DMA hardware verification (3/3 PASS, mem-to-mem on STM32F407)
+- [x] DMA-driven SPI transfers (`spiTransferDma`) with host tests and board-to-board hardware validation
 
-## Next (Do Not Forget): Hardware-Backed Driver Validation
+## TODO: Peripheral Drivers
 
-- [x] Add on-target smoke tests per driver (`uart`, `spi`, `i2c`, `dma`) with machine-parseable PASS/FAIL.
-- [x] Build a host runner that flashes two STM32F407 boards, captures UART logs, and asserts expected results.
-- [x] Add negative/error-path hardware scenarios (NACK, wrong address, no peer, timeout).
-- [ ] Add nightly hardware test stage in CI (or local scheduled run script if CI hardware is unavailable).
-- [x] Add optional register-trace logging mode for failure diagnostics.
+### DMA + Peripheral Integration
+- [x] DMA-driven SPI transfers (`spiTransferDma`)
+- [ ] DMA-driven UART TX/RX
+- [ ] DMA-driven ADC continuous conversion
+- [ ] Host tests
+- [ ] Hardware tests
 
-## In Progress: DMA + Peripheral Integration
+### Timers (TIM) -- DONE
+- [x] Design doc (`docs/design/phase-18-timers.md`)
+- [x] HAL API: `timerInit`, `timerStart`, `timerStop`, `timerSetPeriod`, `timerSetPrescaler`, PWM
+- [x] Basic timer (TIM6/TIM7) -- periodic interrupt, microsecond delay
+- [x] General-purpose timer (TIM2-TIM5) -- PWM output (input capture deferred)
+- [x] 32 host tests with link-time mocks
+- [x] Hardware test on STM32F407 (5/5 PASS + Saleae logic analyzer verification)
+- [x] Zynq stub
 
-- [x] DMA-driven SPI transfers (`spiTransferDma`) with host tests and board-to-board hardware validation.
-- [ ] DMA-driven UART TX/RX.
-- [ ] DMA-driven ADC continuous conversion.
+### RNG (Hardware Random Number Generator)
+- [ ] HAL API: `rngInit`, `rngRead`
+- [ ] STM32F4 register-level driver (F4 only, not available on F2)
+- [ ] Host tests
+- [ ] Hardware test
+
+### RTC (Real-Time Clock)
+- [ ] HAL API: `rtcInit`, `rtcGetTime`, `rtcSetTime`, `rtcSetAlarm`
+- [ ] STM32F4 register-level driver (LSE or LSI clock source)
+- [ ] Host tests
+- [ ] Hardware test
+
+### CRC (Hardware CRC Unit)
+- [ ] HAL API: `crcInit`, `crcCompute`
+- [ ] STM32F4 register-level driver
+- [ ] Host tests
+- [ ] Hardware test (compare against known CRC32 values)
+
+### ADC
+- [ ] Design doc
+- [ ] HAL API: `adcInit`, `adcRead` (single-shot), `adcStartContinuous` (with DMA)
+- [ ] STM32F4 ADC1/2/3 register-level driver
+- [ ] Host tests
+- [ ] Hardware test (read known voltage or internal temp sensor)
+- [ ] Zynq stub
+
+### DAC
+- [ ] HAL API: `dacInit`, `dacWrite`, `dacStartDma`
+- [ ] STM32F4 DAC1/2 register-level driver (PA4/PA5)
+- [ ] Host tests
+- [ ] Hardware test (output known voltage, verify with ADC loopback)
+
+### USB (OTG FS/HS)
+- [ ] Design doc
+- [ ] HAL API: USB device core (endpoint config, control transfers)
+- [ ] CDC ACM class (virtual COM port) as first use case
+- [ ] STM32F4 OTG_FS register-level driver
+- [ ] Host tests
+- [ ] Hardware test (enumerate as CDC device on host PC)
+- [ ] Zynq stub
+
+### CAN (bxCAN)
+- [ ] Design doc
+- [ ] HAL API: `canInit`, `canSend`, `canReceive`, filter configuration
+- [ ] STM32F4 CAN1/CAN2 register-level driver
+- [ ] Host tests
+- [ ] Hardware test (loopback mode, or two-board CAN bus if transceiver available)
+
+### SDIO/SDMMC
+- [ ] HAL API: `sdioInit`, `sdioReadBlock`, `sdioWriteBlock`
+- [ ] STM32F4 SDIO register-level driver (4-bit bus)
+- [ ] Host tests
+- [ ] Hardware test (read/write SD card sectors)
+
+### Ethernet MAC
+- [ ] Design doc
+- [ ] HAL API: `ethInit`, `ethSend`, `ethReceive`, PHY management (MDIO/MDC)
+- [ ] STM32F4 ETH register-level driver (MII/RMII)
+- [ ] DMA-driven TX/RX with descriptor rings
+- [ ] PHY driver (DP83848 or LAN8720 depending on board)
+- [ ] Host tests
+- [ ] Hardware test (link up, raw frame loopback or ping)
+- [ ] Zynq GEM stub
+
+## TODO: Kernel / OS Features
+
+### Timers (Software / Kernel)
+- [ ] One-shot and periodic kernel timers (callback-based)
+- [ ] Timer wheel or sorted list implementation
+- [ ] Integration with SysTick
+
+### User-Space Drivers
+- [ ] Move SPI/I2C/UART drivers out of kernel into user-space services
+- [ ] IPC-based driver access from unprivileged threads
+- [ ] Design doc for driver service model
+
+### File System
+- [ ] Design doc
+- [ ] FAT16/32 or minimal flash FS
+- [ ] SDIO/SDMMC HAL driver (for SD card)
+- [ ] Block device abstraction
+
+### Networking
+- [ ] Design doc
+- [ ] Ethernet MAC HAL driver (STM32F2/F4)
+- [ ] Lightweight TCP/IP stack (lwIP integration or minimal custom)
+- [ ] DMA-driven Ethernet
+
+### Cortex-A9 Parity
+- [ ] SVC/unprivileged mode on PYNQ-Z2
+- [ ] MMU configuration (replace MPU stub)
+
+## TODO: Infrastructure
+
+- [ ] Nightly hardware test stage (CI or local scheduled script)
+- [ ] Code coverage reporting for host tests
+- [ ] Static analysis integration (clang-tidy or cppcheck)
