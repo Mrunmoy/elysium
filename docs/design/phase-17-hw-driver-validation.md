@@ -142,6 +142,7 @@ board-to-board links connected:
 - `uart`: PASS (`5/5`)
 - `spi`: PASS (`5/5`)
 - `i2c`: PASS (`8/8`, includes BME680 chip ID check and negative-path cases)
+- `dma`: PASS (`3/3`, DMA2 memory-to-memory: config-idle, memcpy-64, stop-after-start)
 
 Host validation completed for this phase:
 
