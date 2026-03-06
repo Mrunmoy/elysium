@@ -339,6 +339,31 @@ Flash the slave first, then the master. The master waits 500ms for the slave to
 initialize before starting tests.
 </p>
 
+<h3>SPI DMA Transfer (Phase 19)</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>1-byte delayed slave echo interpreted as immediate echo</td>
+    <td><code>dma-transfer</code> fails at byte 0 while other SPI cases pass</td>
+    <td>Prime one byte first, then compare RX against TX shifted by one byte (slave echoes previous DR value)</td>
+  </tr>
+  <tr>
+    <td>Wrong DMA stream/channel mapping for SPI1</td>
+    <td>Transfer hangs waiting for completion; no RX progress</td>
+    <td>Use SPI1 mapping exactly: RX=DMA2 Stream0 Channel3, TX=DMA2 Stream3 Channel3</td>
+  </tr>
+  <tr>
+    <td>Null TX/RX pointer passed to DMA path</td>
+    <td>Bus fault or corrupted memory access during transfer setup</td>
+    <td>Route null TX to a fixed dummy source and null RX to a fixed dummy sink</td>
+  </tr>
+  <tr>
+    <td>Timeout loop budget too small</td>
+    <td>Intermittent <code>kTimedOut</code> on real boards, mostly under probe/console load</td>
+    <td>Increase timeoutLoops for hardware runs and keep polling bounded on DMA idle + SPI BSY clear</td>
+  </tr>
+</table>
+
 <h3>I2C Slave Mode</h3>
 <table>
   <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>

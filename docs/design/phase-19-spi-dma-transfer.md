@@ -66,6 +66,20 @@ Implementation strategy:
 Update `app/spi2-test` with one DMA-specific case (multi-byte echo) to prove
 `spiTransferDma` works in board-to-board operation and is visible in machine output.
 
+## Findings and Debug Notes
+
+- The board-to-board SPI slave echo path is one-byte delayed by design (the slave
+  returns previously loaded DR). DMA test validation must account for a priming
+  byte and shifted compare.
+- SPI1 DMA mapping is strict on STM32F407:
+  - RX `DMA2 Stream0 Channel3`
+  - TX `DMA2 Stream3 Channel3`
+  Wrong mapping results in completion waits that appear as SPI hangs.
+- `timeoutLoops` should remain bounded but not overly tight on real hardware,
+  especially with active probes and UART logging.
+- Troubleshooting details are captured in
+  `docs/playbook/sec07-toolchain.html` under "SPI DMA Transfer (Phase 19)".
+
 ## Test Plan
 
 Host tests (`test/hal/SpiTest.cpp`):
