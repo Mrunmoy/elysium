@@ -35,8 +35,9 @@ For the full development story, see [The Story of ms-os](https://mrunmoy.github.
 | 17 | Hardware driver validation runner (machine-parseable UART/SPI/I2C/DMA smoke tests) | Complete |
 | 18 | DMA hardware coverage expansion (width/alignment/increment/repeatability matrix) | Complete |
 | 19 | SPI DMA transfer integration (`spiTransferDma`) with host + board-to-board validation | Complete |
+| 20 | ADC single-shot HAL (`adcInit` + polled `adcRead`) with host-test coverage | Complete |
 
-**Test coverage:** 466 C++ host tests, 145 Python tests.
+**Test coverage:** 477 C++ host tests, 145 Python tests.
 
 ## Prerequisites
 
@@ -119,7 +120,7 @@ ms-os/
     stm32f407zgt6/          STM32F407 vector table, linker script, clock init
     pynq-z2/                PYNQ-Z2 startup (ARM mode, GIC, SCU timer)
   hal/
-    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c)
+    inc/hal/                HAL abstraction headers (Gpio, Uart, Rcc, Watchdog, Dma, Spi, I2c, Adc)
     src/stm32f4/            STM32F2/F4 register-level implementation
     src/zynq7000/           Zynq-7000 register-level implementation
   kernel/
@@ -189,6 +190,7 @@ and process management. Written in C++17 with assembly where required.
 - **DMA** -- Dual-controller DMA with 8 streams each, interrupt callbacks, configurable data sizes and priorities
 - **SPI** -- Full-duplex SPI master and slave with polled, async, interrupt-driven, and DMA transfers
 - **I2C** -- I2C master and slave (standard/fast mode), polled and async, interrupt-driven slave with RX/TX callbacks
+- **ADC** -- ADC1/2/3 single-shot conversions with configurable resolution/alignment/sample time
 - **Shell** -- Interactive CLI over UART (help, ps, mem, uptime, version, dt, wdt)
 - **Device tree** -- Standard FDT binaries parsed at runtime (DTS source, DTB binary, kernel parser)
 
@@ -235,6 +237,9 @@ python3 tools/hw_driver_runner.py --register-trace
 
 DMA matrix coverage details are documented in
 `docs/design/phase-18-dma-hw-coverage.md`.
+
+ADC single-shot driver details are documented in
+`docs/design/phase-20-adc-single-shot.md`.
 
 Required board-to-board wiring for these scenarios:
 

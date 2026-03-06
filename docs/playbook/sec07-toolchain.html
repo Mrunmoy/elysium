@@ -405,6 +405,31 @@ initialize before starting tests. BME680 sensor at address 0x77 can coexist on
 the same I2C1 bus -- Test 6 reads chip ID register 0xD0 (expected 0x61).
 </p>
 
+<h3>ADC Single-Shot (Phase 20)</h3>
+<table>
+  <tr><th>Problem</th><th>Symptom</th><th>Fix</th></tr>
+  <tr>
+    <td>ADC clock not enabled</td>
+    <td>Reads always timeout (EOC never sets)</td>
+    <td>Enable APB2 ADC clock for selected controller (ADC1/2/3) before triggering conversion</td>
+  </tr>
+  <tr>
+    <td>Invalid channel selection</td>
+    <td>Incorrect data or timeout on conversion request</td>
+    <td>Keep regular conversion channel in range 0..18 for STM32F4 ADC</td>
+  </tr>
+  <tr>
+    <td>Sample time too short for high-impedance source</td>
+    <td>Noisy/low ADC readings that vary by trigger timing</td>
+    <td>Increase SMPR sample cycles (for example 84/144/480 cycles) and re-check source settling</td>
+  </tr>
+  <tr>
+    <td>ADON/SWSTART sequencing missing</td>
+    <td>Conversion does not start even though channel is configured</td>
+    <td>Ensure ADC is enabled (ADON=1), then trigger regular conversion with SWSTART</td>
+  </tr>
+</table>
+
 <div class="epigraph" style="margin-top: 4em;">
   "The most effective debugging tool is still careful thought,<br>
   coupled with judiciously placed print statements."

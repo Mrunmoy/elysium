@@ -113,4 +113,8 @@ namespace hal
     // Zynq PS DMA (DMAC) clock is always on
     void rccEnableDmaClock(DmaController /* controller */) {}
     void rccDisableDmaClock(DmaController /* controller */) {}
+
+    // XADC integration is not in current Zynq port.
+    void rccEnableAdcClock(AdcId /* id */) {}
+    void rccDisableAdcClock(AdcId /* id */) {}
 }  // namespace hal

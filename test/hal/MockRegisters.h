@@ -251,6 +251,27 @@ namespace test
     inline void *g_i2cSlaveTxCallback = nullptr;
     inline void *g_i2cSlaveArg = nullptr;
 
+    // ADC mock state
+    struct AdcInitCall
+    {
+        std::uint8_t id;
+        std::uint8_t resolution;
+        std::uint8_t align;
+        std::uint8_t sampleTime;
+    };
+
+    struct AdcReadCall
+    {
+        std::uint8_t id;
+        std::uint8_t channel;
+        std::uint32_t timeoutLoops;
+    };
+
+    inline std::vector<AdcInitCall> g_adcInitCalls;
+    inline std::vector<AdcReadCall> g_adcReadCalls;
+    inline std::uint16_t g_adcReadValue = 0;
+    inline std::int32_t g_adcReadStatus = 0;
+
     inline void resetMockState()
     {
         g_gpioInitCalls.clear();
@@ -316,6 +337,11 @@ namespace test
         g_i2cSlaveRxCallback = nullptr;
         g_i2cSlaveTxCallback = nullptr;
         g_i2cSlaveArg = nullptr;
+
+        g_adcInitCalls.clear();
+        g_adcReadCalls.clear();
+        g_adcReadValue = 0;
+        g_adcReadStatus = 0;
     }
 
 }  // namespace test

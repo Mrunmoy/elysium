@@ -73,6 +73,26 @@ TEST_F(RccTest, DisableDmaClockRecordsCall)
     EXPECT_EQ(test::g_rccDisableCalls[0].id, static_cast<std::uint8_t>(hal::DmaController::Dma2));
 }
 
+// ---- ADC clock ----
+
+TEST_F(RccTest, EnableAdcClockRecordsCall)
+{
+    hal::rccEnableAdcClock(hal::AdcId::Adc1);
+
+    ASSERT_EQ(test::g_rccEnableCalls.size(), 1u);
+    EXPECT_EQ(test::g_rccEnableCalls[0].peripheral, "adc");
+    EXPECT_EQ(test::g_rccEnableCalls[0].id, static_cast<std::uint8_t>(hal::AdcId::Adc1));
+}
+
+TEST_F(RccTest, DisableAdcClockRecordsCall)
+{
+    hal::rccDisableAdcClock(hal::AdcId::Adc3);
+
+    ASSERT_EQ(test::g_rccDisableCalls.size(), 1u);
+    EXPECT_EQ(test::g_rccDisableCalls[0].peripheral, "adc");
+    EXPECT_EQ(test::g_rccDisableCalls[0].id, static_cast<std::uint8_t>(hal::AdcId::Adc3));
+}
+
 // ---- Multiple calls ----
 
 TEST_F(RccTest, MultipleEnablesRecordInOrder)
@@ -80,11 +100,13 @@ TEST_F(RccTest, MultipleEnablesRecordInOrder)
     hal::rccEnableSpiClock(hal::SpiId::Spi1);
     hal::rccEnableI2cClock(hal::I2cId::I2c2);
     hal::rccEnableDmaClock(hal::DmaController::Dma1);
+    hal::rccEnableAdcClock(hal::AdcId::Adc2);
 
-    ASSERT_EQ(test::g_rccEnableCalls.size(), 3u);
+    ASSERT_EQ(test::g_rccEnableCalls.size(), 4u);
     EXPECT_EQ(test::g_rccEnableCalls[0].peripheral, "spi");
     EXPECT_EQ(test::g_rccEnableCalls[1].peripheral, "i2c");
     EXPECT_EQ(test::g_rccEnableCalls[2].peripheral, "dma");
+    EXPECT_EQ(test::g_rccEnableCalls[3].peripheral, "adc");
 }
 
 TEST_F(RccTest, MockStateResetsCleanly)

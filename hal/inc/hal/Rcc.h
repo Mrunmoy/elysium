@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/Adc.h"
 #include "hal/Dma.h"
 #include "hal/Gpio.h"
 #include "hal/I2c.h"
@@ -13,11 +14,13 @@ namespace hal
     void rccEnableSpiClock(SpiId id);
     void rccEnableI2cClock(I2cId id);
     void rccEnableDmaClock(DmaController controller);
+    void rccEnableAdcClock(AdcId id);
 
     void rccDisableGpioClock(Port port);
     void rccDisableUartClock(UartId id);
     void rccDisableSpiClock(SpiId id);
     void rccDisableI2cClock(I2cId id);
     void rccDisableDmaClock(DmaController controller);
+    void rccDisableAdcClock(AdcId id);
 
 }  // namespace hal

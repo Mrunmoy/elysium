@@ -24,3 +24,13 @@
 - [x] DMA-driven SPI transfers (`spiTransferDma`) with host tests and board-to-board hardware validation.
 - [ ] DMA-driven UART TX/RX.
 - [ ] DMA-driven ADC continuous conversion.
+
+## In Progress: ADC Driver
+
+- [x] Create design doc (`docs/design/phase-20-adc-single-shot.md`).
+- [x] Add HAL API: `adcInit`, `adcRead` (single-shot, polled).
+- [x] Implement STM32F4 ADC1/ADC2/ADC3 single-shot driver.
+- [x] Add ADC RCC clock helpers (`rccEnableAdcClock`, `rccDisableAdcClock`).
+- [x] Add host tests and mocks (`test/hal/AdcTest.cpp`, `test/hal/MockAdc.cpp`).
+- [x] Add Zynq ADC stub for cross-target build parity.
+- [ ] Add on-target ADC hardware validation app/cases.
